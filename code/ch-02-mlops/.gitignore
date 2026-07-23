@@ -1,0 +1,28 @@
+# local run artifacts — nothing here is manuscript
+data/*.csv
+data/split/
+model/
+model-store/
+runs-local/
+mlruns/
+mlflow-store/
+.sagemaker/
+*.tar.gz
+__pycache__/
+.ruff_cache/
+.aws-sam/
+
+# lambda build artifacts (assembled by make lambda-build)
+serving/lambda/challenger_model.py
+serving/lambda/model/
+
+# fargate build artifacts (assembled by make fargate-build)
+serving/fargate/model/
+
+# SageMaker local-mode run artifacts (docker-compose, model output, staged data)
+docker-compose.yaml
+compressed_artifacts/
+model/
+algo-1/
+tuning-output/
+runs-local/

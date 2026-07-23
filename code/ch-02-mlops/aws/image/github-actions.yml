@@ -1,0 +1,37 @@
+# Example CI: on a push that touches a model container, start the CodeBuild
+# project that builds the image and pushes it to ECR. This is the trigger in
+# front of Developer -> Git -> CodeBuild -> ECR; CodeBuild does the actual build
+# (buildspec.yml), so the workflow stays tiny and no Docker runs on the GitHub
+# runner. Replace the account id and role ARN with your own.
+#
+# Auth uses GitHub OIDC (no long-lived keys): create an IAM role that trusts
+# token.actions.githubusercontent.com and allows codebuild:StartBuild.
+name: build-scorecard-image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "code/ch-02-mlops/scorecard/**"
+      - "code/ch-02-mlops/challenger/**"
+
+permissions:
+  id-token: write   # request the OIDC token
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}  # arn:aws:iam::<account>:role/github-actions-ci
+          aws-region: us-east-1
+
+      - name: Start the CodeBuild image build
+        run: |
+          aws codebuild start-build --project-name ch02-scorecard-build
+          aws codebuild start-build --project-name ch02-challenger-build

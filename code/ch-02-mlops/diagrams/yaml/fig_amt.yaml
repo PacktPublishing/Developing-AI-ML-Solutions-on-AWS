@@ -1,0 +1,39 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Developer, AWSCloud]
+
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "HyperparameterTuner\ncloud AMT | local shim"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Tuner, Trials, MLflow]
+
+    Tuner:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "Tuning job\nBayesian | random"
+    Trials:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "6 training jobs\nBYOC container"
+    MLflow:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "MLflow App\ntrials + registry"
+
+  Links:
+    - {Source: Developer, SourcePosition: E, Target: Tuner, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Tuner, SourcePosition: E, Target: Trials, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Trials, SourcePosition: E, Target: MLflow, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

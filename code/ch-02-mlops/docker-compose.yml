@@ -1,0 +1,45 @@
+services:
+  s3:
+    # real S3-compatible object store, composed from source: S3Proxy (Apache-2.0)
+    # serving the S3 API over a plain filesystem. Holds MLflow artifacts, training
+    # input/output, the registry's model tarballs, and batch-transform data. On
+    # AWS this is Amazon S3; nothing in the code changes.
+    image: andrewgaul/s3proxy:latest
+    environment:
+      - S3PROXY_ENDPOINT=http://0.0.0.0:9000
+      - S3PROXY_AUTHORIZATION=aws-v2-or-v4
+      - S3PROXY_IDENTITY=local
+      - S3PROXY_CREDENTIAL=localsecret
+      - JCLOUDS_PROVIDER=filesystem
+      - JCLOUDS_FILESYSTEM_BASEDIR=/data
+    ports:
+      - "9000:9000"
+
+  createbuckets:
+    # one-shot: wait for S3Proxy, make the chapter's buckets (idempotent), exit
+    image: amazon/aws-cli:latest
+    depends_on:
+      - s3
+    environment:
+      - AWS_ACCESS_KEY_ID=local
+      - AWS_SECRET_ACCESS_KEY=localsecret
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        for i in $$(seq 1 30); do
+          aws --endpoint-url http://s3:9000 s3 ls >/dev/null 2>&1 && break; sleep 2;
+        done;
+        for b in mlflow-artifacts ml-data ml-models; do
+          aws --endpoint-url http://s3:9000 s3 mb s3://$$b 2>/dev/null || true;
+        done;
+        echo "buckets ready"
+
+# There is no MLflow server here on purpose. SageMaker AI's serverless MLflow
+# (its "MLflow Apps", GA Dec 2025) has no tracking server to run or scale —
+# tracking is simply there when a job logs to it. The local mirror keeps that
+# shape: MLflow's client writes runs and the model registry straight to a SQLite
+# backend (the mlflow-store/ file — no process) and artifacts straight to S3.
+# The only thing that moves between worlds is MLFLOW_TRACKING_URI: a sqlite path
+# locally, an MLflow App ARN on AWS. Browse runs on demand with `make mlflow-ui`.

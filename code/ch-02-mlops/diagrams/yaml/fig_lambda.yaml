@@ -1,0 +1,53 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Developer, AWSCloud, Caller]
+
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Developer"
+    Caller:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Caller"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Git, CodeBuild, ECR, Lambda, APIGW]
+
+    Git:
+      Type: AWS::Diagram::Resource
+      Preset: "Git repository"
+      Title: "Git repo"
+    CodeBuild:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS CodeBuild"
+      Title: "CodeBuild"
+    ECR:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Elastic Container Registry (Amazon ECR)"
+      Title: "ECR image"
+    Lambda:
+      Type: AWS::Lambda::Function
+      Title: "Lambda container"
+    APIGW:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon API Gateway"
+      Title: "API Gateway"
+
+  Links:
+    - {Source: Developer, SourcePosition: E, Target: Git, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Git, SourcePosition: E, Target: CodeBuild, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: CodeBuild, SourcePosition: E, Target: ECR, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: ECR, SourcePosition: E, Target: Lambda, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Caller, SourcePosition: W, Target: APIGW, TargetPosition: E, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: APIGW, SourcePosition: W, Target: Lambda, TargetPosition: E, TargetArrowHead: {Type: Open}, Type: orthogonal}

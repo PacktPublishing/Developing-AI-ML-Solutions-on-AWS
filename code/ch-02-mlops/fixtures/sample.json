@@ -1,0 +1,4 @@
+[
+  {"age": 35, "annual_income": 42000, "debt_to_income": 38.0, "bureau_score": 590, "credit_utilization": 85.0, "employment_length_years": 1.5, "loan_amount": 22000, "home_ownership": "RENT", "loan_purpose": "debt_consolidation", "employment_status": "self_employed"},
+  {"age": 52, "annual_income": 140000, "debt_to_income": 9.0, "bureau_score": 790, "credit_utilization": 10.0, "employment_length_years": 20, "loan_amount": 8000, "home_ownership": "OWN", "loan_purpose": "home_improvement", "employment_status": "employed"}
+]

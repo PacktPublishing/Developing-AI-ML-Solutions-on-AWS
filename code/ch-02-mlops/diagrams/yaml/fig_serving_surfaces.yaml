@@ -1,0 +1,63 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [Row1, Row2, Row3]
+
+    # Row 1 — real-time (and batch) on a serverless endpoint, called directly
+    Row1:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Caller1, Endpoint]
+    Caller1:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Caller"
+    Endpoint:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "Serverless endpoint (+ batch)"
+
+    # Row 2 — Lambda container behind API Gateway
+    Row2:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Caller2, APIGW2, Lambda]
+    Caller2:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Caller"
+    APIGW2:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon API Gateway"
+      Title: "API Gateway"
+    Lambda:
+      Type: AWS::Lambda::Function
+      Title: "Lambda container"
+
+    # Row 3 — ECS Fargate task behind API Gateway
+    Row3:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Caller3, APIGW3, Fargate]
+    Caller3:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Caller"
+    APIGW3:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon API Gateway"
+      Title: "API Gateway"
+    Fargate:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "ECS Fargate task"
+
+  Links:
+    - {Source: Caller1, SourcePosition: E, Target: Endpoint, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Caller2, SourcePosition: E, Target: APIGW2, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: APIGW2, SourcePosition: E, Target: Lambda, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Caller3, SourcePosition: E, Target: APIGW3, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: APIGW3, SourcePosition: E, Target: Fargate, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

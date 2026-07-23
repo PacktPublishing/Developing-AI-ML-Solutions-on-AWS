@@ -1,0 +1,21 @@
+version: 0.2
+
+# Builds the scorecard's custom container natively on amd64 (the architecture
+# SageMaker training and endpoints run) and pushes it to ECR. This is the
+# Developer -> Git -> CodeBuild -> ECR leg of the pipeline: the image is built
+# in the cloud, not on a laptop, so an Apple-silicon machine never has to
+# cross-build under emulation.
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  build:
+    commands:
+      - echo "Building $IMAGE_URI"
+      - docker build -t "$IMAGE_URI" .
+  post_build:
+    commands:
+      - echo "Pushing $IMAGE_URI"
+      - docker push "$IMAGE_URI"
+      - echo "Done"

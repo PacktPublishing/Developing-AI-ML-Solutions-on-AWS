@@ -1,0 +1,12 @@
+# Run the Fargate task locally. The image is the same one ECS runs; docker
+# compose is the local task runner. Pair with docker-compose.override.yml to also
+# emulate the ECS task metadata and IAM-task-role credential endpoints.
+services:
+  app:
+    image: ch02-fargate:latest
+    build:
+      context: .
+      args:
+        BASE_IMAGE: ch02-challenger:latest
+    ports:
+      - "8093:8080"

@@ -1,0 +1,57 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Developer, AWSCloud]
+
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "pipeline.py\nPIPELINE_MODE=local | aws"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Prepare, TrainStack, Select, Export, Scores]
+
+    Prepare:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "prepare\n(Processing)"
+    TrainStack:
+      Type: AWS::Diagram::VerticalStack
+      Children: [TrainScorecard, TrainChallenger]
+    TrainScorecard:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "train-scorecard\n(Processing)"
+    TrainChallenger:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "train-challenger\n(Processing)"
+    Select:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "select\nwinner by AUC"
+    Export:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "export\n(Processing)"
+    Scores:
+      Type: AWS::S3::Bucket
+      Title: "scores.csv"
+
+  Links:
+    - {Source: Developer, SourcePosition: E, Target: Prepare, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Prepare, SourcePosition: NNE, Target: TrainScorecard, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Prepare, SourcePosition: SSE, Target: TrainChallenger, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: TrainScorecard, SourcePosition: E, Target: Select, TargetPosition: NNW, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: TrainChallenger, SourcePosition: E, Target: Select, TargetPosition: SSW, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Select, SourcePosition: E, Target: Export, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Export, SourcePosition: E, Target: Scores, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

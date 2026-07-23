@@ -1,0 +1,7 @@
+sagemaker>=3,<4
+mlflow>=3.10,<4
+xgboost>=2.0
+scikit-learn>=1.3
+pandas>=2.0
+numpy>=1.26
+cloudpickle
