@@ -16,7 +16,7 @@ All content is synthetic. It reflects the shape of solar-sector corporate
 lending without reproducing any lender's actual policy or any borrower's data.
 
 Usage:
-  uv run knowledge-base/corpus.py
+  make seed    # or: PYTHONPATH=. uv run knowledge-base/corpus.py
 """
 
 import json

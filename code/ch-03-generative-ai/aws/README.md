@@ -60,7 +60,7 @@ production.
 | `bedrock:InvokeModel` | Qwen3 generation (the Converse API is authorized by this action) |
 | `bedrock:ApplyGuardrail` | the guardrail on the Converse call |
 | `bedrock:CreateGuardrail` and the guardrail lifecycle | manage the guardrail |
-| RDS, Secrets Manager, Lambda, EC2 (VPC) | deploy the stack (`iam/deploy.json`) |
+| CloudFormation, S3 (SAM bucket), EC2 (VPC), RDS, Secrets Manager, Lambda, IAM (the function role) | deploy the stack (`iam/deploy.json`) |
 
 Qwen3 is served on-demand, so a single `bedrock:InvokeModel` on the foundation
 model is enough. A Claude model would instead need a cross-region inference

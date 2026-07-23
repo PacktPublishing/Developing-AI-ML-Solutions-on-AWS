@@ -64,7 +64,8 @@ Text Embeddings v2, so the vector store schema is identical either way. The
 ## Files
 
 The shared seam sits at the root; each chapter element is a folder of scripts
-run from here (for example `uv run knowledge-base/corpus.py`).
+run from here through the `make` targets, which set `PYTHONPATH` to the chapter
+root (a direct run is `PYTHONPATH=. uv run knowledge-base/corpus.py`).
 
 - `models.py`: the model seam, one Bedrock-shaped interface over Bedrock or Ollama
 - `stores.py`: the vector store seam, retrieval over pgvector
