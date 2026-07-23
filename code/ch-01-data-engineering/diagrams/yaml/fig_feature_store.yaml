@@ -1,0 +1,52 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [AWSCloud]
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Redshift, Ingest, Group, Stores, Consumers]
+    Redshift:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "Redshift"
+    Ingest:
+      Type: AWS::Glue::Job
+      Title: "ingest job"
+    Group:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "Feature group"
+    Stores:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Online, Offline]
+    Online:
+      Type: AWS::DynamoDB::Table
+      Title: "online store"
+    Offline:
+      Type: AWS::S3::Bucket
+      Title: "offline store"
+    Consumers:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Serving, Training]
+    Serving:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "serving path"
+    Training:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Athena"
+      Title: "training queries"
+  Links:
+    - {Source: Redshift, SourcePosition: E, Target: Ingest, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Ingest, SourcePosition: E, Target: Group, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Group, SourcePosition: E, Target: Online, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Group, SourcePosition: ESE, Target: Offline, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Online, SourcePosition: E, Target: Serving, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Offline, SourcePosition: E, Target: Training, TargetPosition: W, TargetArrowHead: {Type: Open}}

@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: applicant_credit_profile
+    description: One row per applicant with the latest score and tradeline aggregates.
+    columns:
+      - name: applicant_id
+        tests: [not_null, unique]
+      - name: score
+        tests: [not_null]

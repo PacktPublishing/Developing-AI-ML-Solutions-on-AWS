@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  Redshift Serverless for the data engineering chapter's cloud reproduction: the
+  same bureau warehouse the chapter runs locally as redshift-local, now on real
+  Amazon Redshift Serverless. Namespace + workgroup (8 RPU base) reachable on 5439
+  from one IP, SSL required. dbt/dlt point at the workgroup endpoint by swapping
+  WAREHOUSE_HOST/USER/PASSWORD — the profiles.yml shape does not change.
+  Bills per second while active; delete the stack the same day.
+  Deploy: aws cloudformation deploy --template-file redshift-serverless.yaml \
+    --stack-name ch01-redshift --capabilities CAPABILITY_NAMED_IAM \
+    --parameter-overrides VpcId=... SubnetIds=... AllowedCidr=x.x.x.x/32 AdminPassword=...
+
+Parameters:
+  VpcId:
+    Description: VPC for the workgroup (the default VPC is fine)
+    Type: AWS::EC2::VPC::Id
+
+  SubnetIds:
+    Description: At least 3 subnets in different AZs (default VPC subnets work)
+    Type: List<AWS::EC2::Subnet::Id>
+
+  AllowedCidr:
+    Description: Your IP in CIDR form (x.x.x.x/32) for psql/dbt on 5439
+    Type: String
+
+  AdminUsername:
+    Type: String
+    Default: loader
+
+  AdminPassword:
+    Description: Redshift admin password (8-64 chars, upper+lower+digit; throwaway)
+    Type: String
+    NoEcho: true
+
+  BaseCapacity:
+    Description: Base RPU (8 is the serverless minimum)
+    Type: Number
+    Default: 8
+
+Resources:
+  RedshiftSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Redshift Serverless 5439 from one address
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: !Ref AllowedCidr
+
+  BureauNamespace:
+    Type: AWS::RedshiftServerless::Namespace
+    Properties:
+      NamespaceName: bureau
+      AdminUsername: !Ref AdminUsername
+      AdminUserPassword: !Ref AdminPassword
+      DbName: bureau
+
+  BureauWorkgroup:
+    Type: AWS::RedshiftServerless::Workgroup
+    DependsOn: BureauNamespace
+    Properties:
+      WorkgroupName: bureau-wg
+      NamespaceName: bureau
+      BaseCapacity: !Ref BaseCapacity
+      PubliclyAccessible: true
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !GetAtt RedshiftSecurityGroup.GroupId
+      ConfigParameters:
+        - ParameterKey: require_ssl
+          ParameterValue: "true"
+
+Outputs:
+  WorkgroupEndpoint:
+    Description: Host for WAREHOUSE_HOST (dbt/dlt)
+    Value: !GetAtt BureauWorkgroup.Workgroup.Endpoint.Address
+
+  WorkgroupPort:
+    Value: 5439
+
+  Database:
+    Value: bureau

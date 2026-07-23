@@ -1,0 +1,76 @@
+services:
+  s3:
+    # real S3-compatible object store
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=local
+      - MINIO_ROOT_PASSWORD=localsecret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  online-store:
+    # official DynamoDB Local: the online-store pattern, key-value lookup
+    # of the latest feature row per applicant
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory"]
+    ports:
+      - "8000:8000"
+
+  catalog:
+    # Iceberg REST catalog over MinIO; the offline feature store's table
+    # format (Iceberg) served locally
+    image: apache/iceberg-rest-fixture:latest
+    environment:
+      - AWS_ACCESS_KEY_ID=local
+      - AWS_SECRET_ACCESS_KEY=localsecret
+      - AWS_REGION=us-east-1
+      - CATALOG_WAREHOUSE=s3://feature-store/
+      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+      - CATALOG_S3_ENDPOINT=http://s3:9000
+      - CATALOG_S3_PATH__STYLE__ACCESS=true
+    ports:
+      - "8181:8181"
+    depends_on:
+      - s3
+
+  trino:
+    # the engine inside Athena, pointed at the same Iceberg catalog
+    image: trinodb/trino:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./trino/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+    depends_on:
+      - catalog
+    healthcheck:
+      test: ["CMD", "trino", "--execute", "select 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  warehouse:
+    # Redshift-flavored Postgres 16: accepts redshift-connector's startup
+    # parameters and reports a Redshift server version, so dlt's redshift
+    # destination and dbt-redshift connect natively, same as production
+    image: public.ecr.aws/oblako/redshift-local:16
+    environment:
+      - POSTGRES_USER=loader
+      - POSTGRES_PASSWORD=loader
+      - POSTGRES_DB=bureau
+      - POSTGRES_HOST_AUTH_METHOD=md5
+    ports:
+      - "5439:5439"
+    healthcheck:
+      # the image fronts Postgres (internal :5433) with a Redshift wire proxy
+      # on :5439; probe the engine directly
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5433 -U loader -d bureau"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

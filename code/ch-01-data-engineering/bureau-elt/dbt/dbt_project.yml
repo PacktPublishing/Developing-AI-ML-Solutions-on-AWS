@@ -1,0 +1,12 @@
+name: bureau_marts
+version: "1.0.0"
+profile: bureau
+
+model-paths: ["models"]
+
+models:
+  bureau_marts:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

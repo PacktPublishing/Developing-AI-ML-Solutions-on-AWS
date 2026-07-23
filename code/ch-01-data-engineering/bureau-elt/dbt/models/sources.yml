@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: bureau_raw
+    description: Raw bureau reports loaded daily by the Glue job with dlt.
+    schema: bureau_raw
+    tables:
+      - name: reports
+        columns:
+          - name: report_id
+            tests: [not_null, unique]
+          - name: applicant_id
+            tests: [not_null]
+      - name: reports__tradelines
+      - name: reports__inquiries

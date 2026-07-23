@@ -1,0 +1,50 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [AWSCloud]
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: vertical
+      Children: [TopRow, MidRow, BottomRow]
+    TopRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [SageMaker, GlueSvc]
+    MidRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Lambda, S3, Athena]
+    BottomRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Redshift]
+    SageMaker:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "SageMaker"
+    GlueSvc:
+      Type: AWS::Glue::Job
+      Title: "Glue"
+    Lambda:
+      Type: AWS::Lambda::Function
+      Title: "Lambda"
+    S3:
+      Type: AWS::S3::Bucket
+      Title: "S3"
+    Athena:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Athena"
+      Title: "Athena"
+    Redshift:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "Redshift"
+  Links:
+    - {Source: SageMaker, SourcePosition: S, Target: S3, TargetPosition: NNW, SourceArrowHead: {Type: Open}, TargetArrowHead: {Type: Open}}
+    - {Source: GlueSvc, SourcePosition: S, Target: S3, TargetPosition: NNE, SourceArrowHead: {Type: Open}, TargetArrowHead: {Type: Open}}
+    - {Source: Lambda, SourcePosition: E, Target: S3, TargetPosition: W, SourceArrowHead: {Type: Open}, TargetArrowHead: {Type: Open}}
+    - {Source: Athena, SourcePosition: W, Target: S3, TargetPosition: E, SourceArrowHead: {Type: Open}, TargetArrowHead: {Type: Open}}
+    - {Source: Redshift, SourcePosition: N, Target: S3, TargetPosition: S, SourceArrowHead: {Type: Open}, TargetArrowHead: {Type: Open}}

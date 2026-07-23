@@ -1,0 +1,84 @@
+# Pre-commit hooks for the book's code.
+#   ruff      - format and lint Python
+#   ty        - type-check Python
+#   shfmt     - format shell scripts
+#   mbake     - format Makefiles
+#   commitizen - check the commit message against the schema in pyproject.toml
+#
+# Install once:  uvx pre-commit install
+#                uvx pre-commit install --hook-type commit-msg
+#                (the second command is what enables the commit-message check;
+#                 installing the pre-commit stage alone does not install it)
+# Run on all:    uvx pre-commit run --all-files
+# Refresh pins:  uvx pre-commit autoupdate
+#
+# UNTESTED: pin revs with `pre-commit autoupdate` and run once locally before
+# relying on it. mbake/ty run through uvx, so uv must be on PATH.
+exclude: '(^|/)(\.aws-sam|\.ruff_cache|\.venv|deliveries)/'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+        # mbake formats Makefiles without a trailing newline; let it own them so
+        # the two hooks do not fight on every run.
+        exclude: (^|/)Makefile$
+      - id: check-yaml
+        # allow CloudFormation / SAM short-form intrinsics (!Ref, !GetAtt, !Sub, !Not, ...)
+        args: [--unsafe]
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  # Python: format then lint. Rev tracks the ruff version pinned in pyproject.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
+    hooks:
+      - id: ruff-format
+      - id: ruff-check
+        args: [--fix]
+
+  # Shell: gofmt-style formatting for *.sh. This hook downloads shfmt itself.
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.10.0-2
+    hooks:
+      - id: shfmt
+        args: [-w, -i, "2"] # 2-space indent, write in place
+
+  # Shell: lint for correctness and common footguns. Downloads shellcheck.
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
+
+  # ty (type check) and mbake (Makefile format) have no stable upstream hook
+  # yet, so run them through uvx as local hooks.
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty (type check, per chapter)
+        # ty uses one config per invocation, so run it inside each chapter, where
+        # that chapter's ty.toml applies. ty is a 0.0.x pre-release, so pin the
+        # version (unpinned auto-updates change behavior) and pass --ignore on the
+        # CLI (0.0.62 stopped honoring unresolved-import from ty.toml). The book's
+        # scripts declare deps per-script, so third-party imports never resolve.
+        # --exit-zero-on-warning passes on warnings, still fails on real errors.
+        entry: "bash -c 'for d in code/ch-*/; do [ -f \"$d/ty.toml\" ] || continue; ( cd \"$d\" && uvx ty@0.0.62 check --exit-zero-on-warning --ignore unresolved-import ) || exit 1; done'"
+        language: system
+        pass_filenames: false
+      - id: mbake
+        name: mbake (Makefile format)
+        entry: uvx --from mbake mbake format
+        language: system
+        files: (^|/)Makefile$
+
+  # Validate the commit message against [tool.commitizen] in pyproject.toml:
+  # "<scope> (<+|~|->): <subject>", scope one of ch-NN, book, repo, tools.
+  # Runs at the commit-msg stage, so it needs `pre-commit install --hook-type
+  # commit-msg` as well as the plain install.
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.16.5
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]

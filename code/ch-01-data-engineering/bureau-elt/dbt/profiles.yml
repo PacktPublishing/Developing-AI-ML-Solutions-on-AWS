@@ -1,0 +1,16 @@
+bureau:
+  target: local
+  outputs:
+    # the same profile shape works against real Redshift: change host,
+    # port stays 5439, and swap the credentials
+    local:
+      type: redshift
+      host: "{{ env_var('WAREHOUSE_HOST', 'localhost') }}"
+      port: 5439
+      user: "{{ env_var('WAREHOUSE_USER', 'loader') }}"
+      password: "{{ env_var('WAREHOUSE_PASSWORD', 'loader') }}"
+      dbname: bureau
+      schema: bureau_marts
+      threads: 4
+      # verify-full locally (trust the warehouse cert via SSL_CERT_FILE) and on real Redshift
+      sslmode: "{{ env_var('WAREHOUSE_SSLMODE', 'verify-full') }}"

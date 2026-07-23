@@ -1,0 +1,36 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [AWSCloud]
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [EventBridge, RawZone, GlueJob, Redshift, Dbt]
+    EventBridge:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon EventBridge"
+      Title: "EventBridge"
+    RawZone:
+      Type: AWS::S3::Bucket
+      Title: "S3 raw"
+    GlueJob:
+      Type: AWS::Glue::Job
+      Title: "Glue + dlt"
+    Redshift:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "Redshift"
+    Dbt:
+      Type: AWS::Diagram::Resource
+      Title: "dbt marts"
+  Links:
+    - {Source: EventBridge, SourcePosition: E, Target: RawZone, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: RawZone, SourcePosition: E, Target: GlueJob, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: GlueJob, SourcePosition: E, Target: Redshift, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Redshift, SourcePosition: E, Target: Dbt, TargetPosition: W, TargetArrowHead: {Type: Open}}

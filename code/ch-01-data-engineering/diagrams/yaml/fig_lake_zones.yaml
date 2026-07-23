@@ -1,0 +1,41 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [AWSCloud]
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: vertical
+      Children: [CatalogRow, ZoneRow]
+    CatalogRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Catalog, Athena]
+    ZoneRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Raw, Curated, Feature]
+    Catalog:
+      Type: AWS::Glue::Job
+      Title: "Glue Data Catalog"
+    Athena:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Athena"
+      Title: "Athena"
+    Raw:
+      Type: AWS::S3::Bucket
+      Title: "raw"
+    Curated:
+      Type: AWS::S3::Bucket
+      Title: "curated"
+    Feature:
+      Type: AWS::S3::Bucket
+      Title: "feature"
+  Links:
+    - {Source: Raw, SourcePosition: E, Target: Curated, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Curated, SourcePosition: E, Target: Feature, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Catalog, SourcePosition: S, Target: Curated, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: Athena, SourcePosition: S, Target: Curated, TargetPosition: NNE, TargetArrowHead: {Type: Open}}

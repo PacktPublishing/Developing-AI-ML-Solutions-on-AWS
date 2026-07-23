@@ -1,0 +1,65 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Format, lint, type-check, shell, and Makefile checks, run through the same
+  # pre-commit config used locally so CI and the working tree agree. Shell is
+  # both formatted (shfmt) and linted (shellcheck) here.
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: pre-commit (ruff, ty, shfmt, shellcheck, mbake)
+        run: uvx pre-commit run --all-files --show-diff-on-failure
+
+  # Byte-compile the chapter code on each supported Python so a version-specific
+  # syntax error (for example the 3.14-only bracketless except) fails loudly
+  # rather than only surfacing on a reader's machine. This is a syntax check; it
+  # does not install dependencies or import the modules.
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: byte-compile code/
+        run: |
+          python -m compileall -q \
+            -x '(\.aws-sam|\.ruff_cache|\.venv|__pycache__)' \
+            code
+
+  # Shim tests: the suite provisions its own DynamoDB Local via docker-py
+  # (runners have a Docker daemon), so no services block is needed.
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: sagemaker-local test suite
+        working-directory: code/ch-01-data-engineering
+        run: make test
+
+  # ch-03: unit tests for the routing rule and the guardrail shim, plus a
+  # pgvector round-trip that provisions its own container via docker-py.
+  tests-genai:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: generative-ai test suite
+        working-directory: code/ch-03-generative-ai
+        run: make test

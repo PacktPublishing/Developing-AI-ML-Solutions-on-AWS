@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CreateFeatureGroup",
+        "sagemaker:DescribeFeatureGroup",
+        "sagemaker:DeleteFeatureGroup",
+        "sagemaker:PutRecord",
+        "sagemaker:GetRecord",
+        "sagemaker:BatchGetRecord",
+        "sagemaker:DeleteRecord"
+      ],
+      "Resource": "arn:aws:sagemaker:<REGION>:<ACCOUNT_ID>:feature-group/*"
+    }
+  ]
+}

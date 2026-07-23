@@ -1,0 +1,39 @@
+[project]
+name = "developing-ai-ml-solutions-on-aws"
+version = "0.1.0"
+description = "Book about developing AI/ML solutions on AWS"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "python-docx>=1.2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pydocstyle>=6.3.0",
+    "ruff>=0.15.21",
+]
+
+[tool.commitizen]
+name = "cz_customize"
+
+[tool.commitizen.customize]
+schema = "<scope> (<+|~|->): <subject>"
+schema_pattern = "^(ch-\\d{2}|book|repo|tools) \\([+~-]\\): .+"
+message_template = "{{scope}} ({{change}}): {{subject}}"
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "scope"
+message = "Scope (ch-01, ch-02, ..., book, repo, tools):"
+
+[[tool.commitizen.customize.questions]]
+type = "list"
+name = "change"
+choices = ["+", "~", "-"]
+message = "Change type: + added, ~ changed, - removed"
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "subject"
+message = "Short description:"

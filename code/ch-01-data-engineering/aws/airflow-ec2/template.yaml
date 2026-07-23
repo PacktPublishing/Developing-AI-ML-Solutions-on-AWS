@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  Airflow on EC2 for the data engineering chapter: one free-tier instance running Airflow standalone and redshift-local under docker compose, with the bureau smoke DAG installed. Deploy with: sam deploy --guided
+
+Parameters:
+  AllowedCidr:
+    Description: Your IP in CIDR form (x.x.x.x/32) for the Airflow UI
+    Type: String
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+  SubnetId:
+    Description: Subnet to launch into; empty uses the default VPC's default subnet
+    Type: String
+    Default: ""
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Conditions:
+  HasSubnet: !Not
+    - !Equals
+      - !Ref SubnetId
+      - ""
+
+Resources:
+  AirflowInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  AirflowInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref AirflowInstanceRole
+
+  AirflowSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Airflow UI access from one address
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: !Ref AllowedCidr
+
+  AirflowInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref AirflowInstanceProfile
+      SubnetId: !If
+        - HasSubnet
+        - !Ref SubnetId
+        - !Ref AWS::NoValue
+      SecurityGroupIds:
+        - !GetAtt AirflowSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: book-ch01-airflow
+      UserData: !Base64 |
+        #!/bin/bash
+        dnf install -y docker
+        systemctl enable --now docker
+        fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+        mkdir -p /usr/local/lib/docker/cli-plugins
+        curl -sL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+          -o /usr/local/lib/docker/cli-plugins/docker-compose
+        chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+        mkdir -p /opt/af/dags
+        cat > /opt/af/dags/bureau_smoke.py <<'DAG'
+        """Smoke DAG: orchestrate warehouse steps, the chapter's pipeline shape."""
+        from datetime import datetime
+
+        import psycopg2
+        from airflow.providers.standard.operators.python import PythonOperator
+        from airflow.sdk import DAG
+
+        DSN = "postgresql://loader:loader@warehouse:5439/bureau"
+
+
+        def run_sql(sql):
+            """Run one statement against redshift-local."""
+            with psycopg2.connect(DSN) as conn, conn.cursor() as cur:
+                cur.execute(sql)
+                if cur.description:
+                    print(cur.fetchall())
+
+
+        with DAG("bureau_smoke", start_date=datetime(2026, 1, 1),
+                 schedule=None, catchup=False) as dag:
+            load = PythonOperator(task_id="load", python_callable=run_sql,
+                op_args=["create table if not exists smoke(id int); insert into smoke select 1"])
+            check = PythonOperator(task_id="check", python_callable=run_sql,
+                op_args=["select count(*) from smoke"])
+            load >> check
+        DAG
+        cat > /opt/af/compose.yml <<'YML'
+        services:
+          warehouse:
+            image: public.ecr.aws/oblako/redshift-local:16
+            environment:
+              - POSTGRES_USER=loader
+              - POSTGRES_PASSWORD=loader
+              - POSTGRES_DB=bureau
+              - POSTGRES_HOST_AUTH_METHOD=md5
+          airflow:
+            image: apache/airflow:3.3.0
+            command: standalone
+            environment:
+              - AIRFLOW__CORE__LOAD_EXAMPLES=False
+              # the bureau DAG talks to redshift-local with psycopg2, which is not
+              # in the base image; install it at container start
+              - _PIP_ADDITIONAL_REQUIREMENTS=psycopg2-binary
+            ports:
+              - "8080:8080"
+            volumes:
+              - /opt/af/dags:/opt/airflow/dags
+            depends_on:
+              - warehouse
+        YML
+        cd /opt/af && docker compose up -d
+
+Outputs:
+  AirflowUrl:
+    Description: Airflow UI (login admin; Airflow 3 standalone prints the generated password to the container logs and simple_auth_manager_passwords.json.generated)
+    Value: !Sub http://${AirflowInstance.PublicDnsName}:8080

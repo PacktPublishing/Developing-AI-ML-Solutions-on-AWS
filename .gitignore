@@ -1,0 +1,27 @@
+.DS_Store
+.venv/
+.tmp/
+.vscode/
+.claude/settings.local.json
+.ruff_cache/
+__pycache__/
+.pytest_cache/
+.aws-sam/
+deliveries/
+deliveries/oblako-ca.pem
+code/ch-01-data-engineering/oblako-ca.pem
+code/ch-01-data-engineering/oblako-bundle.pem
+code/ch-01-data-engineering/diagrams/png/
+~$*
+.claude/
+deliveries/
+
+# generated at build time from the chapter root (see aws/assistant-api/Makefile)
+code/ch-03-generative-ai/aws/assistant-api/src/corpus_data.py
+
+# Run captures — kept locally as evidence, not shipped in the repo
+code/**/runs/
+
+# not for the public repo
+tools/templates/packt_base.docx
+code/ch-03-generative-ai/data/guardrail.json
