@@ -11,11 +11,11 @@ score, and routes the decision to the role that may approve it. Both run on
 Bedrock, or on Ollama with BEDROCK_LOCAL=1. The serve mode hosts the agent on
 the Amazon Bedrock AgentCore runtime contract.
 
-Usage:
-  uv run underwriting-agent/agent.py ask --query "What DSCR floor applies to a solar SPV?"
-  uv run underwriting-agent/agent.py decide \
+Usage (from the chapter root):
+  PYTHONPATH=. uv run underwriting-agent/agent.py ask --query "What DSCR floor applies to a solar SPV?"
+  PYTHONPATH=. uv run underwriting-agent/agent.py decide \
       --deal "GreenRoof Installers, residential solar, seeks a 3.5 million term loan"
-  uv run underwriting-agent/agent.py serve
+  PYTHONPATH=. uv run underwriting-agent/agent.py serve
 """
 
 import argparse

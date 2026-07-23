@@ -34,19 +34,24 @@ docker build -t ch02-step:local pipeline/step_image/
 
 # local — no instance quota, containers run on your machine
 PIPELINE_MODE=local STEP_IMAGE=ch02-step:local SCORE_BUCKET=<bucket> \
+SCORE_PREFIX=ch02/pipeline-scores-local \
 SAGEMAKER_ROLE_ARN=arn:aws:iam::<acct>:role/<SageMakerExecutionRole> \
   uv run pipeline/pipeline.py
 
 # cloud — same script, ECR image, real SageMaker jobs
 PIPELINE_MODE=aws INSTANCE_TYPE=ml.m5.large \
 STEP_IMAGE=<acct>.dkr.ecr.us-east-1.amazonaws.com/ch02-pipeline-step:latest \
-SCORE_BUCKET=<bucket> \
+SCORE_BUCKET=<bucket> SCORE_PREFIX=ch02/pipeline-scores-aws \
 SAGEMAKER_ROLE_ARN=arn:aws:iam::<acct>:role/<SageMakerExecutionRole> \
   uv run pipeline/pipeline.py
+
+# compare the two exports byte for byte
+make pipeline-parity SCORE_BUCKET=<bucket>
 ```
 
 Both runs select the same winner (the challenger, AUC 0.7503 vs the scorecard's
-0.7485) and export a byte-identical 800-row `scores.csv`.
+0.7485) and export a byte-identical 800-row `scores.csv`. `make pipeline-parity`
+downloads both exports and proves it with `cmp` and the sha256 hashes.
 
 ## Notes that cost time to learn (SDK v3)
 

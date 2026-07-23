@@ -67,9 +67,12 @@ arguments pass through untouched.
 
 The feature-store demo mirrors a SageMaker Feature Store offline store in
 the Iceberg table format: locally the feature table lives in the REST
-catalog over MinIO and Trino queries it; on AWS you create the feature
-group with the Iceberg format and ship the same rows with
-`feature_group.ingest()`. The online-store pattern runs on DynamoDB Local; only the featurestore-runtime API itself (GetRecord/PutRecord) has no local emulator.
+catalog over MinIO and Trino queries it; the AWS counterpart is a feature
+group created with the Iceberg table format. The online-store pattern runs
+on DynamoDB Local behind `sagemaker-local/`, a shim that serves the
+featurestore-runtime API (PutRecord/GetRecord, batch and delete included),
+so the scripts in `feature-store/extra/` make the same calls against the
+shim and against real AWS.
 
 ## Layout
 
@@ -91,4 +94,8 @@ One local cloud for the chapter, one folder per use case:
   - `ingest_features.py`: gold mart to the Iceberg feature table and the
     online store
   - `lookup_features.py`: one applicant's features by key, the serving read
+  - `extra/`: the online-store demo and the local/AWS parity matrix
+- `sagemaker-local/`: the Feature Store shim, serving the featurestore-runtime
+  API over DynamoDB Local (`make feature-api` / `make feature-group`)
+- `tests/`: the shim's pytest suite, both API planes against DynamoDB Local
 - `Makefile`: all targets above; `make lint` runs ruff

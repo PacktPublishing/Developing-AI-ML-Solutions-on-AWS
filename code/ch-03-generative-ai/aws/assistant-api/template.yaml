@@ -24,7 +24,7 @@ Parameters:
 
   GuardrailId:
     Description: |
-      Bedrock guardrail id, from `uv run underwriting-agent/guardrails.py create` in the chapter (saved to data/guardrail.json). Leave empty to deploy without a guardrail; set it with GuardrailVersion to apply the same guardrail the chapter's ask path uses.
+      Bedrock guardrail id, from `make guardrail` in the chapter (saved to data/guardrail.json). Leave empty to deploy without a guardrail; set it with GuardrailVersion to apply the same guardrail the chapter's ask path uses.
     Type: String
     Default: ""
 

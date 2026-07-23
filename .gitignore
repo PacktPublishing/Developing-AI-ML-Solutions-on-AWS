@@ -23,5 +23,5 @@ code/ch-03-generative-ai/aws/assistant-api/src/corpus_data.py
 code/**/runs/
 
 # not for the public repo
-tools/templates/packt_base.docx
+tools/
 code/ch-03-generative-ai/data/guardrail.json

@@ -11,10 +11,10 @@ also carries a light shim that redacts obvious personal data and refuses the
 same off-topic requests. The shim is not a substitute for the managed service,
 it just keeps the local loop honest about the same rules.
 
-Usage:
-  uv run guardrails.py create      # create the guardrail on your account
-  uv run guardrails.py show
-  uv run guardrails.py delete
+Usage (from the chapter root):
+  make guardrail    # create the guardrail on your account
+  PYTHONPATH=. uv run underwriting-agent/guardrails.py show
+  PYTHONPATH=. uv run underwriting-agent/guardrails.py delete
 """
 
 import argparse

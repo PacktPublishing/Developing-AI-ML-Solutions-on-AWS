@@ -8,8 +8,8 @@ batch-after-delete against whichever endpoint the environment selects,
 printing one normalized line per op so two runs can be diffed directly.
 
 Usage:
-  FEATURE_STORE_URL=http://localhost:8007 uv run feature-store/parity_check.py
-  uv run feature-store/parity_check.py         # real AWS
+  FEATURE_STORE_URL=http://localhost:8007 uv run feature-store/extra/parity_check.py
+  uv run feature-store/extra/parity_check.py   # real AWS
 """
 
 import datetime

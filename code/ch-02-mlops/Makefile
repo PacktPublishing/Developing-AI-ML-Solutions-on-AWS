@@ -1,5 +1,5 @@
 .PHONY: up seed train train-challenger mlflow-train mlflow-ui serve score batch \
-	amt lambda-build lambda-local fargate-build fargate-local down lint test
+	amt lambda-build lambda-local fargate-build fargate-local pipeline-parity down lint
 
 # The local cloud is S3Proxy (S3 API) only; MLflow is serverless — no tracking
 # server. Locally it writes runs to a sqlite file and artifacts to S3Proxy; on
@@ -75,6 +75,8 @@ batch:
 APP_ARN ?= $(shell env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY aws sagemaker list-mlflow-apps --query "Summaries[?Name=='ch02-mlflow'].Arn | [0]" --output text)
 
 amt:
+	@test -n "$(APP_ARN)" && test "$(APP_ARN)" != "None" || \
+		{ echo "no MLflow App named ch02-mlflow on this account: make mlflow-app (aws/) or pass APP_ARN=..."; exit 1; }
 	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
 		MLFLOW_TRACKING_URI="$(APP_ARN)" uv run tuning/amt.py
 
@@ -106,6 +108,19 @@ fargate-local: fargate-build
 	cd serving/fargate && docker compose up -d && sleep 5 && \
 		curl -s -XPOST http://localhost:8093/invocations -H 'Content-Type: application/json' --data-binary @../../fixtures/sample.json; echo; \
 		docker compose down
+
+# the pipeline parity check: download the local-mode and cloud-mode score
+# exports (pipeline/README.md runs the pipeline twice, once per prefix) and
+# compare them byte for byte. Real AWS credentials, hence env -u.
+LOCAL_SCORES ?= ch02/pipeline-scores-local
+AWS_SCORES ?= ch02/pipeline-scores-aws
+pipeline-parity:
+	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY sh -c ' \
+		aws s3 cp s3://$(SCORE_BUCKET)/$(LOCAL_SCORES)/scores.csv /tmp/ch02-scores-local.csv && \
+		aws s3 cp s3://$(SCORE_BUCKET)/$(AWS_SCORES)/scores.csv /tmp/ch02-scores-aws.csv && \
+		shasum -a 256 /tmp/ch02-scores-local.csv /tmp/ch02-scores-aws.csv && \
+		cmp /tmp/ch02-scores-local.csv /tmp/ch02-scores-aws.csv && \
+		echo "parity: scores.csv byte-identical"'
 
 down:
 	docker compose down

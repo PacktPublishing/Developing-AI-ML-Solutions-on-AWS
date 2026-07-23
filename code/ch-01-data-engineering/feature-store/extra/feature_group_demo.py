@@ -9,7 +9,7 @@ point at the sagemaker-local shim; on AWS, unset the endpoint and the
 same calls hit the real service.
 
 Usage:
-  uv run feature-store/feature_group_demo.py --applicant 10073
+  uv run feature-store/extra/feature_group_demo.py --applicant 10073
 """
 
 import argparse

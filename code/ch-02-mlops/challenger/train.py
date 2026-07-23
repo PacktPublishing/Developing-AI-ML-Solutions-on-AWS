@@ -115,7 +115,7 @@ def train() -> None:
         print("validation:", {k: round(v, 4) for k, v in metrics.items()})
         # The metric contract: SageMaker captures training metrics by scraping this
         # printed line from CloudWatch with a regex, not from a return value. This
-        # exact format must match the metric_definitions Regex in aws/jobs/hpo.py
+        # exact format must match the metric_definitions Regex in aws/jobs/amt.py
         # ("validation_auc: ([0-9.]+)"); it is what Automatic Model Tuning optimizes.
         print(f"validation_auc: {metrics['auc']:.6f}")
 

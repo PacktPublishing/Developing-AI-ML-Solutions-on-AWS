@@ -55,7 +55,7 @@ The code never changes; environment seams switch worlds.
 - **Experiment tracking / registry**: `MLFLOW_TRACKING_URI` is a sqlite path
   locally, a serverless MLflow App ARN on AWS (with the `sagemaker-mlflow` plugin).
 - **Training**: `docker run ... train` locally; the same image submitted as a
-  SageMaker training job on AWS (`aws/train_job.py`, v3 `ModelTrainer`). The
+  SageMaker training job on AWS (`aws/jobs/train_job.py`, v3 `ModelTrainer`). The
   image is built in the cloud by CodeBuild -> ECR, so an Apple-silicon laptop
   never cross-builds under emulation.
 - **Serving**: the same container is a local `docker run`, a SageMaker serverless
