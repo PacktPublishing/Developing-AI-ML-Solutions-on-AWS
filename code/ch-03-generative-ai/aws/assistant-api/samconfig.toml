@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.build.parameters]
+beta_features = true
+
+[default.sync.parameters]
+beta_features = true
+
+[default.deploy.parameters]
+stack_name = "underwriting-assistant-ch03"
+resolve_s3 = true
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"

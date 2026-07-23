@@ -1,0 +1,14 @@
+{
+  "query": "What DSCR floor applies to a solar project company?",
+  "k": 5,
+  "provider": "local",
+  "model": "qwen3:0.6b",
+  "retrieved": [
+    "kb/sector/ci-solar-developer.md",
+    "kb/sector/solar-epc-contractor.md",
+    "kb/sector/solar-project-spv.md",
+    "kb/sector/residential-solar-installer.md",
+    "kb/policy/policy-collateral.md"
+  ],
+  "answer": "The DSCR floor applies to a solar project company with a floor of **1.30x** on a P50 production case.  \n\nCitations:  \n[kb/sector/solar-project-spv.md] # Sector profile: Solar project company (SPV)  \nDSCR expectation: Floor 1.30x on a P50 production case, 1.10x on a P90 case."
+}

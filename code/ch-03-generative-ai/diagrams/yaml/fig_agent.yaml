@@ -1,0 +1,40 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [User, AWSCloud]
+    User:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Underwriter"
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Agent, Tools]
+    Agent:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "AgentCore\nStrands agent"
+    Tools:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Model, Retrieve, Route]
+    Model:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "Bedrock\nQwen3"
+    Retrieve:
+      Type: AWS::RDS::DBInstance
+      Title: "RDS pgvector\nlookup_sector"
+    Route:
+      Type: AWS::Lambda::Function
+      Title: "route_decision\nauthority limits"
+  Links:
+    - {Source: User, SourcePosition: E, Target: Agent, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Agent, SourcePosition: E, Target: Model, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Agent, SourcePosition: E, Target: Retrieve, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Agent, SourcePosition: E, Target: Route, TargetPosition: W, TargetArrowHead: {Type: Open}}

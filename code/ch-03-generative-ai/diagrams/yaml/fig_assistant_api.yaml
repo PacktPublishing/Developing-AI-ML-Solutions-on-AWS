@@ -1,0 +1,55 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Underwriter, AWSCloud]
+
+    Underwriter:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Underwriter\nSigV4 request"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [VPC, Services]
+
+    VPC:
+      Type: AWS::EC2::VPC
+      Direction: horizontal
+      Title: "VPC (no NAT)"
+      Children: [Assistant, Database]
+
+    Assistant:
+      Type: AWS::Lambda::Function
+      Title: "Lambda\nfunction URL"
+    Database:
+      Type: AWS::RDS::DBInstance
+      Title: "RDS Postgres\npgvector"
+
+    Services:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Bedrock, Secrets]
+
+    Bedrock:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "Bedrock\nConverse + Guardrail"
+    Secrets:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Secrets Manager"
+      Title: "Secrets Manager\nDB credentials"
+
+  Links:
+    - {Source: Underwriter, SourcePosition: E, Target: Assistant, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Assistant, SourcePosition: E, Target: Database, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Assistant, SourcePosition: NNE, Target: Bedrock, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Assistant, SourcePosition: SSE, Target: Secrets, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+  # Bedrock and Secrets Manager are reached through VPC interface endpoints,
+  # which is why the VPC needs no NAT gateway (see assistant-api/template.yaml).

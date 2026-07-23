@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageGuardrail",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:CreateGuardrail",
+        "bedrock:CreateGuardrailVersion",
+        "bedrock:GetGuardrail",
+        "bedrock:DeleteGuardrail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ApplyGuardrailAtRuntime",
+      "Effect": "Allow",
+      "Action": ["bedrock:ApplyGuardrail"],
+      "Resource": "arn:aws:bedrock:*:*:guardrail/*"
+    }
+  ]
+}

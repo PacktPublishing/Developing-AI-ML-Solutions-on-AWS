@@ -1,0 +1,14 @@
+{
+  "query": "What DSCR floor applies to a solar project company?",
+  "k": 5,
+  "provider": "bedrock",
+  "model": "qwen.qwen3-next-80b-a3b",
+  "retrieved": [
+    "kb/sector/solar-project-spv.md",
+    "kb/sector/ci-solar-developer.md",
+    "kb/sector/solar-epc-contractor.md",
+    "kb/sector/residential-solar-installer.md",
+    "kb/policy/policy-risk-profile.md"
+  ],
+  "answer": "The DSCR floor for a solar project company is 1.30x on a P50 production case and 1.10x on a P90 case [kb/sector/solar-project-spv.md]."
+}

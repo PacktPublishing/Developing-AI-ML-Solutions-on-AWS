@@ -1,0 +1,37 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [AWSCloud]
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [KB, Embed, Vectors, Generate, User]
+    KB:
+      Type: AWS::Diagram::Resource
+      Title: "knowledge base\n(corpus_data.py)"
+    Embed:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "Bedrock\nTitan embeddings"
+    Vectors:
+      Type: AWS::RDS::DBInstance
+      Title: "RDS Postgres\npgvector"
+    Generate:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "Bedrock Converse\nand Guardrails"
+    User:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Underwriter"
+  Links:
+    - {Source: KB, SourcePosition: E, Target: Embed, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Embed, SourcePosition: E, Target: Vectors, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Vectors, SourcePosition: E, Target: Generate, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Generate, SourcePosition: E, Target: User, TargetPosition: W, TargetArrowHead: {Type: Open}}

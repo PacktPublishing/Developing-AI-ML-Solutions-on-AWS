@@ -1,0 +1,16 @@
+services:
+  vectors:
+    # Postgres with pgvector: the local vector store. On AWS this is Amazon RDS
+    # for PostgreSQL with the same extension. The retrieval SQL does not change.
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=underwriter
+      - POSTGRES_PASSWORD=underwriter
+      - POSTGRES_DB=underwriting
+    ports:
+      - "5544:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U underwriter -d underwriting"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

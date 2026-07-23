@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  The underwriting assistant on AWS: RDS for PostgreSQL with pgvector as the vector store, and a Lambda that answers a grounded question against Bedrock. The store and the retrieval code are the same as the local chapter; only the Postgres host moves to RDS.
+  Self-contained: the Lambda creates the pgvector extension, the table, and the index on its first call, and seeds the synthetic knowledge base when the table is empty, so a fresh deploy needs no manual SQL and redeploys are idempotent.
+  RDS db.t3.micro is free-tier eligible. Aurora is the scale-up, but Aurora on a free-plan account needs the express configuration, which CloudFormation does not yet expose, so a plain RDS instance keeps this runnable with no account upgrade.
+
+Parameters:
+  DBName:
+    Type: String
+    Default: underwriting
+
+  DBUsername:
+    Type: String
+    Default: underwriter
+
+  TextModel:
+    Type: String
+    Default: qwen.qwen3-next-80b-a3b
+
+  EmbedModel:
+    Type: String
+    Default: amazon.titan-embed-text-v2:0
+
+  GuardrailId:
+    Description: |
+      Bedrock guardrail id, from `uv run underwriting-agent/guardrails.py create` in the chapter (saved to data/guardrail.json). Leave empty to deploy without a guardrail; set it with GuardrailVersion to apply the same guardrail the chapter's ask path uses.
+    Type: String
+    Default: ""
+
+  GuardrailVersion:
+    Description: guardrail version that goes with GuardrailId
+    Type: String
+    Default: ""
+
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+
+  # A small VPC so the Lambda can reach a private database. Bedrock and Secrets
+  # Manager are reached through interface endpoints, so no NAT gateway is needed.
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+
+  LambdaSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: assistant lambda
+      VpcId: !Ref Vpc
+
+  DbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: postgres from the lambda only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref LambdaSg
+
+  EndpointSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: interface endpoints, https from the lambda
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref LambdaSg
+
+  BedrockEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.bedrock-runtime
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+      SecurityGroupIds:
+        - !Ref EndpointSg
+
+  SecretsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+      SecurityGroupIds:
+        - !Ref EndpointSg
+
+  # Both stateful resources are deliberately disposable: this is a chapter stack
+  # that holds a synthetic knowledge base the Lambda reseeds on its first call,
+  # so `make teardown` should leave nothing behind and nothing to pay for. Say so
+  # explicitly rather than relying on the default. A production store would set
+  # Retain on both, along with backups and deletion protection.
+  DbSecret:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: database credentials for the underwriting assistant
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${DBUsername}"}'
+        GenerateStringKey: password
+        ExcludePunctuation: true
+        PasswordLength: 24
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: assistant database subnets
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+
+  Database:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: "20"
+      StorageType: gp3
+      DBName: !Ref DBName
+      MasterUsername: !Sub '{{resolve:secretsmanager:${DbSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DbSecret}:SecretString:password}}'
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DbSg
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 0
+      DeletionProtection: false
+
+  Assistant:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: python-uv
+    Properties:
+      CodeUri: src/
+      Handler: handler.answer
+      Runtime: python3.12
+      Timeout: 60
+      MemorySize: 512
+      VpcConfig:
+        SubnetIds:
+          - !Ref SubnetA
+          - !Ref SubnetB
+        SecurityGroupIds:
+          - !Ref LambdaSg
+      Environment:
+        Variables:
+          PGHOST: !GetAtt Database.Endpoint.Address
+          PGPORT: "5432"
+          PGDATABASE: !Ref DBName
+          DB_SECRET_ARN: !Ref DbSecret
+          TEXT_MODEL: !Ref TextModel
+          EMBED_MODEL: !Ref EmbedModel
+          GUARDRAIL_ID: !Ref GuardrailId
+          GUARDRAIL_VERSION: !Ref GuardrailVersion
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:ApplyGuardrail
+              Resource: '*'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref DbSecret
+
+Outputs:
+  FunctionUrl:
+    Description: the assistant endpoint, sign requests with SigV4
+    Value: !GetAtt AssistantUrl.FunctionUrl
+
+  DatabaseEndpoint:
+    Description: the RDS PostgreSQL endpoint
+    Value: !GetAtt Database.Endpoint.Address

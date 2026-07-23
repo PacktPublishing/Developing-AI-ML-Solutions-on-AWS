@@ -1,0 +1,20 @@
+[
+  {
+    "tier": 1,
+    "name": "Underwriter",
+    "max_exposure_usd": 2000000,
+    "max_risk_profile": 6
+  },
+  {
+    "tier": 2,
+    "name": "Managing director",
+    "max_exposure_usd": 10000000,
+    "max_risk_profile": 8
+  },
+  {
+    "tier": 3,
+    "name": "Chief executive",
+    "max_exposure_usd": null,
+    "max_risk_profile": 10
+  }
+]
