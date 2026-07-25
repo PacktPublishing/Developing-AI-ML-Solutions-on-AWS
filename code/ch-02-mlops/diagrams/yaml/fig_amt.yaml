@@ -12,7 +12,7 @@ Diagram:
     Developer:
       Type: AWS::Diagram::Resource
       Preset: User
-      Title: "HyperparameterTuner\ncloud AMT | local shim"
+      Title: "HyperparameterTuner\ncloud AMT | local Syne Tune"
 
     AWSCloud:
       Type: AWS::Diagram::Cloud
@@ -23,7 +23,7 @@ Diagram:
     Tuner:
       Type: AWS::Diagram::Resource
       Preset: "Amazon SageMaker AI"
-      Title: "Tuning job\nBayesian | random"
+      Title: "Tuning job\nBayesian search"
     Trials:
       Type: AWS::Diagram::Resource
       Preset: "Amazon SageMaker AI"

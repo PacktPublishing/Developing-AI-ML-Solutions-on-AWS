@@ -27,7 +27,7 @@ make dbt-run         # staging views and the gold mart, via dbt-redshift
 make dbt-test        # source and mart tests
 make gold            # top of applicant_credit_profile
 make lake-objects    # buckets, objects, prefixes, provenance metadata
-make lake-parquet    # partitioned Parquet + a DuckDB query in place
+make lake-parquet    # partitioned Parquet + a PyArrow read in place
 make lake-table      # an Iceberg applications table via PyIceberg
 make lake-table-query # the same table through Trino SQL
 make features        # ship the gold mart to the Iceberg feature table
@@ -86,7 +86,7 @@ One local cloud for the chapter, one folder per use case:
   - `dbt/`: sources with tests, staging views, and the gold mart
     `applicant_credit_profile`
 - `lake-basics/`: the lake section's examples (objects and metadata,
-  partitioned Parquet with DuckDB, an Iceberg table with PyIceberg).
+  partitioned Parquet with PyArrow, an Iceberg table with PyIceberg).
   S3 Inventory configuration appears in the chapter text only: MinIO does
   not implement the inventory API, and the configuration has not yet been
   applied to a bucket on real S3
