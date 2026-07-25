@@ -27,7 +27,9 @@ rows = pa.table(
         "vintage": pa.array(
             [random.choice(["2025-12", "2026-01"]) for _ in range(200)], pa.string()
         ),
-        "pd": pa.array([round(random.uniform(0.01, 0.25), 4) for _ in range(200)]),
+        "default_rate": pa.array(
+            [round(random.uniform(0.01, 0.25), 4) for _ in range(200)]
+        ),
         "decision": pa.array(
             [random.choice(["APPROVE", "REFER", "DECLINE"]) for _ in range(200)],
             pa.string(),

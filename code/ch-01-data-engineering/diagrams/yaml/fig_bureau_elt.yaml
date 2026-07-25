@@ -11,7 +11,7 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Children: [EventBridge, RawZone, GlueJob, Redshift, Dbt]
+      Children: [EventBridge, RawZone, GlueJob, Redshift]
     EventBridge:
       Type: AWS::Diagram::Resource
       Preset: "Amazon EventBridge"
@@ -25,12 +25,8 @@ Diagram:
     Redshift:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Redshift"
-      Title: "Redshift"
-    Dbt:
-      Type: AWS::Diagram::Resource
-      Title: "dbt marts"
+      Title: "Redshift (dbt marts)"
   Links:
     - {Source: EventBridge, SourcePosition: E, Target: RawZone, TargetPosition: W, TargetArrowHead: {Type: Open}}
     - {Source: RawZone, SourcePosition: E, Target: GlueJob, TargetPosition: W, TargetArrowHead: {Type: Open}}
     - {Source: GlueJob, SourcePosition: E, Target: Redshift, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Redshift, SourcePosition: E, Target: Dbt, TargetPosition: W, TargetArrowHead: {Type: Open}}
