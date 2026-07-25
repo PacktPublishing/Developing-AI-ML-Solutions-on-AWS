@@ -129,27 +129,31 @@ POLICY = [
             "Solar-sector borrowers are young companies in a new market, so there"
             " is no external credit score. The underwriter assigns an internal"
             " risk profile from 1 to 10, where 10 is the most risky, using the"
-            " five-factor rating scorecard that follows. The risk profile and the"
+            " six-factor rating scorecard that follows. The risk profile and the"
             " exposure together determine who may approve the deal."
         ),
     },
     {
         "id": "policy-rating-methodology",
-        "title": "Rating methodology: the five-factor scorecard",
+        "title": "Rating methodology: the six-factor scorecard",
         "body": (
             "With no external score, the underwriter rates each deal on a"
             " qualitative scorecard adapted from the supervisory slotting approach"
-            " for specialised lending. Five factors are each graded strong, good,"
-            " satisfactory, or weak. One, financial strength: leverage, debt"
+            " for specialised lending: the five slotting factors, plus a sixth"
+            " the firm added for its market. Six factors are each graded strong,"
+            " good, satisfactory, or weak. One, financial strength: leverage, debt"
             " service coverage, liquidity, and the quality of projected cash flow."
-            " Two, market and sector position: the sector profile, competitive"
-            " position, and dependence on subsidies. Three, sponsor and execution:"
-            " the track record of the installer or developer, management depth, and"
-            " delivery history. Four, security package: collateral quality, the"
-            " borrowing base, and for project companies the power purchase"
-            " agreement and account security. Five, climate and transition:"
-            " exposure to subsidy and policy change, physical and production risk"
-            " on the assets, and the borrower's position in the energy transition."
+            " Two, political and legal environment: the stability of the subsidy"
+            " and permitting regime the cash flows depend on, and the"
+            " enforceability of the contracts behind them. Three, transaction"
+            " characteristics: tenor against contract length, amortization"
+            " profile, and the technology risk of the financed equipment. Four,"
+            " strength of sponsor: the track record of the installer or developer,"
+            " management depth, and delivery history. Five, security package:"
+            " collateral quality, the borrowing base, and for project companies"
+            " the power purchase agreement and account security. Six, climate and"
+            " transition: physical and production risk on the assets, and the"
+            " borrower's position in the energy transition."
             " The underwriter weights the factors, takes the weighted average, and"
             " maps it to a category. Strong maps to risk profile 1 to 3, good to 4"
             " to 5, satisfactory to 6 to 7, and weak to 8 to 10."

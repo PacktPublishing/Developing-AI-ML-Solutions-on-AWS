@@ -8,7 +8,7 @@ credential chain. Each target tees its output to `/tmp` with the date.
 ```
 make check-account   # which account and bucket names the runs will use
 make lake-objects    # buckets/objects/metadata on real S3
-make lake-parquet    # partitioned Parquet to real S3, DuckDB reads it back
+make lake-parquet    # partitioned Parquet to real S3, PyArrow reads it back
 make lake-table      # S3 Tables: PyIceberg append + scan over SigV4 REST
 make glue-run        # the bureau job as a real Glue Python shell job
 make feature-group   # Feature Store online: create, put, get
