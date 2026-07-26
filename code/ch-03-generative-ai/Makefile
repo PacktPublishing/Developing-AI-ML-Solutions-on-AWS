@@ -1,4 +1,4 @@
-.PHONY: up seed guardrail ask decide down lint test
+.PHONY: up seed guardrail ask decide serve down lint test
 
 # The element scripts live in sub-folders but import the shared seam (models.py,
 # stores.py) from the chapter root, so the root is on the path.
@@ -32,6 +32,11 @@ ask:
 
 decide:
 	uv run underwriting-agent/agent.py decide --deal "$(DEAL)"
+
+# serve the agent on the AgentCore contract (POST /invocations on :8080);
+# same request shape locally and on the managed runtime
+serve:
+	uv run underwriting-agent/agent.py serve
 
 down:
 	docker compose down -v

@@ -1,0 +1,91 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children:
+        - AWSCloud
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children:
+        - RegistryCol
+        - ImageCol
+        - EndpointCol
+
+    RegistryCol:
+      Type: AWS::Diagram::VerticalStack
+      Children:
+        - Registry
+
+    ImageCol:
+      Type: AWS::Diagram::VerticalStack
+      Children:
+        - DLC
+        - BYOC
+
+    EndpointCol:
+      Type: AWS::Diagram::VerticalStack
+      Children:
+        - EndpointA
+        - EndpointB
+
+    Registry:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "Model registry\n(MLflow App)"
+
+    DLC:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Deep Learning Containers"
+      Title: "ModelBuilder repack\npytorch-inference DLC"
+
+    BYOC:
+      Type: AWS::ECR::Repository
+      Title: "BYOC image\nch02-challenger"
+
+    EndpointA:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "Serverless endpoint\nover 3,072 MB: fails"
+
+    EndpointB:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "Serverless endpoint\nfits, parity to the byte"
+
+  Links:
+    - Source: Registry
+      SourcePosition: NNE
+      Target: DLC
+      TargetPosition: W
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
+    - Source: Registry
+      SourcePosition: SSE
+      Target: BYOC
+      TargetPosition: W
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
+    - Source: DLC
+      SourcePosition: E
+      Target: EndpointA
+      TargetPosition: W
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
+    - Source: BYOC
+      SourcePosition: E
+      Target: EndpointB
+      TargetPosition: W
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
