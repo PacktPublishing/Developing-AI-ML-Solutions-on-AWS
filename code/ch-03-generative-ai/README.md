@@ -34,6 +34,7 @@ make seed        # generate the knowledge base and embed it into pgvector
 make guardrail   # create the Bedrock guardrail (once)
 make ask         # a grounded, cited answer to one question, guardrail on
 make decide      # the agent works a whole deal and routes it
+make serve       # the agent on the AgentCore contract (POST /invocations :8080)
 make down        # stop and clean
 ```
 
