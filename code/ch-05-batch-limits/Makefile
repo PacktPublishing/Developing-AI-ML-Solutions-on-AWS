@@ -1,4 +1,4 @@
-.PHONY: up seed run query down clean lint
+.PHONY: up seed run pipeline query down clean lint
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
@@ -18,6 +18,15 @@ run:
 	uv run steps/decide.py
 	uv run steps/apply_limits.py
 
+# the same run as a SageMaker Pipeline: local executor (Docker), real
+# control plane — real credentials, a real S3 bucket for step I/O, the
+# local warehouse. Needs make up + seed and BATCH_BUCKET + SAGEMAKER_ROLE_ARN.
+pipeline:
+	docker build -q -t ch05-step:local pipeline/step_image/
+	PIPELINE_MODE=local STEP_IMAGE=ch05-step:local \
+		WAREHOUSE_DSN=postgresql://analyst:analyst@host.docker.internal:5439/portfolio \
+		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY uv run pipeline/pipeline.py
+
 query:
 	docker compose exec warehouse psql -h 127.0.0.1 -p 5433 -U analyst -d portfolio \
 		-c "SELECT ROUND(AVG(current_limit)) AS avg_limit, COUNT(*) FROM customers"
@@ -29,5 +38,5 @@ clean: down
 	rm -rf data/portfolio.csv data/feature_spec.json catboost_info
 
 lint:
-	uvx ruff format data/*.py steps/*.py
-	uvx ruff check data/*.py steps/*.py
+	uvx ruff format data/*.py steps/*.py pipeline/pipeline.py pipeline/scripts/*.py
+	uvx ruff check data/*.py steps/*.py pipeline/pipeline.py pipeline/scripts/*.py
