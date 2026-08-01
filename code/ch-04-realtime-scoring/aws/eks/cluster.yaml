@@ -1,0 +1,19 @@
+# The chapter's EKS cluster, Fargate only — no nodes to manage, no EC2.
+# eksctl drives CloudFormation under the hood; the stacks it creates are
+# named eksctl-ch04-decision-*. The control plane bills hourly, so this is
+# a create-run-delete resource like the warehouse in chapter 5.
+#
+# Create:  eksctl create cluster -f aws/eks/cluster.yaml   (~15 minutes)
+# Delete:  eksctl delete cluster -f aws/eks/cluster.yaml
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: ch04-decision
+  region: us-east-1
+
+fargateProfiles:
+  - name: default
+    selectors:
+      - namespace: default
+      - namespace: kube-system

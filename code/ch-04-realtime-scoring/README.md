@@ -40,9 +40,13 @@ readiness and liveness probes (the target group's job), a Service, and an
 Ingress (the ALB's job). `make kube-decide` answers through it, and
 `make kube-down` removes the cluster. Needs k3d and kubectl installed.
 
-On AWS the same manifests run on EKS with a Fargate profile
-(`eksctl create cluster --fargate`) — described here, not shipped: the
-chapter's cloud path is ECS.
+On AWS the same manifests run on EKS with a Fargate profile — scaffolded
+in `aws/eks/cluster.yaml` and the `eks-up` / `eks-deploy` / `eks-decide` /
+`eks-down` targets: the identical YAML, only the image reference swapped
+for the ECR copy the aws/ stack built. The control plane bills hourly;
+create, run, delete. Exposure stays at a port-forward — a production
+ingress on EKS-Fargate needs the AWS Load Balancer Controller, which is
+beyond this chapter. The chapter's first-class cloud path remains ECS.
 
 Still to come in this chapter: the SageMaker endpoint the service can call
 instead of its in-process scorecard, the Step Functions orchestration, the

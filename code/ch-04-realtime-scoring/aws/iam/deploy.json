@@ -13,38 +13,148 @@
     {
       "Sid": "CloudFormationRead",
       "Effect": "Allow",
-      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Action": [
+        "cloudformation:Describe*",
+        "cloudformation:List*",
+        "cloudformation:GetTemplateSummary"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "ManageChapterRoles",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
-        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
-        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
-        "iam:ListAttachedRolePolicies", "iam:PassRole"
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PassRole"
       ],
       "Resource": "arn:aws:iam::*:role/ch04-*"
     },
     {
       "Sid": "Network",
       "Effect": "Allow",
-      "Action": ["ec2:*Vpc*", "ec2:*Subnet*", "ec2:*Route*", "ec2:*InternetGateway*", "ec2:*SecurityGroup*", "ec2:*Address*", "ec2:Describe*", "ec2:*Tags"],
+      "Action": [
+        "ec2:*Vpc*",
+        "ec2:*Subnet*",
+        "ec2:*Route*",
+        "ec2:*InternetGateway*",
+        "ec2:*SecurityGroup*",
+        "ec2:*Address*",
+        "ec2:Describe*",
+        "ec2:*Tags"
+      ],
       "Resource": "*"
     },
-    {"Sid": "LoadBalancer", "Effect": "Allow", "Action": "elasticloadbalancing:*", "Resource": "*"},
-    {"Sid": "Ecs", "Effect": "Allow", "Action": "ecs:*", "Resource": "*"},
-    {"Sid": "DynamoDb", "Effect": "Allow", "Action": "dynamodb:*", "Resource": "arn:aws:dynamodb:us-east-1:*:table/ch04-*"},
-    {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": "arn:aws:ecr:us-east-1:*:repository/ch04-decision"},
-    {"Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
+    {
+      "Sid": "LoadBalancer",
+      "Effect": "Allow",
+      "Action": "elasticloadbalancing:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Ecs",
+      "Effect": "Allow",
+      "Action": "ecs:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DynamoDb",
+      "Effect": "Allow",
+      "Action": "dynamodb:*",
+      "Resource": "arn:aws:dynamodb:us-east-1:*:table/ch04-*"
+    },
+    {
+      "Sid": "EcrRepository",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:us-east-1:*:repository/ch04-decision"
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
     {
       "Sid": "CodeBuild",
       "Effect": "Allow",
-      "Action": ["codebuild:CreateProject", "codebuild:UpdateProject", "codebuild:DeleteProject", "codebuild:StartBuild", "codebuild:BatchGetBuilds", "codebuild:BatchGetProjects"],
+      "Action": [
+        "codebuild:CreateProject",
+        "codebuild:UpdateProject",
+        "codebuild:DeleteProject",
+        "codebuild:StartBuild",
+        "codebuild:BatchGetBuilds",
+        "codebuild:BatchGetProjects"
+      ],
       "Resource": "arn:aws:codebuild:us-east-1:*:project/ch04-*"
     },
-    {"Sid": "StagingBucket", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch04-*", "arn:aws:s3:::ch04-*/*", "arn:aws:s3:::aws-sam-cli-managed-*", "arn:aws:s3:::aws-sam-cli-managed-*/*"]},
-    {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch04*"}
+    {
+      "Sid": "StagingBucket",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::ch04-*",
+        "arn:aws:s3:::ch04-*/*",
+        "arn:aws:s3:::aws-sam-cli-managed-*",
+        "arn:aws:s3:::aws-sam-cli-managed-*/*"
+      ]
+    },
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch04*"
+    },
+    {
+      "Sid": "Eks",
+      "Effect": "Allow",
+      "Action": "eks:*",
+      "Resource": [
+        "arn:aws:eks:us-east-1:*:cluster/ch04-*",
+        "arn:aws:eks:us-east-1:*:fargateprofile/ch04-*/*/*"
+      ]
+    },
+    {
+      "Sid": "EksCtlStacks",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/eksctl-ch04-*/*"
+    },
+    {
+      "Sid": "EksCtlRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PassRole",
+        "iam:CreateOpenIDConnectProvider",
+        "iam:DeleteOpenIDConnectProvider",
+        "iam:GetOpenIDConnectProvider",
+        "iam:TagOpenIDConnectProvider"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/eksctl-ch04-*",
+        "arn:aws:iam::*:oidc-provider/*"
+      ]
+    }
   ]
 }

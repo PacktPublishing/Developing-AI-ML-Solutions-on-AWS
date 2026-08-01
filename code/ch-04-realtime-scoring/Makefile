@@ -1,13 +1,11 @@
-.PHONY: up decide refer decline log kube-up kube-decide kube-down down clean lint diagrams
+.PHONY: up decide refer decline log kube-up kube-decide kube-down eks-up eks-deploy eks-decide eks-down down clean lint
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
 export AWS_DEFAULT_REGION ?= us-east-1
 
-COMPOSE := docker compose -f local/decision-service.yml
-
 up:
-	$(COMPOSE) up -d --build --wait
+	docker compose up -d --build --wait
 
 # one clean application: expect APPROVE
 decide:
@@ -54,28 +52,39 @@ kube-decide:
 kube-down:
 	k3d cluster delete decision
 
+# the same manifests on EKS with a Fargate profile: create the cluster,
+# swap the image for the ECR copy, apply. The control plane bills hourly —
+# create, run, delete. Needs eksctl; the image comes from the aws/ stack.
+eks-up:
+	eksctl create cluster -f aws/eks/cluster.yaml
+
+REPO = $(shell aws cloudformation describe-stacks --region us-east-1 \
+	--stack-name realtime-scoring-ch04 \
+	--query "Stacks[0].Outputs[?OutputKey=='ServiceRepoUri'].OutputValue" --output text)
+eks-deploy:
+	sed -e "s|ch04-decision:local|$(REPO):latest|" \
+		-e "s|imagePullPolicy: Never|imagePullPolicy: Always|" \
+		k8s/decision-service.yaml | kubectl apply -f -
+	kubectl rollout status deployment/decision-service --timeout=300s
+
+# no load balancer controller in scope: smoke-test through a port-forward
+eks-decide:
+	@kubectl port-forward svc/decision-service 8085:80 >/dev/null 2>&1 & \
+	PF=$$!; sleep 3; \
+	curl -s localhost:8085/decision -H 'content-type: application/json' -d '{ \
+	"application_id": "app-1042", "age": 34, "monthly_income": 4200, \
+	"requested_amount": 8000, "dti": 0.20, "utilization": 0.15 }'; \
+	echo; kill $$PF
+
+eks-down:
+	eksctl delete cluster -f aws/eks/cluster.yaml
+
 down:
-	$(COMPOSE) down -v
+	docker compose down -v
 
 clean: down
-	docker rmi ch04-service 2>/dev/null || true
+	docker rmi ch-04-realtime-scoring-service ch04-decision:local 2>/dev/null || true
 
 lint:
 	uvx ruff format src/*.py
 	uvx ruff check src/*.py
-# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
-# Custom icons live in the shared assets/diagrams/; AWS icons fetched at render.
-AWSDAC_VERSION := v0.22.4
-AWSDAC := $(shell go env GOPATH)/bin/awsdac
-WIDTH ?= 0
-ICON_HEIGHT ?= 500
-diagrams:
-	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
-	@for s in ../../assets/diagrams/icons/*.svg; do \
-		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
-	done
-	@mkdir -p diagrams/png
-	@for f in diagrams/yaml/*.yaml; do \
-		echo "  $$f"; \
-		"$(AWSDAC)" -f "$$f" -o "diagrams/png/$$(basename $$f .yaml).png" --width $(WIDTH); \
-	done
