@@ -1,7 +1,7 @@
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
-      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
   Resources:
     Canvas:
       Type: AWS::Diagram::Canvas

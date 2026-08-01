@@ -14,7 +14,7 @@ make glue-run        # the bureau job as a real Glue Python shell job
 make feature-group   # Feature Store online: create, put, get
 make clean-feature-group
 make clean-lake      # remove the verification lake bucket
-make airflow-deploy  # single-node Airflow on EC2 (SAM, airflow-ec2/)
+make airflow-deploy  # Airflow on EC2: Postgres metadata + LocalExecutor, nightly pg_dump to S3 (SAM, airflow-ec2/)
 make airflow-delete
 ```
 

@@ -1,0 +1,54 @@
+# The local cloud as the chapter actually runs it: raw bureau files land in
+# MinIO, a Glue job with dlt loads redshift-local, dbt builds the marts, and
+# ingest_features ships the gold mart to the feature store — offline as an
+# Iceberg table over MinIO (Trino can query it) and online into DynamoDB Local.
+# Local container names, with their AWS equivalents in parentheses.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [Local]
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local cloud (Docker)"
+      Children: [RawZone, GlueJob, Warehouse, FeatureStore]
+    RawZone:
+      Type: AWS::Diagram::Resource
+      Preset: "MinIO"
+      Title: "MinIO :9000\nraw zone (S3)"
+    GlueJob:
+      Type: AWS::Glue::Job
+      Title: "Glue + dlt"
+    Warehouse:
+      Type: AWS::Diagram::Resource
+      Preset: "RedshiftLocal"
+      Title: "redshift-local :5439\ndbt marts (Redshift)"
+    FeatureStore:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Offline, Trino, Online]
+    Offline:
+      Type: AWS::Diagram::Resource
+      Preset: "Iceberg"
+      Title: "Iceberg REST :8181\noffline (Glue Catalog)"
+    Trino:
+      Type: AWS::Diagram::Resource
+      Preset: "Trino"
+      Title: "Trino :8080\nquery (Athena)"
+    Online:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon DynamoDB"
+      Title: "DynamoDB Local :8000\nonline (Feature Store)"
+  Links:
+    - {Source: RawZone, SourcePosition: E, Target: GlueJob, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: GlueJob, SourcePosition: E, Target: Warehouse, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Warehouse, SourcePosition: E, Target: Offline, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Warehouse, SourcePosition: E, Target: Online, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Trino, SourcePosition: N, Target: Offline, TargetPosition: S, TargetArrowHead: {Type: Open}}

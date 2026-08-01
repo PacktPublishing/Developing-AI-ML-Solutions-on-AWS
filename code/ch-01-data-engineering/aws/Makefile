@@ -10,10 +10,21 @@ LAKE_BUCKET ?= credit-lake-$(ACCOUNT)
 RAW_BUCKET ?= bureau-raw-$(ACCOUNT)
 RUN_STAMP := $(shell date +%Y-%m-%d)
 
+# Airflow on EC2 (Postgres metadata + LocalExecutor, nightly pg_dump to S3).
+# AllowedCidr is set to your current public IP so only you reach the UI on :8080;
+# stack name, region, and capabilities come from airflow-ec2/samconfig.toml.
 airflow-deploy:
 	cd airflow-ec2 && sam deploy --parameter-overrides AllowedCidr=$$(curl -4 -s ifconfig.me)/32 --no-fail-on-empty-changeset
 
+# S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
+# backup bucket (read from the stack outputs) before sam delete tears it down.
 airflow-delete:
+	@BUCKET=$$(aws cloudformation describe-stacks --stack-name book-airflow \
+	  --query "Stacks[0].Outputs[?OutputKey=='BackupBucket'].OutputValue" \
+	  --output text 2>/dev/null); \
+	if [ -n "$$BUCKET" ] && [ "$$BUCKET" != "None" ]; then \
+		echo "emptying s3://$$BUCKET"; aws s3 rm "s3://$$BUCKET" --recursive; \
+	fi
 	cd airflow-ec2 && sam delete --no-prompts
 
 check-account:
