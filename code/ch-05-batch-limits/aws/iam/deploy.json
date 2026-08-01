@@ -1,0 +1,63 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SageMakerPipeline",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CreatePipeline",
+        "sagemaker:UpdatePipeline",
+        "sagemaker:DeletePipeline",
+        "sagemaker:DescribePipeline",
+        "sagemaker:StartPipelineExecution",
+        "sagemaker:DescribePipelineExecution",
+        "sagemaker:ListPipelineExecutionSteps",
+        "sagemaker:AddTags"
+      ],
+      "Resource": "arn:aws:sagemaker:us-east-1:*:pipeline/batch-credit-limits*"
+    },
+    {
+      "Sid": "EcrRepository",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:us-east-1:*:repository/ch05-step"
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "CodeBuild",
+      "Effect": "Allow",
+      "Action": [
+        "codebuild:CreateProject",
+        "codebuild:UpdateProject",
+        "codebuild:DeleteProject",
+        "codebuild:StartBuild",
+        "codebuild:BatchGetBuilds",
+        "codebuild:BatchGetProjects"
+      ],
+      "Resource": "arn:aws:codebuild:us-east-1:*:project/ch05-*"
+    },
+    {
+      "Sid": "EventsAndAlerts",
+      "Effect": "Allow",
+      "Action": [
+        "events:PutRule",
+        "events:DeleteRule",
+        "events:DescribeRule",
+        "events:PutTargets",
+        "events:RemoveTargets",
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:TagResource"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

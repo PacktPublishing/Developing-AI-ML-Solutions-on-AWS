@@ -1,0 +1,259 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  The batch limit run on AWS: the pipeline's S3 bucket, the step image built in the cloud, the role the pipeline runs as, the EventBridge schedule that starts it, and an SNS topic that hears about failures. The pipeline itself is registered by pipeline/pipeline.py with PIPELINE_MODE=aws; the warehouse is Redshift Serverless from the chapter-01 stack.
+  Every stateful resource is deliberately disposable: `make teardown` leaves nothing behind.
+
+Parameters:
+  PipelineName:
+    Type: String
+    Default: batch-credit-limits
+
+  ScheduleExpression:
+    Description: when the batch runs (monthly, first day, 02:00 UTC)
+    Type: String
+    Default: cron(0 2 1 * ? *)
+
+  AlertEmail:
+    Description: subscribe this address to failure alerts; empty skips the subscription
+    Type: String
+    Default: ""
+
+Conditions:
+  HasEmail: !Not
+    - !Equals
+      - !Ref AlertEmail
+      - ""
+
+Resources:
+  BatchBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-batch-artifacts
+            Status: Enabled
+            ExpirationInDays: 7
+
+  StepRepo:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch05-step
+      EmptyOnDelete: true
+
+  ImageBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build-step-image
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub ${BatchBucket.Arn}/ch05/source/*
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !GetAtt StepRepo.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/ch05-step-build*
+
+  ImageBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: ch05-step-build
+      ServiceRole: !GetAtt ImageBuildRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      TimeoutInMinutes: 20
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REGISTRY
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+          - Name: IMAGE_URI
+            Value: !Sub ${StepRepo.RepositoryUri}:latest
+      Source:
+        Type: S3
+        Location: !Sub ${BatchBucket}/ch05/source/steps.zip
+
+  # the role the pipeline's jobs run as: read and write the batch bucket,
+  # pull the step image, write logs
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: run-batch-steps
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt BatchBucket.Arn
+                  - !Sub ${BatchBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: !GetAtt StepRepo.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
+              - Effect: Allow
+                Action:
+                  - sagemaker:CreateProcessingJob
+                  - sagemaker:DescribeProcessingJob
+                  - sagemaker:CreateTrainingJob
+                  - sagemaker:DescribeTrainingJob
+                  - sagemaker:AddTags
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: sagemaker.amazonaws.com
+
+  ScheduleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: start-batch-pipeline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sagemaker:StartPipelineExecution
+                Resource: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:pipeline/${PipelineName}
+
+  # the trigger from the preface: EventBridge starts the pipeline on a
+  # schedule; no compute sits waiting between runs
+  Schedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: the monthly batch limit run
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Id: batch-pipeline
+          Arn: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:pipeline/${PipelineName}
+          RoleArn: !GetAtt ScheduleRole.Arn
+          SageMakerPipelineParameters:
+            PipelineParameterList: []
+
+  Alerts:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: ch05-batch-alerts
+
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref Alerts
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+    Condition: HasEmail
+
+  AlertsPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref Alerts
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref Alerts
+
+  # a failed execution publishes to the topic; CloudWatch keeps the logs
+  FailureRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: batch pipeline failures to SNS
+      EventPattern:
+        source:
+          - aws.sagemaker
+        detail-type:
+          - SageMaker Model Building Pipeline Execution Status Change
+        detail:
+          currentPipelineExecutionStatus:
+            - Failed
+          pipelineArn:
+            - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:pipeline/${PipelineName}
+      State: ENABLED
+      Targets:
+        - Id: alerts
+          Arn: !Ref Alerts
+
+Outputs:
+  BatchBucketName:
+    Value: !Ref BatchBucket
+
+  StepRepoUri:
+    Value: !GetAtt StepRepo.RepositoryUri
+
+  PipelineRoleArn:
+    Description: SAGEMAKER_ROLE_ARN for pipeline/pipeline.py
+    Value: !GetAtt PipelineRole.Arn

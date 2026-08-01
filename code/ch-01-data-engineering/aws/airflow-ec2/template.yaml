@@ -31,11 +31,12 @@ Conditions:
       - ""
 
 Resources:
+
   # Off-instance home for the metadata dumps: the EC2 volume dies with the
   # instance, so Airflow's run history and connections live here instead.
   BackupBucket:
-    Type: AWS::S3::Bucket
     DeletionPolicy: Delete
+    Type: AWS::S3::Bucket
     Properties:
       LifecycleConfiguration:
         Rules:
@@ -62,7 +63,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: s3:PutObject
-                Resource: !Sub "${BackupBucket.Arn}/airflow-metadata/*"
+                Resource: !Sub ${BackupBucket.Arn}/airflow-metadata/*
 
   AirflowInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -95,8 +96,8 @@ Resources:
       Tags:
         - Key: Name
           Value: book-ch01-airflow
-      UserData:
-        Fn::Base64: !Sub |
+      UserData: !Base64
+        Fn::Sub: |
           #!/bin/bash
           dnf install -y docker cronie
           systemctl enable --now docker crond
@@ -200,6 +201,7 @@ Outputs:
   AirflowUrl:
     Description: Airflow UI (login admin; Airflow 3 standalone prints the generated password to the container logs and simple_auth_manager_passwords.json.generated)
     Value: !Sub http://${AirflowInstance.PublicDnsName}:8080
+
   BackupBucket:
     Description: S3 bucket holding the nightly Airflow metadata dumps
     Value: !Ref BackupBucket

@@ -72,6 +72,14 @@ repos:
         entry: uvx --from mbake mbake format
         language: system
         files: (^|/)Makefile$
+      - id: rain-fmt
+        name: rain fmt (CloudFormation format)
+        # canonical formatting for the chapters' CFN/SAM templates; rain must
+        # be on PATH (brew install rain). Scoped to template files so it never
+        # touches compose files or buildspecs.
+        entry: rain fmt -w
+        language: system
+        files: (^|/)(template|redshift-serverless)\.yaml$
 
   # Validate the commit message against [tool.commitizen] in pyproject.toml:
   # "<scope> (<+|~|->): <subject>", scope one of ch-NN, book, repo, tools.
