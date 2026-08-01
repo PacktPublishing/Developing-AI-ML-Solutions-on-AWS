@@ -235,6 +235,18 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+
+        # the managed policy can create streams but not groups; the task
+        # definition asks awslogs to create the group on first start
+        - PolicyName: create-log-group
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/ch04-decision*
 
   TaskRole:
     Type: AWS::IAM::Role
