@@ -1,7 +1,9 @@
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
-      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
 
   Resources:
     Canvas:
@@ -27,7 +29,8 @@ Diagram:
       Children: [Assistant, Database]
 
     Assistant:
-      Type: AWS::Lambda::Function
+      Type: AWS::Diagram::Resource
+      Preset: "LambdaCoin"
       Title: "Lambda\nfunction URL"
     Database:
       Type: AWS::RDS::DBInstance
@@ -47,9 +50,9 @@ Diagram:
       Title: "Secrets Manager\nDB credentials"
 
   Links:
-    - {Source: Underwriter, SourcePosition: E, Target: Assistant, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Assistant, SourcePosition: E, Target: Database, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Assistant, SourcePosition: NNE, Target: Bedrock, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Assistant, SourcePosition: SSE, Target: Secrets, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Underwriter, SourcePosition: E, Target: Assistant, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Assistant, SourcePosition: E, Target: Database, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Assistant, SourcePosition: E, Target: Bedrock, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Assistant, SourcePosition: E, Target: Secrets, TargetPosition: W, TargetArrowHead: {Type: Open}}
   # Bedrock and Secrets Manager are reached through VPC interface endpoints,
   # which is why the VPC needs no NAT gateway (see assistant-api/template.yaml).

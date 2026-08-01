@@ -1,7 +1,9 @@
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
-      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
 
   Resources:
     Canvas:
@@ -35,7 +37,8 @@ Diagram:
       Preset: "Amazon API Gateway"
       Title: "API Gateway"
     Lambda:
-      Type: AWS::Lambda::Function
+      Type: AWS::Diagram::Resource
+      Preset: "LambdaCoin"
       Title: "Lambda container"
 
     # Row 3 — ECS Fargate task behind API Gateway

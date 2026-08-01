@@ -1,0 +1,34 @@
+# Local MLOps loop: the same custom containers train on the laptop, log runs to a
+# local MLflow (sqlite), and push artifacts to S3Proxy standing in for Amazon S3.
+# The one env that moves between worlds is MLFLOW_TRACKING_URI.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [Local]
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local cloud (Docker)"
+      Children: [Container, MLflow, S3]
+    Container:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "scorecard + challenger\ncustom container (docker run)"
+    MLflow:
+      Type: AWS::Diagram::Resource
+      Preset: "MLflow"
+      Title: "MLflow :5000\nsqlite + registry"
+    S3:
+      Type: AWS::S3::Bucket
+      Title: "S3Proxy :9000\n(Amazon S3) artifacts + models"
+  Links:
+    - {Source: Container, SourcePosition: E, Target: MLflow, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: MLflow, SourcePosition: E, Target: S3, TargetPosition: W, TargetArrowHead: {Type: Open}}

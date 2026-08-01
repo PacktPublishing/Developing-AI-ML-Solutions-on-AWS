@@ -1,7 +1,9 @@
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
-      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
   Resources:
     Canvas:
       Type: AWS::Diagram::Canvas
@@ -29,7 +31,8 @@ Diagram:
       Type: AWS::Glue::Job
       Title: "Glue"
     Lambda:
-      Type: AWS::Lambda::Function
+      Type: AWS::Diagram::Resource
+      Preset: "LambdaCoin"
       Title: "Lambda"
     S3:
       Type: AWS::S3::Bucket

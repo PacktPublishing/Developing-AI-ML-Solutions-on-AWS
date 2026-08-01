@@ -1,0 +1,53 @@
+# Custom (non-AWS-service) icons shared across the book's diagrams, kept in the
+# repo so figures reproduce from source. Icon paths resolve from the chapter
+# directory, where `make diagrams` runs awsdac (so ../../assets from code/ch-NN/).
+# SVG sources live beside the PNGs; `make diagrams` re-renders the PNGs awsdac
+# consumes. Presets:
+#   - Strands / LambdaCoin: the agent mark and the classic AWS Lambda coin.
+#   - MinIO, MLflow, Ollama, Postgres, Iceberg, Trino: local-stack tools (SVG).
+#   - Oblako: local-stack tool (raster only, no vector source).
+Definitions:
+  CustomIcons:
+    Type: Directory
+    Directory:
+      Path: "../../assets/diagrams/icons/"
+  Strands:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "strands.png"}
+    Label: {Title: "Strands", Color: "rgba(0, 0, 0, 255)"}
+  LambdaCoin:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "lambda-coin.png"}
+    Label: {Title: "AWS Lambda", Color: "rgba(0, 0, 0, 255)"}
+  MinIO:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "minio.png"}
+    Label: {Title: "MinIO", Color: "rgba(0, 0, 0, 255)"}
+  MLflow:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "mlflow.png"}
+    Label: {Title: "MLflow", Color: "rgba(0, 0, 0, 255)"}
+  Ollama:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "ollama.png"}
+    Label: {Title: "Ollama", Color: "rgba(0, 0, 0, 255)"}
+  Postgres:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "postgres.png"}
+    Label: {Title: "PostgreSQL", Color: "rgba(0, 0, 0, 255)"}
+  Iceberg:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "iceberg.png"}
+    Label: {Title: "Apache Iceberg", Color: "rgba(0, 0, 0, 255)"}
+  Trino:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "trino.png"}
+    Label: {Title: "Trino", Color: "rgba(0, 0, 0, 255)"}
+  Oblako:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "oblako.png"}
+    Label: {Title: "oblako", Color: "rgba(0, 0, 0, 255)"}
+  RedshiftLocal:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "redshift-local.png"}
+    Label: {Title: "redshift-local", Color: "rgba(0, 0, 0, 255)"}

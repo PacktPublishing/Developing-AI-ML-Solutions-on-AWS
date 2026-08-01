@@ -1,3 +1,6 @@
+# Local mode: the same Strands underwriting agent, with Ollama standing in for
+# Bedrock and a pgvector Postgres container for the RDS vector store. Set
+# BEDROCK_LOCAL=1 and the agent runs entirely offline; only the endpoints change.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -8,36 +11,33 @@ Diagram:
     Canvas:
       Type: AWS::Diagram::Canvas
       Direction: horizontal
-      Children: [User, AWSCloud]
+      Children: [User, Local]
     User:
       Type: AWS::Diagram::Resource
       Preset: User
       Title: "Underwriter"
-    AWSCloud:
+    Local:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
+      Title: "Local (Docker + Ollama)"
       Children: [Agent, Tools]
     Agent:
       Type: AWS::Diagram::Resource
       Preset: "Strands"
-      Title: "AgentCore\nStrands agent"
+      Title: "Strands agent\n(BEDROCK_LOCAL=1)"
     Tools:
       Type: AWS::Diagram::VerticalStack
-      Children: [Model, Retrieve, Route]
-    Model:
+      Children: [Ollama, Vectors]
+    Ollama:
       Type: AWS::Diagram::Resource
-      Preset: "Amazon Bedrock"
-      Title: "Bedrock\nQwen3"
-    Retrieve:
-      Type: AWS::RDS::DBInstance
-      Title: "RDS pgvector\nlookup_sector"
-    Route:
+      Preset: "Ollama"
+      Title: "Ollama :11434\n(Amazon Bedrock)"
+    Vectors:
       Type: AWS::Diagram::Resource
-      Preset: "LambdaCoin"
-      Title: "route_decision\nauthority limits"
+      Preset: "Postgres"
+      Title: "pgvector :5544\n(RDS Postgres)"
   Links:
     - {Source: User, SourcePosition: E, Target: Agent, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Agent, SourcePosition: E, Target: Model, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Agent, SourcePosition: E, Target: Retrieve, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Agent, SourcePosition: E, Target: Route, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Agent, SourcePosition: E, Target: Ollama, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Agent, SourcePosition: E, Target: Vectors, TargetPosition: W, TargetArrowHead: {Type: Open}}
