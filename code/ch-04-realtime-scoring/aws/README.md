@@ -6,15 +6,15 @@ the stack costs nothing until you scale it up.
 
 ## Before the first deploy
 
-The deploying user needs EC2 (the VPC), ELB, ECS, ECR, and CodeBuild
-grants; they are collected in `iam/deploy.json`. Attach once, on the
-chapter's IAM group:
+This chapter deploys as `ch04-user`, a role carrying only the grants in
+`iam/deploy.json` (EC2/VPC, ELB, ECS, ECR, DynamoDB, CodeBuild, plus the
+CloudFormation and scoped IAM needed to create the stack). Bootstrap the role
+once and assume it via a profile — see
+[`code/README.md`](../../README.md) (`code/setup-users.sh`). Then deploy under
+that profile:
 
 ```
-aws iam create-group --group-name book-ch04
-aws iam put-group-policy --group-name book-ch04 \
-  --policy-name CreditBookCh4Deploy --policy-document file://iam/deploy.json
-aws iam add-user-to-group --group-name book-ch04 --user-name <you>
+make deploy AWS_PROFILE=ch04
 ```
 
 ## Run it, in order

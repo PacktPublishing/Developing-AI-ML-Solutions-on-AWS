@@ -1,3 +1,5 @@
+name: ch04-decision
+
 services:
   decisions:
     # official DynamoDB Local: the decision log. Every response the service
@@ -33,7 +35,8 @@ services:
 
   service:
     # the decision service itself: the same image that runs on Fargate
-    build: app/
+    image: ch04-service
+    build: ../src
     ports:
       - "8080:8000"
     environment:

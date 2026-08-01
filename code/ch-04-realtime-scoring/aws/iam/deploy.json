@@ -2,56 +2,49 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "Network",
+      "Sid": "CloudFormation",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:*:stack/realtime-scoring-ch04/*",
+        "arn:aws:cloudformation:us-east-1:*:stack/aws-sam-cli-managed-*/*"
+      ]
+    },
+    {
+      "Sid": "CloudFormationRead",
+      "Effect": "Allow",
+      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageChapterRoles",
       "Effect": "Allow",
       "Action": [
-        "ec2:*Vpc*",
-        "ec2:*Subnet*",
-        "ec2:*Route*",
-        "ec2:*InternetGateway*",
-        "ec2:*SecurityGroup*",
-        "ec2:*Address*",
-        "ec2:Describe*",
-        "ec2:*Tags"
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
+        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies", "iam:PassRole"
       ],
-      "Resource": "*"
+      "Resource": "arn:aws:iam::*:role/ch04-*"
     },
     {
-      "Sid": "LoadBalancer",
+      "Sid": "Network",
       "Effect": "Allow",
-      "Action": "elasticloadbalancing:*",
+      "Action": ["ec2:*Vpc*", "ec2:*Subnet*", "ec2:*Route*", "ec2:*InternetGateway*", "ec2:*SecurityGroup*", "ec2:*Address*", "ec2:Describe*", "ec2:*Tags"],
       "Resource": "*"
     },
-    {
-      "Sid": "Ecs",
-      "Effect": "Allow",
-      "Action": "ecs:*",
-      "Resource": "*"
-    },
-    {
-      "Sid": "EcrRepository",
-      "Effect": "Allow",
-      "Action": "ecr:*",
-      "Resource": "arn:aws:ecr:us-east-1:*:repository/ch04-decision"
-    },
-    {
-      "Sid": "EcrLogin",
-      "Effect": "Allow",
-      "Action": "ecr:GetAuthorizationToken",
-      "Resource": "*"
-    },
+    {"Sid": "LoadBalancer", "Effect": "Allow", "Action": "elasticloadbalancing:*", "Resource": "*"},
+    {"Sid": "Ecs", "Effect": "Allow", "Action": "ecs:*", "Resource": "*"},
+    {"Sid": "DynamoDb", "Effect": "Allow", "Action": "dynamodb:*", "Resource": "arn:aws:dynamodb:us-east-1:*:table/ch04-*"},
+    {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": "arn:aws:ecr:us-east-1:*:repository/ch04-decision"},
+    {"Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
     {
       "Sid": "CodeBuild",
       "Effect": "Allow",
-      "Action": [
-        "codebuild:CreateProject",
-        "codebuild:UpdateProject",
-        "codebuild:DeleteProject",
-        "codebuild:StartBuild",
-        "codebuild:BatchGetBuilds",
-        "codebuild:BatchGetProjects"
-      ],
+      "Action": ["codebuild:CreateProject", "codebuild:UpdateProject", "codebuild:DeleteProject", "codebuild:StartBuild", "codebuild:BatchGetBuilds", "codebuild:BatchGetProjects"],
       "Resource": "arn:aws:codebuild:us-east-1:*:project/ch04-*"
-    }
+    },
+    {"Sid": "StagingBucket", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch04-*", "arn:aws:s3:::ch04-*/*", "arn:aws:s3:::aws-sam-cli-managed-*", "arn:aws:s3:::aws-sam-cli-managed-*/*"]},
+    {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch04*"}
   ]
 }

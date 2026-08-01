@@ -18,7 +18,7 @@ deploy:
 image:
 	$(eval BUCKET := $(call output,StagingBucketName))
 	cd .. && rm -f /tmp/ch04-app-src.zip && \
-		zip -q -j /tmp/ch04-app-src.zip app/Dockerfile app/app.py app/scorecard.py \
+		zip -q -j /tmp/ch04-app-src.zip src/Dockerfile src/app.py src/scorecard.py \
 		aws/image/buildspec.yml
 	aws s3 cp /tmp/ch04-app-src.zip s3://$(BUCKET)/ch04/source/app.zip
 	@ID=$$(aws codebuild start-build --region $(REGION) --project-name ch04-decision-build \

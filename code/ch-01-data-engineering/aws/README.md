@@ -45,7 +45,7 @@ day: `aws cloudformation delete-stack --stack-name ch01-redshift --region us-eas
 
 ## One-time Glue setup (already applied in this account)
 
-- role `glue-book-ch01`: trusts glue.amazonaws.com, AWSGlueServiceRole plus
+- role `ch01-glue`: trusts glue.amazonaws.com, AWSGlueServiceRole plus
   S3 access scoped to the raw bucket
 - job `bureau-elt-ch01`: pythonshell, Python 3.9, 0.0625 DPU, script at
   `s3://bureau-raw-<account>/scripts/glue_bureau_job.py`

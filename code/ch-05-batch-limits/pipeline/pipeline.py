@@ -65,7 +65,9 @@ if MODE == "local":
     sess = LocalPipelineSession()
     instance_type = "local"
 else:
-    sess = PipelineSession()
+    # the step code uploads to the session's default bucket; point it at the
+    # batch bucket so the pipeline role's grants cover it
+    sess = PipelineSession(default_bucket=BUCKET)
     instance_type = os.environ.get("INSTANCE_TYPE", "ml.m5.large")
 
 

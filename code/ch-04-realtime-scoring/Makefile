@@ -4,8 +4,10 @@ export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
 export AWS_DEFAULT_REGION ?= us-east-1
 
+COMPOSE := docker compose -f local/decision-service.yml
+
 up:
-	docker compose up -d --build --wait
+	$(COMPOSE) up -d --build --wait
 
 # one clean application: expect APPROVE
 decide:
@@ -35,14 +37,14 @@ log:
 		--table-name decision_log --select COUNT --query Count
 
 down:
-	docker compose down -v
+	$(COMPOSE) down -v
 
 clean: down
-	docker rmi ch-04-realtime-scoring-service 2>/dev/null || true
+	docker rmi ch04-service 2>/dev/null || true
 
 lint:
-	uvx ruff format app/*.py
-	uvx ruff check app/*.py
+	uvx ruff format src/*.py
+	uvx ruff check src/*.py
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
 # Custom icons live in the shared assets/diagrams/; AWS icons fetched at render.
 AWSDAC_VERSION := v0.22.4

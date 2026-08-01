@@ -1,0 +1,21 @@
+version: 0.2
+
+# Builds the assistant image natively on amd64 (the architecture Fargate
+# runs) and pushes it to the stack's repository: the chapter 2 pipeline leg,
+# Developer -> CodeBuild -> ECR, so a laptop never cross-builds under
+# emulation. The CodeBuild project itself is a stack resource; start a build
+# with `make image`.
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  build:
+    commands:
+      - echo "Building $IMAGE_URI"
+      - docker build -t "$IMAGE_URI" .
+  post_build:
+    commands:
+      - echo "Pushing $IMAGE_URI"
+      - docker push "$IMAGE_URI"
+      - echo "Done"

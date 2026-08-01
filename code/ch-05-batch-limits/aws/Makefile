@@ -34,7 +34,8 @@ pipeline:
 	$(eval REPO := $(call output,StepRepoUri))
 	$(eval BUCKET := $(call output,BatchBucketName))
 	$(eval ROLE := $(call output,PipelineRoleArn))
-	cd .. && PIPELINE_MODE=aws STEP_IMAGE=$(REPO):latest BATCH_BUCKET=$(BUCKET) \
+	cd .. && PIPELINE_MODE=aws AWS_DEFAULT_REGION=$(REGION) \
+		STEP_IMAGE=$(REPO):latest BATCH_BUCKET=$(BUCKET) \
 		SAGEMAKER_ROLE_ARN=$(ROLE) WAREHOUSE_DSN=$(WAREHOUSE_DSN) \
 		uv run pipeline/pipeline.py
 

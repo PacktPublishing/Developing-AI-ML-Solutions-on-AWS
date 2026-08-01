@@ -1,0 +1,70 @@
+services:
+  kinesis:
+    # Kinesis Data Streams API served by kinesalite (MIT), the same engine
+    # LocalStack wraps. boto3 talks to it unchanged through endpoint_url.
+    # On AWS this is Amazon Kinesis Data Streams; nothing in the code changes.
+    image: saidsef/aws-kinesis-local:latest
+    ports:
+      - "4567:4567"
+
+  decisions:
+    # official DynamoDB Local: the decision store the consumer writes to,
+    # key-value lookup of blocks by transaction id
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory"]
+    ports:
+      - "8000:8000"
+
+  s3:
+    # real S3-compatible object store, composed from source: S3Proxy (Apache-2.0)
+    # serving the S3 API over a plain filesystem. Firehose's staging area: batch
+    # objects land here before they are COPYed into the warehouse.
+    image: andrewgaul/s3proxy:latest
+    environment:
+      - S3PROXY_ENDPOINT=http://0.0.0.0:9000
+      - S3PROXY_AUTHORIZATION=aws-v2-or-v4
+      - S3PROXY_IDENTITY=local
+      - S3PROXY_CREDENTIAL=localsecret
+      - JCLOUDS_PROVIDER=filesystem
+      - JCLOUDS_FILESYSTEM_BASEDIR=/data
+    ports:
+      - "9000:9000"
+
+  createbuckets:
+    # one-shot: wait for S3Proxy, make the chapter's bucket (idempotent), exit
+    image: amazon/aws-cli:latest
+    depends_on:
+      - s3
+    environment:
+      - AWS_ACCESS_KEY_ID=local
+      - AWS_SECRET_ACCESS_KEY=localsecret
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        for i in $$(seq 1 30); do
+          aws --endpoint-url http://s3:9000 s3 ls >/dev/null 2>&1 && break; sleep 2;
+        done;
+        aws --endpoint-url http://s3:9000 s3 mb s3://fraud-analytics 2>/dev/null || true;
+        echo "bucket ready"
+
+  warehouse:
+    # Redshift-flavored Postgres 16: accepts redshift-connector's startup
+    # parameters and reports a Redshift server version. The analytics table
+    # the delivery worker COPYes decisions into.
+    image: public.ecr.aws/oblako/redshift-local:16
+    environment:
+      - POSTGRES_USER=analyst
+      - POSTGRES_PASSWORD=analyst
+      - POSTGRES_DB=fraud
+      - POSTGRES_HOST_AUTH_METHOD=md5
+    ports:
+      - "5439:5439"
+    healthcheck:
+      # the image fronts Postgres (internal :5433) with a Redshift wire proxy
+      # on :5439; probe the engine directly
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5433 -U analyst -d fraud"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

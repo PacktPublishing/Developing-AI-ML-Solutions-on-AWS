@@ -1,0 +1,57 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudFormation",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:*:stack/ch06-*/*",
+        "arn:aws:cloudformation:us-east-1:*:stack/aws-sam-cli-managed-*/*"
+      ]
+    },
+    {
+      "Sid": "CloudFormationRead",
+      "Effect": "Allow",
+      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageChapterRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
+        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies", "iam:PassRole"
+      ],
+      "Resource": ["arn:aws:iam::*:role/ch06-*", "arn:aws:iam::*:role/fraud-*"]
+    },
+    {"Sid": "KinesisStreams", "Effect": "Allow", "Action": "kinesis:*", "Resource": "arn:aws:kinesis:us-east-1:*:stream/*"},
+    {"Sid": "KinesisList", "Effect": "Allow", "Action": "kinesis:ListStreams", "Resource": "*"},
+    {"Sid": "Firehose", "Effect": "Allow", "Action": "firehose:*", "Resource": "arn:aws:firehose:us-east-1:*:deliverystream/*"},
+    {"Sid": "DynamoDb", "Effect": "Allow", "Action": "dynamodb:*", "Resource": ["arn:aws:dynamodb:us-east-1:*:table/ch06-*", "arn:aws:dynamodb:us-east-1:*:table/fraud-*"]},
+    {
+      "Sid": "Lambda",
+      "Effect": "Allow",
+      "Action": ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:InvokeFunction", "lambda:AddPermission", "lambda:RemovePermission", "lambda:CreateEventSourceMapping", "lambda:DeleteEventSourceMapping", "lambda:GetEventSourceMapping", "lambda:TagResource"],
+      "Resource": ["arn:aws:lambda:us-east-1:*:function:ch06-*", "arn:aws:lambda:us-east-1:*:function:fraud-*"]
+    },
+    {
+      "Sid": "SageMakerEndpoint",
+      "Effect": "Allow",
+      "Action": ["sagemaker:CreateModel", "sagemaker:DeleteModel", "sagemaker:CreateEndpointConfig", "sagemaker:DeleteEndpointConfig", "sagemaker:CreateEndpoint", "sagemaker:DeleteEndpoint", "sagemaker:DescribeModel", "sagemaker:DescribeEndpointConfig", "sagemaker:DescribeEndpoint", "sagemaker:InvokeEndpoint", "sagemaker:AddTags"],
+      "Resource": "arn:aws:sagemaker:us-east-1:*:*/fraud-*"
+    },
+    {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": "arn:aws:ecr:us-east-1:*:repository/ch06-scoring"},
+    {"Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
+    {
+      "Sid": "CodeBuild",
+      "Effect": "Allow",
+      "Action": ["codebuild:CreateProject", "codebuild:UpdateProject", "codebuild:DeleteProject", "codebuild:StartBuild", "codebuild:BatchGetBuilds", "codebuild:BatchGetProjects"],
+      "Resource": "arn:aws:codebuild:us-east-1:*:project/ch06-*"
+    },
+    {"Sid": "SourceBucket", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch06-*", "arn:aws:s3:::ch06-*/*", "arn:aws:s3:::aws-sam-cli-managed-*", "arn:aws:s3:::aws-sam-cli-managed-*/*"]},
+    {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": ["arn:aws:logs:us-east-1:*:log-group:*ch06*", "arn:aws:logs:us-east-1:*:log-group:*fraud*"]}
+  ]
+}

@@ -1,7 +1,7 @@
 version = 0.1
 
 [default.deploy.parameters]
-stack_name = "book-airflow"
+stack_name = "ch01-airflow"
 region = "us-east-1"
 resolve_s3 = true
 capabilities = "CAPABILITY_IAM"

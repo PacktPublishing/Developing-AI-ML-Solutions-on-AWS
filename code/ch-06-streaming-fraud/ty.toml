@@ -1,0 +1,11 @@
+[environment]
+python-version = "3.14"
+
+[rules]
+possibly-unresolved-reference = "warn"
+division-by-zero = "ignore"
+unresolved-import = "ignore"
+
+[analysis]
+replace-imports-with-any = ["pandas.**", "numpy.**"]
+respect-type-ignore-comments = false

@@ -1,0 +1,74 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Processor, AWSCloud]
+
+    Processor:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Card processor"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Transactions, FastPath, AnalyticsPath]
+
+    Transactions:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Kinesis Data Streams"
+      Title: "transactions stream"
+
+    FastPath:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Endpoint, Consumer, Blocks]
+
+    Endpoint:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "Serverless Inference"
+    Consumer:
+      Type: AWS::Diagram::Resource
+      Preset: "LambdaCoin"
+      Title: "consumer"
+    Blocks:
+      Type: AWS::DynamoDB::Table
+      Title: "blocked_transactions"
+
+    AnalyticsPath:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Decisions, Firehose, Staging, Warehouse]
+
+    Decisions:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Kinesis Data Streams"
+      Title: "decisions stream"
+    Firehose:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Data Firehose"
+      Title: "delivery stream"
+    Staging:
+      Type: AWS::S3::Bucket
+      Title: "staging bucket"
+    Warehouse:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "fraud_decisions"
+
+  Links:
+    - {Source: Processor, SourcePosition: E, Target: Transactions, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Transactions, SourcePosition: E, Target: Consumer, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Consumer, SourcePosition: N, Target: Endpoint, TargetPosition: S, SourceArrowHead: {Type: Open}, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Consumer, SourcePosition: S, Target: Blocks, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Consumer, SourcePosition: E, Target: Decisions, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Decisions, SourcePosition: S, Target: Firehose, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Firehose, SourcePosition: S, Target: Staging, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Staging, SourcePosition: S, Target: Warehouse, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}

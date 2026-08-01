@@ -1,0 +1,81 @@
+.PHONY: lint deploy image endpoint-local endpoint produce blocks teardown
+
+# The cloud round, in order: `make deploy` (the SAM stack: streams, table,
+# ECR, Firehose, consumer), `make image` (push the serving image), `make
+# endpoint` (Serverless Inference from that image), `make produce` (replay
+# transactions at the real stream), `make blocks` (count what got blocked),
+# `make teardown` (leave nothing behind).
+REGION ?= us-east-1
+STACK := streaming-fraud-ch06
+
+# stack outputs, resolved on demand
+output = $(shell aws cloudformation describe-stacks --region $(REGION) \
+	--stack-name $(STACK) \
+	--query "Stacks[0].Outputs[?OutputKey=='$(1)'].OutputValue" --output text)
+
+# template checks: cfn-lint for correctness, rain for canonical formatting
+lint:
+	uvx cfn-lint template.yaml
+	rain fmt --verify template.yaml
+
+deploy:
+	sam build
+	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+
+# build the serving image in the cloud: upload the build context, start the
+# stack's CodeBuild project, wait for the multi-arch push to ECR. The laptop
+# never builds or loads an image.
+image:
+	$(eval BUCKET := $(call output,StagingBucketName))
+	cd .. && rm -f /tmp/ch06-scoring-src.zip && \
+		zip -q -j /tmp/ch06-scoring-src.zip scoring/Dockerfile scoring/serve.py \
+		scoring/entrypoint.sh aws/image/buildspec.yml
+	aws s3 cp /tmp/ch06-scoring-src.zip s3://$(BUCKET)/ch06/source/scoring.zip
+	@ID=$$(aws codebuild start-build --region $(REGION) --project-name ch06-scoring-build \
+		--query 'build.id' --output text); \
+	echo "build $$ID"; \
+	while STATUS=$$(aws codebuild batch-get-builds --region $(REGION) --ids $$ID \
+		--query 'builds[0].buildStatus' --output text); \
+		[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
+		echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
+
+# rehearse the deploy in SageMaker local mode: the SDK keeps the real
+# control plane (role, ECR image, S3) but runs the serving container on
+# this machine — the chapter-02 pattern, applied to serving
+endpoint-local:
+	$(eval REPO := $(call output,ScoringRepoUri))
+	$(eval BUCKET := $(call output,StagingBucketName))
+	$(eval ROLE := $(call output,EndpointRoleArn))
+	cd .. && SAGEMAKER_ROLE_ARN=$(ROLE) IMAGE_URI=$(REPO):local \
+		ARTIFACT_BUCKET=$(BUCKET) AWS_DEFAULT_REGION=$(REGION) \
+		uv run aws/deploy.py
+
+# the real deploy — the same BYOC choreography the book used in chapter 2:
+# model.tar.gz to S3, then model + endpoint config + endpoint with a
+# ServerlessConfig
+endpoint:
+	$(eval REPO := $(call output,ScoringRepoUri))
+	$(eval BUCKET := $(call output,StagingBucketName))
+	$(eval ROLE := $(call output,EndpointRoleArn))
+	cd .. && SAGEMAKER_SERVERLESS=1 SAGEMAKER_ROLE_ARN=$(ROLE) IMAGE_URI=$(REPO):latest \
+		ARTIFACT_BUCKET=$(BUCKET) AWS_DEFAULT_REGION=$(REGION) \
+		uv run aws/deploy.py
+
+# replay transactions at the real stream: same producer, endpoint variables
+# cleared so boto3 talks to AWS
+produce:
+	cd .. && KINESIS_ENDPOINT= uv run streaming/producer.py --limit 500
+
+# how many transactions the consumer blocked
+blocks:
+	aws dynamodb scan --region $(REGION) --table-name blocked_transactions \
+		--select COUNT --query Count
+
+# delete in reverse: endpoint first (it is not in the stack), then empty the
+# staging bucket, then the stack itself
+teardown:
+	-aws sagemaker delete-endpoint --region $(REGION) --endpoint-name fraud-scoring
+	-aws sagemaker delete-endpoint-config --region $(REGION) --endpoint-config-name fraud-scoring
+	-aws sagemaker delete-model --region $(REGION) --model-name fraud-scoring
+	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
+	sam delete --no-prompts --region $(REGION)

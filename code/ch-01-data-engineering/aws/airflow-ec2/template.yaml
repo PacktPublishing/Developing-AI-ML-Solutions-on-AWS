@@ -95,7 +95,7 @@ Resources:
         - !GetAtt AirflowSecurityGroup.GroupId
       Tags:
         - Key: Name
-          Value: book-ch01-airflow
+          Value: ch01-airflow
       UserData: !Base64
         Fn::Sub: |
           #!/bin/bash

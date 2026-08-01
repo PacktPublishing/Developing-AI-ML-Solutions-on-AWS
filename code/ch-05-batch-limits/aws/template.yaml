@@ -4,6 +4,16 @@ Description: |
   The batch limit run on AWS: the pipeline's S3 bucket, the step image built in the cloud, the role the pipeline runs as, the EventBridge schedule that starts it, and an SNS topic that hears about failures. The pipeline itself is registered by pipeline/pipeline.py with PIPELINE_MODE=aws; the warehouse is Redshift Serverless from the chapter-01 stack.
   Every stateful resource is deliberately disposable: `make teardown` leaves nothing behind.
 
+Metadata:
+  cfn-lint:
+    config:
+
+      # W1033: WarehouseSubnetIds' empty default never reaches the workgroup —
+      # the warehouse resources exist only when HasWarehouse, which requires
+      # the parameters to be set
+      ignore_checks:
+        - W1033
+
 Parameters:
   PipelineName:
     Type: String
@@ -19,10 +29,31 @@ Parameters:
     Type: String
     Default: ""
 
+  VpcId:
+    Description: |
+      VPC for the warehouse (the default VPC is fine). Empty deploys the stack without the warehouse — it bills per second while active, so create it for the run and update the stack back without it the same day.
+    Type: String
+    Default: ""
+
+  WarehouseSubnetIds:
+    Description: at least 3 comma-separated subnets in different AZs (default VPC subnets work)
+    Type: String
+    Default: ""
+
+  AllowedCidr:
+    Description: your IP in CIDR form (x.x.x.x/32) for psql on 5439
+    Type: String
+    Default: 127.0.0.1/32
+
 Conditions:
   HasEmail: !Not
     - !Equals
       - !Ref AlertEmail
+      - ""
+
+  HasWarehouse: !Not
+    - !Equals
+      - !Ref VpcId
       - ""
 
 Resources:
@@ -157,6 +188,22 @@ Resources:
                   - sagemaker:DescribeTrainingJob
                   - sagemaker:AddTags
                 Resource: '*'
+
+              # the standard SageMaker execution baseline the SDK validates:
+              # job metrics, and the ENI actions VPC-attached jobs would need
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                  - ec2:CreateNetworkInterface
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DeleteNetworkInterfacePermission
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                Resource: '*'
               - Effect: Allow
                 Action:
                   - iam:PassRole
@@ -247,6 +294,61 @@ Resources:
         - Id: alerts
           Arn: !Ref Alerts
 
+  # the warehouse, in the same stack: Redshift Serverless namespace +
+  # workgroup, admin credentials generated into Secrets Manager, 5439 open
+  # to one address. Deployed only when VpcId is set.
+  WarehouseSecret:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: portfolio warehouse admin credentials
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "analyst"}'
+        GenerateStringKey: password
+        ExcludePunctuation: true
+        PasswordLength: 24
+    Condition: HasWarehouse
+
+  WarehouseSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: portfolio warehouse, 5439 from one address
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: !Ref AllowedCidr
+    Condition: HasWarehouse
+
+  PortfolioNamespace:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RedshiftServerless::Namespace
+    Properties:
+      NamespaceName: portfolio
+      DbName: portfolio
+      AdminUsername: analyst
+      AdminUserPassword: !Sub '{{resolve:secretsmanager:${WarehouseSecret}:SecretString:password}}'
+    Condition: HasWarehouse
+
+  PortfolioWorkgroup:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RedshiftServerless::Workgroup
+    Properties:
+      WorkgroupName: portfolio-wg
+      NamespaceName: !Ref PortfolioNamespace
+      BaseCapacity: 8
+      PubliclyAccessible: true
+      SubnetIds: !Split
+        - ','
+        - !Ref WarehouseSubnetIds
+      SecurityGroupIds:
+        - !GetAtt WarehouseSg.GroupId
+    Condition: HasWarehouse
+
 Outputs:
   BatchBucketName:
     Value: !Ref BatchBucket
@@ -257,3 +359,13 @@ Outputs:
   PipelineRoleArn:
     Description: SAGEMAKER_ROLE_ARN for pipeline/pipeline.py
     Value: !GetAtt PipelineRole.Arn
+
+  WarehouseEndpoint:
+    Description: host for WAREHOUSE_DSN
+    Value: !GetAtt PortfolioWorkgroup.Workgroup.Endpoint.Address
+    Condition: HasWarehouse
+
+  WarehouseSecretArn:
+    Description: admin credentials (username analyst, key password)
+    Value: !Ref WarehouseSecret
+    Condition: HasWarehouse

@@ -1,0 +1,55 @@
+# The same Vision RAG loop on your laptop: the facenet Lambda containers run under
+# the Lambda RIE (curled directly — no API Gateway locally), a Postgres+pgvector
+# container stands in for RDS, and S3Proxy stands in for S3. Same code; only the
+# DB and image endpoints change.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Applicant, Local]
+
+    Applicant:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Applicant"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local (Docker)"
+      Children: [Images, Compute, Store]
+
+    Images:
+      Type: AWS::S3::Bucket
+      Title: "S3Proxy :9000\n(S3)"
+
+    Compute:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Embed, Search]
+    Embed:
+      Type: AWS::Diagram::Resource
+      Preset: "LambdaCoin"
+      Title: "embeddings RIE :9011\n(facenet)"
+    Search:
+      Type: AWS::Diagram::Resource
+      Preset: "LambdaCoin"
+      Title: "search RIE :9010\n(facenet)"
+
+    Store:
+      Type: AWS::Diagram::Resource
+      Preset: "Postgres"
+      Title: "pgvector :5432\n(RDS Postgres)"
+
+  Links:
+    - {Source: Images, SourcePosition: E, Target: Embed, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Applicant, SourcePosition: E, Target: Search, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Embed, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Search, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

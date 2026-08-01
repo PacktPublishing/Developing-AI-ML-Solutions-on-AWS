@@ -1,6 +1,6 @@
 .PHONY: airflow-deploy airflow-delete lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
 
-S3TABLES_ARN ?= arn:aws:s3tables:us-east-1:$(ACCOUNT):bucket/book-lake-ch01
+S3TABLES_ARN ?= arn:aws:s3tables:us-east-1:$(ACCOUNT):bucket/ch01-lake
 
 # Cloud verification: the SAME scripts as the local targets, run against
 # real AWS through the default credential chain. Bucket names get the
@@ -19,7 +19,7 @@ airflow-deploy:
 # S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
 # backup bucket (read from the stack outputs) before sam delete tears it down.
 airflow-delete:
-	@BUCKET=$$(aws cloudformation describe-stacks --stack-name book-airflow \
+	@BUCKET=$$(aws cloudformation describe-stacks --stack-name ch01-airflow \
 	  --query "Stacks[0].Outputs[?OutputKey=='BackupBucket'].OutputValue" \
 	  --output text 2>/dev/null); \
 	if [ -n "$$BUCKET" ] && [ "$$BUCKET" != "None" ]; then \

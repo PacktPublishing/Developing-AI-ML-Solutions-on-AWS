@@ -77,3 +77,44 @@ alerts an SNS topic on failure.
   SNS
 - **Local stand-ins:** redshift-local (Redshift), S3Proxy (S3), step container
   (Docker Compose)
+
+---
+
+## Per-chapter deploy identities
+
+Each chapter deploys with its **own** scoped IAM role — `ch01-user` … `ch08-user` —
+carrying only that chapter's permissions, instead of running everything as admin.
+Piling every chapter's permissions onto one admin user hits the IAM per-user policy
+quota (the "runs out of permissions" failure); one assumable role per chapter avoids
+that and keeps each chapter least-privilege. Each role's permissions live in that
+chapter's `aws/iam/deploy.json`.
+
+Bootstrap once, from a privileged identity that can create roles:
+
+```bash
+code/setup-users.sh create arn:aws:iam::<ACCOUNT_ID>:user/<your-base-user>
+```
+
+That creates all eight roles, each trusting `<your-base-user>` to `sts:AssumeRole`
+and carrying its chapter's `deploy.json` inline. Re-run it after editing any
+`deploy.json` (updates in place); `code/setup-users.sh delete` removes them all.
+
+Add a profile per chapter to `~/.aws/config` and deploy under it:
+
+```ini
+[profile ch04]
+role_arn = arn:aws:iam::<ACCOUNT_ID>:role/ch04-user
+source_profile = default
+region = us-east-1
+```
+
+```bash
+make -C code/ch-04-realtime-scoring deploy AWS_PROFILE=ch04
+```
+
+**These policies are best-effort and must be author-tested.** Each `deploy.json`
+was derived from the chapter's `aws/` template and Make targets, not from a live
+deploy. Least-privilege is iterative: assume the role, deploy, and if a call returns
+`AccessDenied`, add that one action to the chapter's `deploy.json` and re-run the
+bootstrap. A few statements stay broad (`ec2:*Vpc*`, `glue:*`, `sagemaker:*`) where
+tight ARN scoping isn't practical.

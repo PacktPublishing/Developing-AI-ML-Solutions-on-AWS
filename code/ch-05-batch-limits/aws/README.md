@@ -4,22 +4,31 @@ The stack carries the pipeline's bucket, the step image built in the cloud,
 the role the pipeline runs as, the EventBridge schedule that starts it, and
 an SNS topic that hears about failures. The pipeline definition is the same
 `pipeline/pipeline.py` that ran locally, registered with
-`PIPELINE_MODE=aws`. The warehouse is Redshift Serverless — deploy the
-chapter-01 stack (`code/ch-01-data-engineering/aws/redshift-serverless.yaml`)
-and pass its endpoint as `WAREHOUSE_DSN`.
+`PIPELINE_MODE=aws`. The warehouse is the chapter's own Redshift Serverless
+(`redshift-serverless.yaml`, deployed separately because its lifetime is
+shorter — it bills per second while active); pass its endpoint as
+`WAREHOUSE_DSN`.
 
 ## Before the first deploy
 
+This chapter deploys as `ch05-user`, a role carrying only the grants in
+`iam/deploy.json` (SageMaker Pipelines, ECR, CodeBuild, EventBridge, SNS,
+Redshift read, plus the CloudFormation and scoped IAM needed to create the
+stack). Bootstrap the role once and assume it via a profile — see
+[`code/README.md`](../../README.md) (`code/setup-users.sh`). Then deploy under
+that profile:
+
 ```
-aws iam create-group --group-name book-ch05
-aws iam put-group-policy --group-name book-ch05 \
-  --policy-name CreditBookCh5Deploy --policy-document file://iam/deploy.json
-aws iam add-user-to-group --group-name book-ch05 --user-name <you>
+make deploy AWS_PROFILE=ch05
 ```
 
 ## Run it, in order
 
 ```
+aws cloudformation deploy --template-file redshift-serverless.yaml \
+  --stack-name ch05-redshift --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides VpcId=... SubnetIds=... AllowedCidr=x.x.x.x/32 \
+  AdminPassword=...   # the warehouse; delete it the same day
 make deploy      # bucket, ECR, CodeBuild, roles, schedule, alerts
 make image       # build the step image in the cloud
 make pipeline WAREHOUSE_DSN=postgresql://...   # register the pipeline

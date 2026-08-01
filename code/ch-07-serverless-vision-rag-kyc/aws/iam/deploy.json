@@ -1,0 +1,65 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudFormation",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:*:stack/ch07-*/*",
+        "arn:aws:cloudformation:us-east-1:*:stack/aws-sam-cli-managed-*/*"
+      ]
+    },
+    {
+      "Sid": "CloudFormationRead",
+      "Effect": "Allow",
+      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageChapterRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
+        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies", "iam:PassRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/ch07-*"
+    },
+    {
+      "Sid": "VpcNetworking",
+      "Effect": "Allow",
+      "Action": ["ec2:*Vpc*", "ec2:*Subnet*", "ec2:*Route*", "ec2:*InternetGateway*", "ec2:*NatGateway*", "ec2:*SecurityGroup*", "ec2:*Address*", "ec2:*NetworkInterface*", "ec2:Describe*", "ec2:*Tags"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RdsPgvector",
+      "Effect": "Allow",
+      "Action": ["rds:CreateDBSubnetGroup", "rds:DeleteDBSubnetGroup", "rds:DescribeDBSubnetGroups", "rds:CreateDBInstance", "rds:DeleteDBInstance", "rds:DescribeDBInstances", "rds:ModifyDBInstance", "rds:AddTagsToResource", "rds:ListTagsForResource"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DbCredentials",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:GetRandomPassword", "secretsmanager:TagResource"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Lambda",
+      "Effect": "Allow",
+      "Action": ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:InvokeFunction", "lambda:CreateFunctionUrlConfig", "lambda:DeleteFunctionUrlConfig", "lambda:GetFunctionUrlConfig", "lambda:AddPermission", "lambda:RemovePermission", "lambda:TagResource"],
+      "Resource": "arn:aws:lambda:us-east-1:*:function:ch07-*"
+    },
+    {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": "arn:aws:ecr:us-east-1:*:repository/ch07-*"},
+    {"Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
+    {
+      "Sid": "CodeBuild",
+      "Effect": "Allow",
+      "Action": ["codebuild:CreateProject", "codebuild:UpdateProject", "codebuild:DeleteProject", "codebuild:StartBuild", "codebuild:BatchGetBuilds", "codebuild:BatchGetProjects"],
+      "Resource": "arn:aws:codebuild:us-east-1:*:project/ch07-*"
+    },
+    {"Sid": "SourceBucket", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch07-*", "arn:aws:s3:::ch07-*/*", "arn:aws:s3:::aws-sam-cli-managed-*", "arn:aws:s3:::aws-sam-cli-managed-*/*"]},
+    {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch07*"}
+  ]
+}

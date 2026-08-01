@@ -1,19 +1,20 @@
-# IAM applied for the chapter's cloud verification
+# IAM for chapter 1
 
-Templated with <ACCOUNT_ID>/<REGION>; applied to account via the commands below.
+**Deploy identity.** This chapter deploys with the `ch01-user` role, not admin —
+its permissions are in `deploy.json`. Bootstrap it once and assume it as described
+in [`code/README.md`](../../../README.md) (`code/setup-users.sh`).
+
+**Service roles.** The Glue job needs its own role (Glue assumes it at run time),
+templated here with `<ACCOUNT_ID>`/`<REGION>`:
 
 | File | Applied as |
 |---|---|
-| glue-book-ch01-trust.json | trust policy of role `glue-book-ch01` (+ managed AWSGlueServiceRole) |
-| glue-book-ch01-s3.json | inline policy `s3-bureau-raw` on role `glue-book-ch01` |
-| sagemaker-feature-store.json | managed policy `sagemaker-feature-store-ch01`, attached to group `book-ch01` (user `admin` is a member; user policy quota was full) |
+| ch01-glue-trust.json | trust policy of role `ch01-glue` (+ managed AWSGlueServiceRole) |
+| ch01-glue-s3.json | inline policy `s3-bureau-raw` on role `ch01-glue` |
+| sagemaker-feature-store.json | reference policy for the SageMaker Feature Store calls; these actions are already in `deploy.json`, so `ch01-user` can make them directly |
 
 ```
-aws iam create-role --role-name glue-book-ch01 --assume-role-policy-document file://glue-book-ch01-trust.json
-aws iam attach-role-policy --role-name glue-book-ch01 --policy-arn arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
-aws iam put-role-policy --role-name glue-book-ch01 --policy-name s3-bureau-raw --policy-document file://glue-book-ch01-s3.json
-aws iam create-policy --policy-name sagemaker-feature-store-ch01 --policy-document file://sagemaker-feature-store.json
-aws iam create-group --group-name book-ch01
-aws iam attach-group-policy --group-name book-ch01 --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/sagemaker-feature-store-ch01
-aws iam add-user-to-group --group-name book-ch01 --user-name <YOUR_USER>
+aws iam create-role --role-name ch01-glue --assume-role-policy-document file://ch01-glue-trust.json
+aws iam attach-role-policy --role-name ch01-glue --policy-arn arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+aws iam put-role-policy --role-name ch01-glue --policy-name s3-bureau-raw --policy-document file://ch01-glue-s3.json
 ```

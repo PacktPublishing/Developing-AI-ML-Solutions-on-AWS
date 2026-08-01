@@ -1,0 +1,119 @@
+name: ch08-analytics-local
+
+# The local stack, one file, three modes:
+#
+#   make local          Claude Code with standard Claude auth (sign in with
+#                       /login, or export ANTHROPIC_API_KEY first): the fast
+#                       local mode, no AWS account touched
+#   make local-bedrock  Claude Code on real Bedrock; credentials arrive
+#                       through the ecs-local-endpoints sidecar at
+#                       169.254.170.2, the task-metadata path the task role
+#                       fills on Fargate (set AWS_PROFILE first)
+#   make local-ollama   fully offline on Ollama's Anthropic-compatible API
+#                       (BEDROCK_LOCAL=1, chapter 3's flag); expect
+#                       laptop-model speed and judgment
+#
+#   browser -> assistant (ttyd + Claude Code) -> Ollama | Bedrock
+#                |  boto3.client("redshift-data")
+#                v
+#             dataapi (from-source shim) --redshift_connector--> redshift-local
+#
+# In both modes the helper is UNMODIFIED: it reaches the local Data API
+# through AWS_ENDPOINT_URL_REDSHIFT_DATA, and no access key appears in this
+# file — the sidecar vends the host profile's credentials either way.
+
+networks:
+  credentials_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "169.254.170.0/24"
+          gateway: 169.254.170.1
+
+services:
+  redshift-local:
+    image: public.ecr.aws/oblako/redshift-local:16
+    environment:
+      POSTGRES_USER: bi_analyst
+      POSTGRES_PASSWORD: local
+      POSTGRES_DB: analytics
+      POSTGRES_HOST_AUTH_METHOD: md5
+    volumes:
+      - ./seed:/docker-entrypoint-initdb.d:ro
+      - redshift_data:/var/lib/postgresql/data
+    healthcheck:
+      # the image fronts Postgres (internal :5433) with a Redshift wire proxy
+      # on :5439; probe the engine directly, the ch-01 pattern
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5433 -U bi_analyst -d analytics"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  dataapi:
+    build: ./dataapi
+    environment:
+      PGHOST: redshift-local
+      PGPORT: "5439"
+      PGUSER: bi_analyst
+      PGPASSWORD: local
+      DEFAULT_DB: analytics
+    depends_on:
+      redshift-local:
+        condition: service_healthy
+
+  ecs-local-endpoints:
+    image: amazon/amazon-ecs-local-container-endpoints
+    volumes:
+      - /var/run:/var/run
+      - $HOME/.aws/:/home/.aws/
+    environment:
+      HOME: "/home"
+      AWS_PROFILE: "${AWS_PROFILE:-default}"
+    networks:
+      credentials_network:
+        ipv4_address: "169.254.170.2"
+
+  llmproxy:
+    image: python:3.12-slim
+    volumes:
+      - ./llmproxy:/srv:ro
+    command: python /srv/server.py
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  assistant:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "7681:7681"
+    environment:
+      AWS_ENDPOINT_URL_REDSHIFT_DATA: http://dataapi:8002
+      AWS_DEFAULT_REGION: us-east-1
+      REDSHIFT_REGION: us-east-1
+      REDSHIFT_HOST: local-redshift
+      REDSHIFT_DB_NAME: analytics
+      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "/creds"
+      # The model seam: launch-claude reads these; all empty = standard
+      # Claude auth (subscription or ANTHROPIC_API_KEY), the fast default.
+      BEDROCK_LOCAL: "${BEDROCK_LOCAL:-}"
+      CLAUDE_CODE_USE_BEDROCK: "${CLAUDE_CODE_USE_BEDROCK:-}"
+      LOCAL_MODEL: "${LOCAL_MODEL:-gpt-oss:20b}"
+      # Either credential skips the login dialog: an API key, or a
+      # subscription token from `claude setup-token` on the host.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      CLAUDE_CODE_OAUTH_TOKEN: "${CLAUDE_CODE_OAUTH_TOKEN:-}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      default: {}
+      credentials_network:
+        ipv4_address: "169.254.170.3"
+    depends_on:
+      - dataapi
+      - ecs-local-endpoints
+      - llmproxy
+    restart: unless-stopped
+
+volumes:
+  redshift_data:
