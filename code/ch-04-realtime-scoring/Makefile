@@ -44,7 +44,8 @@ kube-up:
 	kubectl rollout status deployment/decision-service --timeout=120s
 
 kube-decide:
-	curl -s localhost:8085/decision -H 'content-type: application/json' -d '{ \
+	curl -s --retry 10 --retry-delay 2 --retry-all-errors \
+	  localhost:8085/decision -H 'content-type: application/json' -d '{ \
 	  "application_id": "app-1042", "age": 34, "monthly_income": 4200, \
 	  "requested_amount": 8000, "dti": 0.20, "utilization": 0.15 }'
 	@echo
