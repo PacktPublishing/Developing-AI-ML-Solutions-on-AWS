@@ -1,5 +1,6 @@
-# Code
+# Chapter code
 
+The runnable code for *Developing AI/ML Solutions on AWS*, one folder per chapter.
 Every chapter runs **locally first** — real engines in containers standing in for
 the AWS services — then on **real AWS** with the same code; only the endpoints
 change. Each chapter's `diagrams/` holds the cloud architecture and its local
