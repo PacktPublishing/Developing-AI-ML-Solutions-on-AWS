@@ -56,7 +56,7 @@ kube-down:
 # swap the image for the ECR copy, apply. The control plane bills hourly —
 # create, run, delete. Needs eksctl; the image comes from the aws/ stack.
 eks-up:
-	eksctl create cluster -f aws/eks/cluster.yaml
+	eksctl create cluster -f aws/eks/create-cluster.yaml
 
 REPO = $(shell aws cloudformation describe-stacks --region us-east-1 \
 	--stack-name realtime-scoring-ch04 \
@@ -77,7 +77,7 @@ eks-decide:
 	echo; kill $$PF
 
 eks-down:
-	eksctl delete cluster -f aws/eks/cluster.yaml
+	eksctl delete cluster -f aws/eks/create-cluster.yaml
 
 down:
 	docker compose down -v

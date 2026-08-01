@@ -41,7 +41,7 @@ Ingress (the ALB's job). `make kube-decide` answers through it, and
 `make kube-down` removes the cluster. Needs k3d and kubectl installed.
 
 On AWS the same manifests run on EKS with a Fargate profile — scaffolded
-in `aws/eks/cluster.yaml` and the `eks-up` / `eks-deploy` / `eks-decide` /
+in `aws/eks/create-cluster.yaml` and the `eks-up` / `eks-deploy` / `eks-decide` /
 `eks-down` targets: the identical YAML, only the image reference swapped
 for the ECR copy the aws/ stack built. The control plane bills hourly;
 create, run, delete. Exposure stays at a port-forward — a production
