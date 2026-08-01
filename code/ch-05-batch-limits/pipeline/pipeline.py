@@ -199,7 +199,21 @@ if __name__ == "__main__":
     # register through the session locally, upsert only on AWS (same as ch-02).
     if MODE == "local":
         sess.create_pipeline(pipeline, "batch limit run, local execution")
-        execution = sess.start_pipeline_execution(PipelineName=pipeline.name)
+        try:
+            execution = sess.start_pipeline_execution(PipelineName=pipeline.name)
+        except Exception:
+            # the local stand-in for the failure rule in aws/template.yaml:
+            # a failed run publishes to the alerts topic before re-raising
+            sns_endpoint = os.environ.get("SNS_ENDPOINT", "")
+            if sns_endpoint:
+                import boto3
+
+                boto3.client("sns", endpoint_url=sns_endpoint).publish(
+                    TopicArn="arn:aws:sns:us-east-1:000000000000:ch05-batch-alerts",
+                    Subject="batch pipeline failed",
+                    Message=f"pipeline {pipeline.name} failed",
+                )
+            raise
     else:
         pipeline.upsert(role_arn=ROLE)
         execution = pipeline.start()

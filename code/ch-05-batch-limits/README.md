@@ -25,12 +25,17 @@ make down    # stop and clean
 | `steps/decide.py` | the limit-manager Lambda |
 | S3Proxy | Amazon S3 |
 | redshift-local | Amazon Redshift Serverless |
-| `make run` by hand | an EventBridge schedule |
+| the events-local shim | EventBridge and SNS |
+| `make schedule`: rule + topic via the API | the same resources in aws/template.yaml |
 
 The pipeline (`pipeline/`) uses ch-02's local pipeline session: the same
 DAG runs on the local executor and as SageMaker jobs, with only the session
 changing. `make pipeline` needs real credentials, a real S3 bucket
 (`BATCH_BUCKET`), and a SageMaker role — local compute, real control plane.
 
-Still to come: the EventBridge schedule, CloudWatch + SNS on the job, and
-the `aws/` templates, with Redshift Serverless as in ch-01.
+The schedule runs locally too: `make events` serves an EventBridge- and
+SNS-shaped service (rules fire on their cron or rate expression; SNS
+targets deliver, other targets are printed with their event), and
+`make schedule` creates the rule and the alerts topic with the same
+configuration the template declares. A failed local pipeline run publishes
+to the alerts topic when SNS_ENDPOINT is set.

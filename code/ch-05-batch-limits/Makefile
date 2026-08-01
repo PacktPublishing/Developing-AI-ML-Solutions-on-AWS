@@ -1,4 +1,4 @@
-.PHONY: up seed run pipeline query down clean lint
+.PHONY: up seed run pipeline events schedule query down clean lint
 
 include ../aws.mk
 
@@ -20,6 +20,14 @@ run:
 	uv run steps/decide.py
 	uv run steps/apply_limits.py
 
+# the local EventBridge and SNS, in its own terminal
+events:
+	uv run events-local/app.py
+
+# the schedule and the alerts topic, same shapes as aws/template.yaml
+schedule:
+	uv run steps/schedule.py
+
 # the same run as a SageMaker Pipeline: local executor (Docker), real
 # control plane — real credentials, a real S3 bucket for step I/O, the
 # local warehouse. Needs make up + seed and BATCH_BUCKET + SAGEMAKER_ROLE_ARN.
@@ -40,5 +48,5 @@ clean: down
 	rm -rf data/portfolio.csv data/feature_spec.json catboost_info
 
 lint:
-	uvx ruff format data/*.py steps/*.py pipeline/pipeline.py pipeline/scripts/*.py
+	uvx ruff format data/*.py steps/*.py pipeline/pipeline.py pipeline/scripts/*.py events-local/*.py
 	uvx ruff check data/*.py steps/*.py pipeline/pipeline.py pipeline/scripts/*.py
