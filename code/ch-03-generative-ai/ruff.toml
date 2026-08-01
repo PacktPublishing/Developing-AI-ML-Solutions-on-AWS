@@ -1,9 +1,4 @@
-[lint]
-extend-select = ["D"]
-ignore = ["D107"]
-
-[lint.pydocstyle]
-convention = "pep257"
+extend = "../../pyproject.toml"
 
 [lint.per-file-ignores]
 # test functions do not need docstrings

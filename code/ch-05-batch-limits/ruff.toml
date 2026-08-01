@@ -1,6 +1,0 @@
-[lint]
-extend-select = ["D"]
-ignore = ["D107"]
-
-[lint.pydocstyle]
-convention = "pep257"
