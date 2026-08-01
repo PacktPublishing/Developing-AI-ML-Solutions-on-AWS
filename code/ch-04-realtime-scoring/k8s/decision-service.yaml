@@ -1,0 +1,61 @@
+# The same decision-service image on Kubernetes: a Deployment with /health
+# wired to the probes (the target group's job), a Service, and an Ingress
+# (the ALB's job). On AWS the same manifests run on EKS with a Fargate
+# profile; locally the cluster is k3d.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decision-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: decision-service
+  template:
+    metadata:
+      labels:
+        app: decision-service
+    spec:
+      containers:
+        - name: service
+          image: ch04-decision:local
+          imagePullPolicy: Never # imported into the cluster, never pulled
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: decision-service
+spec:
+  selector:
+    app: decision-service
+  ports:
+    - port: 80
+      targetPort: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: decision-service
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: decision-service
+                port:
+                  number: 80

@@ -1,4 +1,4 @@
-.PHONY: up decide refer decline log down clean lint diagrams
+.PHONY: up decide refer decline log kube-up kube-decide kube-down down clean lint diagrams
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
@@ -35,6 +35,24 @@ decline:
 log:
 	aws dynamodb scan --endpoint-url http://localhost:8000 \
 		--table-name decision_log --select COUNT --query Count
+
+# the same image on Kubernetes: a k3d cluster (k3s in docker), the image
+# imported, the manifests applied. Needs k3d and kubectl installed.
+kube-up:
+	k3d cluster create decision --port "8085:80@loadbalancer" --wait
+	docker build -q -t ch04-decision:local src/
+	k3d image import -c decision ch04-decision:local
+	kubectl apply -f k8s/decision-service.yaml
+	kubectl rollout status deployment/decision-service --timeout=120s
+
+kube-decide:
+	curl -s localhost:8085/decision -H 'content-type: application/json' -d '{ \
+	  "application_id": "app-1042", "age": 34, "monthly_income": 4200, \
+	  "requested_amount": 8000, "dti": 0.20, "utilization": 0.15 }'
+	@echo
+
+kube-down:
+	k3d cluster delete decision
 
 down:
 	$(COMPOSE) down -v

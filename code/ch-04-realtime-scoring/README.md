@@ -31,6 +31,19 @@ make down      # stop and clean
 | `/health` answered to nobody | the ALB target-group health check |
 | DynamoDB Local decision log | DynamoDB |
 
+## The same image on Kubernetes
+
+The portability claim, proven on a second orchestrator: `make kube-up`
+starts a k3d cluster (k3s in Docker), imports the image, and applies
+`k8s/decision-service.yaml` — a Deployment with `/health` wired to the
+readiness and liveness probes (the target group's job), a Service, and an
+Ingress (the ALB's job). `make kube-decide` answers through it, and
+`make kube-down` removes the cluster. Needs k3d and kubectl installed.
+
+On AWS the same manifests run on EKS with a Fargate profile
+(`eksctl create cluster --fargate`) — described here, not shipped: the
+chapter's cloud path is ECS.
+
 Still to come in this chapter: the SageMaker endpoint the service can call
 instead of its in-process scorecard, the Step Functions orchestration, the
 `aws/` SAM template (Fargate service, desired-count 0 until you scale it),
