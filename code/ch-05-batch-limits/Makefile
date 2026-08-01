@@ -1,5 +1,7 @@
 .PHONY: up seed run pipeline query down clean lint
 
+include ../aws.mk
+
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
 export AWS_DEFAULT_REGION ?= us-east-1
@@ -25,7 +27,7 @@ pipeline:
 	docker build -q -t ch05-step:local pipeline/step_image/
 	PIPELINE_MODE=local STEP_IMAGE=ch05-step:local \
 		WAREHOUSE_DSN=postgresql://analyst:analyst@host.docker.internal:5439/portfolio \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY uv run pipeline/pipeline.py
+		$(REAL_AWS) uv run pipeline/pipeline.py
 
 query:
 	docker compose exec warehouse psql -h 127.0.0.1 -p 5433 -U analyst -d portfolio \
