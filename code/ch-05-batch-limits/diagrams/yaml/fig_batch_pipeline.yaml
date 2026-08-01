@@ -1,0 +1,76 @@
+# The monthly batch limit run: an EventBridge schedule starts the SageMaker
+# pipeline, which reads the warehouse (Redshift Serverless from chapter 1), scores
+# limits in the step container (image built by CodeBuild -> ECR), and stages
+# results in S3. A failure event fans out to an SNS topic for alerts.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [AWSCloud]
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Trigger, Pipeline, Data]
+
+    Trigger:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Schedule, Developer, Git, CodeBuild, ECR]
+    Schedule:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon EventBridge"
+      Title: "EventBridge\nmonthly schedule"
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Developer"
+    Git:
+      Type: AWS::Diagram::Resource
+      Preset: "Git repository"
+      Title: "Git repo"
+    CodeBuild:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS CodeBuild"
+      Title: "CodeBuild"
+    ECR:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Elastic Container Registry (Amazon ECR)"
+      Title: "ECR step image"
+
+    Pipeline:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "SageMaker pipeline\nbatch credit limits"
+
+    Data:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Redshift, Bucket, Sns]
+    Redshift:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "Redshift\nwarehouse (ch-01)"
+    Bucket:
+      Type: AWS::S3::Bucket
+      Title: "S3\nbatch results"
+    Sns:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Notification Service (Amazon SNS)"
+      Title: "SNS\nfailure alerts"
+
+  Links:
+    - {Source: Schedule, SourcePosition: E, Target: Pipeline, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Developer, SourcePosition: S, Target: Git, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: Git, SourcePosition: S, Target: CodeBuild, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: CodeBuild, SourcePosition: S, Target: ECR, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: ECR, SourcePosition: E, Target: Pipeline, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Pipeline, SourcePosition: E, Target: Redshift, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Pipeline, SourcePosition: E, Target: Bucket, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Pipeline, SourcePosition: E, Target: Sns, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

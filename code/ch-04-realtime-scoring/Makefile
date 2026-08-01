@@ -1,4 +1,4 @@
-.PHONY: up decide refer decline log down clean lint
+.PHONY: up decide refer decline log down clean lint diagrams
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
@@ -43,3 +43,19 @@ clean: down
 lint:
 	uvx ruff format app/*.py
 	uvx ruff check app/*.py
+# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
+# Custom icons live in the shared assets/diagrams/; AWS icons fetched at render.
+AWSDAC_VERSION := v0.22.4
+AWSDAC := $(shell go env GOPATH)/bin/awsdac
+WIDTH ?= 0
+ICON_HEIGHT ?= 500
+diagrams:
+	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
+	@for s in ../../assets/diagrams/icons/*.svg; do \
+		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
+	done
+	@mkdir -p diagrams/png
+	@for f in diagrams/yaml/*.yaml; do \
+		echo "  $$f"; \
+		"$(AWSDAC)" -f "$$f" -o "diagrams/png/$$(basename $$f .yaml).png" --width $(WIDTH); \
+	done

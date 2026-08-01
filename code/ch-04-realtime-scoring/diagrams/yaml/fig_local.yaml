@@ -1,0 +1,39 @@
+# The same decision service on your laptop: the container runs under Docker and
+# writes decisions to DynamoDB Local. Same code; only the endpoints change.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Applicant, Local]
+
+    Applicant:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Applicant"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local (Docker Compose)"
+      Children: [Service, Dynamo]
+
+    Service:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "ECS Fargate :8080"
+    Dynamo:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon DynamoDB"
+      Title: "DynamoDB :8000"
+
+  Links:
+    - {Source: Applicant, SourcePosition: E, Target: Service, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Service, SourcePosition: E, Target: Dynamo, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

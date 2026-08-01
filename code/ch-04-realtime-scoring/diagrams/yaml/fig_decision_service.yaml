@@ -1,0 +1,72 @@
+# The realtime decision service: a scoring request hits an Application Load
+# Balancer, which routes (after a /health check) to the decision container on ECS
+# Fargate; each decision is written to DynamoDB. The image is built in the cloud by
+# CodeBuild and pushed to ECR — the laptop never builds it.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Applicant, AWSCloud]
+
+    Applicant:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Applicant"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Build, Serve]
+
+    Build:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Developer, Git, CodeBuild, ECR]
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Developer"
+    Git:
+      Type: AWS::Diagram::Resource
+      Preset: "Git repository"
+      Title: "Git repo"
+    CodeBuild:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS CodeBuild"
+      Title: "CodeBuild"
+    ECR:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Elastic Container Registry (Amazon ECR)"
+      Title: "ECR image"
+
+    Serve:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Alb, Fargate, Dynamo]
+    Alb:
+      Type: AWS::Diagram::Resource
+      Preset: "Application Load Balancer"
+      Title: "ALB\n/health"
+    Fargate:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "ECS Fargate\ndecision service"
+    Dynamo:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon DynamoDB"
+      Title: "DynamoDB\ndecision log"
+
+  Links:
+    - {Source: Developer, SourcePosition: S, Target: Git, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: Git, SourcePosition: S, Target: CodeBuild, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: CodeBuild, SourcePosition: S, Target: ECR, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: ECR, SourcePosition: E, Target: Fargate, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Applicant, SourcePosition: E, Target: Alb, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Alb, SourcePosition: S, Target: Fargate, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: Fargate, SourcePosition: S, Target: Dynamo, TargetPosition: N, TargetArrowHead: {Type: Open}}

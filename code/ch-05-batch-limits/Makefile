@@ -1,4 +1,4 @@
-.PHONY: up seed run pipeline events schedule query down clean lint
+.PHONY: up seed run pipeline events schedule query down clean lint diagrams
 
 include ../aws.mk
 
@@ -50,3 +50,19 @@ clean: down
 lint:
 	uvx ruff format data/*.py steps/*.py pipeline/pipeline.py pipeline/scripts/*.py events-local/*.py
 	uvx ruff check data/*.py steps/*.py pipeline/pipeline.py pipeline/scripts/*.py
+# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
+# Custom icons live in the shared assets/diagrams/; AWS icons fetched at render.
+AWSDAC_VERSION := v0.22.4
+AWSDAC := $(shell go env GOPATH)/bin/awsdac
+WIDTH ?= 0
+ICON_HEIGHT ?= 500
+diagrams:
+	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
+	@for s in ../../assets/diagrams/icons/*.svg; do \
+		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
+	done
+	@mkdir -p diagrams/png
+	@for f in diagrams/yaml/*.yaml; do \
+		echo "  $$f"; \
+		"$(AWSDAC)" -f "$$f" -o "diagrams/png/$$(basename $$f .yaml).png" --width $(WIDTH); \
+	done
