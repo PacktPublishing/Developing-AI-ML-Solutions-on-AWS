@@ -13,3 +13,7 @@ RUN uv pip install --system \
     "pandas>=2.0" \
     "numpy>=1.26" \
     "psycopg2-binary>=2.9"
+
+# the SageMaker training entrypoint: `docker run <image> train`
+COPY train /usr/local/bin/train
+RUN chmod +x /usr/local/bin/train

@@ -4,10 +4,10 @@
 # ///
 """The batch limit run as a SageMaker Pipeline — one script, local AND AWS.
 
-Four ProcessingSteps (shortlist -> score -> decide -> apply), data flowing
-between them by S3 property reference. Only the session changes between
-worlds: LocalPipelineSession (Docker, no quota) vs PipelineSession
-(SageMaker jobs).
+Five steps (shortlist -> train -> score -> decide -> apply): a TrainingStep
+producing model.tar.gz between four ProcessingSteps, data flowing by S3
+property reference. Only the session changes between worlds:
+LocalPipelineSession (Docker, no quota) vs PipelineSession (SageMaker jobs).
 
 Env: STEP_IMAGE (local tag or ECR URI), SAGEMAKER_ROLE_ARN, BATCH_BUCKET,
      WAREHOUSE_DSN (as reachable from inside the step containers),
@@ -34,7 +34,9 @@ from sagemaker.mlops.local.local_pipeline_session import (
     LocalPipelineSession as _MlopsLocalPipelineSession,
 )
 from sagemaker.mlops.workflow.pipeline import Pipeline
-from sagemaker.mlops.workflow.steps import ProcessingStep
+from sagemaker.mlops.workflow.steps import ProcessingStep, TrainingStep
+from sagemaker.train import ModelTrainer
+from sagemaker.train.configs import Compute, InputData, OutputDataConfig
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(HERE, "scripts")
@@ -115,7 +117,32 @@ shortlist = ProcessingStep(
     name="shortlist",
     step_args=processor("shortlist").run(
         code=os.path.join(SCRIPTS, "shortlist.py"),
-        outputs=[step_output("shortlist", "eligible", "/opt/ml/processing/output")],
+        outputs=[
+            step_output("shortlist", "eligible", "/opt/ml/processing/eligible"),
+            step_output("shortlist", "history", "/opt/ml/processing/history"),
+        ],
+    ),
+)
+
+trainer = ModelTrainer(
+    training_image=IMAGE,
+    role=ROLE,
+    base_job_name="train-limits",
+    compute=Compute(instance_type=instance_type, instance_count=1),
+    output_data_config=OutputDataConfig(
+        s3_output_path=f"s3://{BUCKET}/{IO_PREFIX}/train"
+    ),
+    hyperparameters={"iterations": "300", "features": FEATURES},
+    sagemaker_session=sess,
+)
+
+train = TrainingStep(
+    name="train",
+    step_args=trainer.train(
+        input_data_config=[
+            InputData(channel_name="train", data_source=out_uri(shortlist, "history"))
+        ],
+        wait=False,
     ),
 )
 
@@ -126,12 +153,14 @@ score = ProcessingStep(
         inputs=[
             step_input(
                 "eligible", out_uri(shortlist, "eligible"), "/opt/ml/processing/input"
-            )
+            ),
+            step_input(
+                "model",
+                train.properties.ModelArtifacts.S3ModelArtifacts,
+                "/opt/ml/processing/model",
+            ),
         ],
-        outputs=[
-            step_output("score", "scores", "/opt/ml/processing/scores"),
-            step_output("score", "model", "/opt/ml/processing/model"),
-        ],
+        outputs=[step_output("score", "scores", "/opt/ml/processing/output")],
     ),
 )
 
@@ -161,7 +190,7 @@ apply_limits = ProcessingStep(
 
 pipeline = Pipeline(
     name="batch-credit-limits",
-    steps=[shortlist, score, decide, apply_limits],
+    steps=[shortlist, train, score, decide, apply_limits],
     sagemaker_session=sess,
 )
 

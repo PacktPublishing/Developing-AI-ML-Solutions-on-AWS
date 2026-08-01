@@ -1,42 +1,34 @@
-"""Pipeline step 2 (Processing): train on labeled history, score the shortlist.
-
-History comes from the warehouse; the shortlist arrives as a processing
-input. Scores and the trained model go to two processing outputs.
-"""
+"""Pipeline step (Processing): score the shortlist with the trained model."""
 
 import os
+import tarfile
 
 import pandas as pd
-import psycopg2
 from catboost import CatBoostClassifier
 
 IN = "/opt/ml/processing/input"
-SCORES_OUT = "/opt/ml/processing/scores"
-MODEL_OUT = "/opt/ml/processing/model"
+MODEL_IN = "/opt/ml/processing/model"
+OUT = "/opt/ml/processing/output"
 
 
 def main() -> None:
-    """Fit on the labeled past, score the eligible book."""
+    """Load the training step's artifact and score the eligible book."""
     features = os.environ["FEATURES"].split(",")
-    with psycopg2.connect(os.environ["WAREHOUSE_DSN"]) as conn, conn.cursor() as cur:
-        cur.execute(
-            f"SELECT {', '.join(features)}, default_12m FROM customers "
-            "WHERE default_12m IS NOT NULL"
-        )
-        history = pd.DataFrame(cur.fetchall(), columns=[*features, "default_12m"])
-
     eligible = pd.read_csv(f"{IN}/eligible.csv")
 
-    model = CatBoostClassifier(iterations=300, random_seed=5, verbose=0)
-    model.fit(history[features], history["default_12m"].astype(int))
+    # the training step ships model.tar.gz; unpack it to get model.cbm
+    for name in os.listdir(MODEL_IN):
+        if name.endswith(".tar.gz"):
+            with tarfile.open(f"{MODEL_IN}/{name}") as tar:
+                tar.extractall(MODEL_IN, filter="data")
+    model = CatBoostClassifier()
+    model.load_model(f"{MODEL_IN}/model.cbm")
 
     scored = eligible[["customer_id", "current_limit", "utilization"]].copy()
     scored["pd_12m"] = model.predict_proba(eligible[features])[:, 1].round(6)
 
-    os.makedirs(SCORES_OUT, exist_ok=True)
-    os.makedirs(MODEL_OUT, exist_ok=True)
-    scored.to_csv(f"{SCORES_OUT}/scores.csv", index=False)
-    model.save_model(f"{MODEL_OUT}/model.cbm")
+    os.makedirs(OUT, exist_ok=True)
+    scored.to_csv(f"{OUT}/scores.csv", index=False)
     print(f"scored {len(scored)} customers (mean pd {scored['pd_12m'].mean():.3f})")
 
 
