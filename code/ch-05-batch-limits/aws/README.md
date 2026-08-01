@@ -3,7 +3,7 @@
 The stack carries the pipeline's bucket, the step image built in the cloud,
 the role the pipeline runs as, the EventBridge schedule that starts it, and
 an SNS topic that hears about failures. The pipeline definition is the same
-`pipeline/pipeline.py` that ran locally, registered with
+`src/pipeline/pipeline.py` that ran locally, registered with
 `PIPELINE_MODE=aws`. The warehouse is the chapter's own Redshift Serverless
 (`redshift-serverless.yaml`, deployed separately because its lifetime is
 shorter — it bills per second while active); pass its endpoint as

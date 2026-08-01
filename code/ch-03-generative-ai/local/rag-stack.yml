@@ -1,3 +1,5 @@
+name: ch03-rag
+
 services:
   vectors:
     # Postgres with pgvector: the local vector store. On AWS this is Amazon RDS

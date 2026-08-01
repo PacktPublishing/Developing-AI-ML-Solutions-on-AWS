@@ -64,16 +64,16 @@ Text Embeddings v2, so the vector store schema is identical either way. The
 
 ## Files
 
-The shared seam sits at the root; each chapter element is a folder of scripts
-run from here through the `make` targets, which set `PYTHONPATH` to the chapter
-root (a direct run is `PYTHONPATH=. uv run knowledge-base/corpus.py`).
+The shared seam and each chapter element live under `src/`; the `make` targets
+set `PYTHONPATH` to `src/` so the elements import the seam as top-level modules
+(a direct run is `PYTHONPATH=src uv run src/knowledge-base/corpus.py`).
 
-- `models.py`: the model seam, one Bedrock-shaped interface over Bedrock or Ollama
-- `stores.py`: the vector store seam, retrieval over pgvector
-- `knowledge-base/corpus.py`: generate the knowledge base and embed it
-- `underwriting-agent/authority.py`: the delegated-authority routing logic
-- `underwriting-agent/guardrails.py`: the Bedrock guardrail and the local shim
-- `underwriting-agent/agent.py`: the ask, decide, and serve entry points
-- `docker-compose.yml`: the local vector store (pgvector)
+- `src/models.py`: the model seam, one Bedrock-shaped interface over Bedrock or Ollama
+- `src/stores.py`: the vector store seam, retrieval over pgvector
+- `src/knowledge-base/corpus.py`: generate the knowledge base and embed it
+- `src/underwriting-agent/authority.py`: the delegated-authority routing logic
+- `src/underwriting-agent/guardrails.py`: the Bedrock guardrail and the local shim
+- `src/underwriting-agent/agent.py`: the ask, decide, and serve entry points
+- `local/rag-stack.yml`: the local vector store (pgvector)
 - `aws/`: deploy on real AWS
 - `Makefile`: the targets above; `make lint` runs ruff

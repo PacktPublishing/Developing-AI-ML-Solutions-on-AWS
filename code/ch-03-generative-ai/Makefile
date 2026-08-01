@@ -1,8 +1,11 @@
 .PHONY: up seed guardrail ask decide serve down lint test diagrams
 
-# The element scripts live in sub-folders but import the shared seam (models.py,
-# stores.py) from the chapter root, so the root is on the path.
-export PYTHONPATH := $(CURDIR)
+# The element scripts live under src/ but import the shared seam (models.py,
+# stores.py) as top-level modules, so src/ is on the path.
+SRC := $(CURDIR)/src
+export PYTHONPATH := $(SRC)
+
+COMPOSE := docker compose -f local/rag-stack.yml
 
 # Bedrock is the one cloud call and uses your real AWS credentials from the
 # default chain. Set BEDROCK_LOCAL=1 to run the models on Ollama instead.
@@ -19,31 +22,31 @@ Q ?= What DSCR floor applies to a solar project company?
 DEAL ?= GreenRoof Installers, a residential solar installer, seeks a 3.5 million US dollar term loan for working capital.
 
 up:
-	docker compose up -d --wait
+	$(COMPOSE) up -d --wait
 
 seed:
-	uv run knowledge-base/corpus.py
+	uv run src/knowledge-base/corpus.py
 
 guardrail:
-	uv run underwriting-agent/guardrails.py create
+	uv run src/underwriting-agent/guardrails.py create
 
 ask:
-	uv run underwriting-agent/agent.py ask --query "$(Q)" --guardrail
+	uv run src/underwriting-agent/agent.py ask --query "$(Q)" --guardrail
 
 decide:
-	uv run underwriting-agent/agent.py decide --deal "$(DEAL)"
+	uv run src/underwriting-agent/agent.py decide --deal "$(DEAL)"
 
 # serve the agent on the AgentCore contract (POST /invocations on :8080);
 # same request shape locally and on the managed runtime
 serve:
-	uv run underwriting-agent/agent.py serve
+	uv run src/underwriting-agent/agent.py serve
 
 down:
-	docker compose down -v
+	$(COMPOSE) down -v
 
 lint:
-	uvx ruff format *.py knowledge-base/*.py underwriting-agent/*.py
-	uvx ruff check *.py knowledge-base/*.py underwriting-agent/*.py
+	uvx ruff format src/*.py src/knowledge-base/*.py src/underwriting-agent/*.py
+	uvx ruff check src/*.py src/knowledge-base/*.py src/underwriting-agent/*.py
 
 # Unit tests plus a pgvector round-trip. The pgvector test provisions its own
 # container with docker-py and stubs the embeddings, so it needs no cloud.

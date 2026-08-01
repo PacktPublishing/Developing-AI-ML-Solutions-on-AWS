@@ -1,4 +1,4 @@
-"""Score the transaction stream on AWS: the cloud twin of streaming/consumer.py.
+"""Score the transaction stream on AWS: the cloud twin of src/streaming/consumer.py.
 
 The Kinesis event source mapping does what the local polling loop did — track
 a per-shard iterator and hand over batches — so this handler is only the loop

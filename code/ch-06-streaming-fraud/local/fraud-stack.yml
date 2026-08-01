@@ -1,3 +1,5 @@
+name: ch06-fraud
+
 services:
   kinesis:
     # Kinesis Data Streams API served by kinesalite (MIT), the same engine

@@ -1,3 +1,5 @@
+COMPOSE := docker compose -f local/analytics-stack.yml
+
 .PHONY: llm local local-stop lint
 
 # Local means local: Claude Code drives gpt-oss:20b on the host through
@@ -6,7 +8,7 @@
 # starts straight at the prompt, exactly like the Bedrock task does.
 # Prerequisite: ollama pull gpt-oss:20b
 local:
-	cd local && BEDROCK_LOCAL=1 docker compose up -d --build
+	BEDROCK_LOCAL=1 $(COMPOSE) up -d --build
 	@echo "loading the model in the background; the first question skips the load wait..."
 	@docker exec -d -e ANTHROPIC_BASE_URL=http://llmproxy:8091 \
 		-e ANTHROPIC_AUTH_TOKEN=local -e AWS_ACCESS_KEY_ID=local \
@@ -20,16 +22,16 @@ local:
 # arrive through the ecs-local-endpoints sidecar exactly as the task role
 # will supply them on ECS. Run before the cloud round as the parity check.
 local-bedrock:
-	cd local && AWS_PROFILE=$${AWS_PROFILE:-default} CLAUDE_CODE_USE_BEDROCK=1 \
-		docker compose up -d --build
+	AWS_PROFILE=$${AWS_PROFILE:-default} CLAUDE_CODE_USE_BEDROCK=1 \
+		$(COMPOSE) up -d --build
 
 # Optional: your own Claude account instead of a local model (export
 # CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, or ANTHROPIC_API_KEY).
 local-claude:
-	cd local && docker compose up -d --build
+	$(COMPOSE) up -d --build
 
 local-stop:
-	cd local && docker compose down -v
+	$(COMPOSE) down -v
 
 lint:
 	uvx ruff format skills/redshift-data-api/*.py local/dataapi/*.py

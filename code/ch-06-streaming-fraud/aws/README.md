@@ -65,8 +65,8 @@ template reads it as a dynamic reference, so the credential never passes
 through a stack parameter.
 
 Firehose then issues `COPY fraud_decisions FROM <staged object>` — the same
-choreography the firehose-local shim performs, from the same destination
-configuration `streaming/downstream.py` passes to the API locally. One
+choreography the local/firehose-local shim performs, from the same destination
+configuration `src/streaming/downstream.py` passes to the API locally. One
 divergence to know: real Redshift COPYs the staged JSON directly (`FORMAT AS
 JSON 'auto'`); the local warehouse is Postgres, whose COPY has no JSON mode,
 so the shim reshapes each staged batch to CSV before loading it.

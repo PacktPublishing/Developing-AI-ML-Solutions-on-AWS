@@ -10,15 +10,9 @@ round-trip, and the cosine ordering.
 import atexit
 import os
 import socket
-import sys
 import time
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "knowledge-base"))
 
 PG_PORT = 5455
 

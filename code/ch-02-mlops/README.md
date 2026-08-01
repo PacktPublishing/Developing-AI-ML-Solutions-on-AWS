@@ -23,10 +23,10 @@ image both trains (the SageMaker `/opt/ml` contract) and serves (`/ping` and
 `/invocations`), so the exact image that produced a model is the one behind the
 endpoint. The chapter uses **SageMaker Python SDK v3** throughout — cloud and
 local (`sagemaker.train.ModelTrainer`, `sagemaker.serve.ModelBuilder`,
-`sagemaker.train.tuner.HyperparameterTuner`, and the pipeline in `pipeline/`);
+`sagemaker.train.tuner.HyperparameterTuner`, and the pipeline in `src/pipeline/`);
 where v3's local mode has gaps, the chapter fills them in place
-(`pipeline/pipeline.py`) rather than falling back to v2. Local hyperparameter
-search runs on **Syne Tune** (the AMT team's open-source tuner, `tuning/amt.py`);
+(`src/pipeline/pipeline.py`) rather than falling back to v2. Local hyperparameter
+search runs on **Syne Tune** (the AMT team's open-source tuner, `src/tuning/amt.py`);
 the managed search is SageMaker AMT (`aws/jobs/amt.py`).
 
 ## Run it
@@ -68,7 +68,7 @@ The `aws/` folder reproduces each step on real AWS.
 
 - **Real-time**: a serverless SageMaker endpoint from the registry. `make serve`
   is the local equivalent (same image).
-- **Batch**: stream a file through the endpoint (`serving/batch.py`). Note the
+- **Batch**: stream a file through the endpoint (`src/serving/batch.py`). Note the
   ~6 MB payload and ~60 s timeout per invoke, so batches chunk; a true Batch
   Transform job is the alternative for very large files.
 - **Lambda + container**: the scoring model as a Lambda container image, tested
@@ -78,11 +78,11 @@ The `aws/` folder reproduces each step on real AWS.
 
 ## Layout
 
-- `docker-compose.yml`: the local cloud (S3Proxy)
+- `local/mlflow-stack.yml`: the local cloud (S3Proxy)
 - `data/generate_applications.py`: synthetic credit data + the shared monotone spec
-- `scorecard/`: the incumbent WOE scorecard container (fastwoe + LogisticRegression)
-- `challenger/`: the monotone XGBoost challenger container
-- `tuning/amt.py`: local HPO with Syne Tune (Bayesian TPE, no instance), tracked in MLflow
-- `serving/batch.py`, `serving/lambda/`, `serving/fargate/`: the serving surfaces
+- `src/scorecard/`: the incumbent WOE scorecard container (fastwoe + LogisticRegression)
+- `src/challenger/`: the monotone XGBoost challenger container
+- `src/tuning/amt.py`: local HPO with Syne Tune (Bayesian TPE, no instance), tracked in MLflow
+- `src/serving/batch.py`, `src/serving/lambda/`, `src/serving/fargate/`: the serving surfaces
 - `aws/`: reproduce on real AWS (SDK v3), with IAM notes
 - `Makefile`: the targets above; `make lint` runs ruff

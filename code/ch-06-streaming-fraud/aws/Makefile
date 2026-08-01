@@ -28,8 +28,8 @@ deploy:
 image:
 	$(eval BUCKET := $(call output,StagingBucketName))
 	cd .. && rm -f /tmp/ch06-scoring-src.zip && \
-		zip -q -j /tmp/ch06-scoring-src.zip scoring/Dockerfile scoring/serve.py \
-		scoring/entrypoint.sh aws/image/buildspec.yml
+		zip -q -j /tmp/ch06-scoring-src.zip src/scoring/Dockerfile src/scoring/serve.py \
+		src/scoring/entrypoint.sh aws/image/buildspec.yml
 	aws s3 cp /tmp/ch06-scoring-src.zip s3://$(BUCKET)/ch06/source/scoring.zip
 	@ID=$$(aws codebuild start-build --region $(REGION) --project-name ch06-scoring-build \
 		--query 'build.id' --output text); \
@@ -64,7 +64,7 @@ endpoint:
 # replay transactions at the real stream: same producer, endpoint variables
 # cleared so boto3 talks to AWS
 produce:
-	cd .. && KINESIS_ENDPOINT= uv run streaming/producer.py --limit 500
+	cd .. && KINESIS_ENDPOINT= uv run src/streaming/producer.py --limit 500
 
 # how many transactions the consumer blocked
 blocks:

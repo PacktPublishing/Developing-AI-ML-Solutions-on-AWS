@@ -1,3 +1,5 @@
+name: ch01-lakehouse
+
 services:
   s3:
     # real S3-compatible object store

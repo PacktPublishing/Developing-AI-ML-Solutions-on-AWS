@@ -51,7 +51,7 @@ service keeps delivering for as long as it runs.
 | In this directory | On AWS |
 | --- | --- |
 | kinesalite container | Kinesis Data Streams |
-| `streaming/consumer.py` polling shards | Lambda with a Kinesis event source |
+| `src/streaming/consumer.py` polling shards | Lambda with a Kinesis event source |
 | `make serve`: the scoring image on port 8080 | the same image behind SageMaker Serverless Inference |
 | DynamoDB Local | DynamoDB |
 | the firehose-local shim | Amazon Data Firehose with a Redshift destination |
@@ -67,7 +67,7 @@ The cloud deploy is `aws/deploy_serverless.py`: the same image from ECR and
 the same model.tar.gz behind a real Serverless Inference endpoint, following
 the chapter-02 BYOC pattern.
 
-The shim mirrors Firehose deliberately: `streaming/downstream.py` calls
+The shim mirrors Firehose deliberately: `src/streaming/downstream.py` calls
 `create_delivery_stream` with the same `RedshiftDestinationConfiguration`
 that `aws/template.yaml` declares — one destination config, two worlds — and
 the delivery loop keeps the hour-partitioned key layout

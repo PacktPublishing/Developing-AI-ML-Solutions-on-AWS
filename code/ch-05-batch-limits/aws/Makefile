@@ -18,8 +18,8 @@ deploy:
 image:
 	$(eval BUCKET := $(call output,BatchBucketName))
 	cd .. && rm -f /tmp/ch05-steps-src.zip && \
-		zip -q -j /tmp/ch05-steps-src.zip pipeline/step_image/Dockerfile \
-		pipeline/step_image/train aws/image/buildspec.yml
+		zip -q -j /tmp/ch05-steps-src.zip src/pipeline/step_image/Dockerfile \
+		src/pipeline/step_image/train aws/image/buildspec.yml
 	aws s3 cp /tmp/ch05-steps-src.zip s3://$(BUCKET)/ch05/source/steps.zip
 	@ID=$$(aws codebuild start-build --region $(REGION) --project-name ch05-step-build \
 		--query 'build.id' --output text); \
@@ -37,7 +37,7 @@ pipeline:
 	cd .. && PIPELINE_MODE=aws AWS_DEFAULT_REGION=$(REGION) \
 		STEP_IMAGE=$(REPO):latest BATCH_BUCKET=$(BUCKET) \
 		SAGEMAKER_ROLE_ARN=$(ROLE) WAREHOUSE_DSN=$(WAREHOUSE_DSN) \
-		uv run pipeline/pipeline.py
+		uv run src/pipeline/pipeline.py
 
 # start one execution without waiting for the schedule
 run-now:

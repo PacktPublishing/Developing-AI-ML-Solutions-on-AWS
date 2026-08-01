@@ -1,3 +1,5 @@
+name: ch02-mlflow
+
 services:
   s3:
     # real S3-compatible object store, composed from source: S3Proxy (Apache-2.0)

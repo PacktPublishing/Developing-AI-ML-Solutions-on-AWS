@@ -4,14 +4,7 @@ Pure unit tests. They check that the shim refuses the same off-topic requests
 and redacts the same personal data the managed guardrail is configured for.
 """
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "underwriting-agent"))
-
-from guardrails import local_input_blocked, local_redact  # noqa: E402
+from guardrails import local_input_blocked, local_redact
 
 
 def test_blocks_personal_advice():

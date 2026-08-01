@@ -50,4 +50,4 @@ day: `aws cloudformation delete-stack --stack-name ch01-redshift --region us-eas
 - job `bureau-elt-ch01`: pythonshell, Python 3.9, 0.0625 DPU, script at
   `s3://bureau-raw-<account>/scripts/glue_bureau_job.py`
 - re-upload the script after changes:
-  `aws s3 cp bureau-elt/glue_bureau_job.py s3://bureau-raw-<account>/scripts/`
+  `aws s3 cp src/bureau-elt/glue_bureau_job.py s3://bureau-raw-<account>/scripts/`

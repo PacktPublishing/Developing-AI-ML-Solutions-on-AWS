@@ -8,14 +8,11 @@ batching is tested against a stub.
 
 import atexit
 import socket
-import sys
 import time
 import uuid
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sagemaker-local"))
+from starlette.testclient import TestClient
 
 
 # -------------------------------------------------------------------------------
@@ -55,8 +52,6 @@ def _start_dynamodb() -> None:
 
 if not _dynamodb_up():
     _start_dynamodb()
-
-from starlette.testclient import TestClient  # noqa: E402
 
 import app as shim  # noqa: E402
 

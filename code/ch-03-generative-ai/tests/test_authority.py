@@ -5,14 +5,9 @@ two-dimensional escalation, so a change to the thresholds, the role names, or
 the returned keys fails loudly.
 """
 
-import sys
-from pathlib import Path
+from authority import decide
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "underwriting-agent"))
-
-from authority import decide  # noqa: E402
-
-# Mirrors AUTHORITY_TIERS in knowledge-base/corpus.py.
+# Mirrors AUTHORITY_TIERS in src/knowledge-base/corpus.py.
 TIERS = [
     {
         "tier": 1,

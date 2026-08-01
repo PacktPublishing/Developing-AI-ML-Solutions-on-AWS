@@ -2,7 +2,7 @@
 
 # dbt connects with verified TLS: oblako-ca.pem is the local warehouse cert,
 # trusted via SSL_CERT_FILE, same sslmode as production
-DBT := DBT_PROFILES_DIR=bureau-elt/dbt SSL_CERT_FILE=$(PWD)/oblako-bundle.pem WAREHOUSE_SSLMODE=verify-full uvx --from dbt-core --with dbt-redshift dbt
+DBT := DBT_PROFILES_DIR=src/bureau-elt/dbt SSL_CERT_FILE=$(PWD)/oblako-bundle.pem WAREHOUSE_SSLMODE=verify-full uvx --from dbt-core --with dbt-redshift dbt
 
 DATE ?= $(shell date -v-1d +%Y-%m-%d 2>/dev/null || date -d yesterday +%Y-%m-%d)
 
@@ -15,17 +15,19 @@ export DLT_DESTINATION ?= redshift
 # DLT_DESTINATION, not by the URL scheme
 export DESTINATION__REDSHIFT__CREDENTIALS ?= postgresql://loader:loader@localhost:5439/bureau?sslmode=require
 
+COMPOSE := docker compose -f local/lakehouse.yml
+
 up:
-	docker compose up -d --wait
+	$(COMPOSE) up -d --wait
 
 seed:
-	uv run bureau-elt/generate_bureau_files.py --date $(DATE)
+	uv run src/bureau-elt/generate_bureau_files.py --date $(DATE)
 
 seed-drift:
-	uv run bureau-elt/generate_bureau_files.py --date $(DATE) --drift
+	uv run src/bureau-elt/generate_bureau_files.py --date $(DATE) --drift
 
 run:
-	uv run bureau-elt/glue_bureau_job.py --date $(DATE)
+	uv run src/bureau-elt/glue_bureau_job.py --date $(DATE)
 
 run-glue:
 	# the same job inside the official Glue runtime image; pip install at
@@ -36,10 +38,10 @@ run-glue:
 		-e AWS_DEFAULT_REGION=us-east-1 -e DLT_DESTINATION=redshift \
 		-e DESTINATION__REDSHIFT__CREDENTIALS=postgresql://loader:loader@host.docker.internal:5439/bureau \
 		--entrypoint bash public.ecr.aws/glue/aws-glue-libs:5 \
-		-c "pip install -q 'dlt[redshift]' && python3 /work/bureau-elt/glue_bureau_job.py --date $(DATE)"
+		-c "pip install -q 'dlt[redshift]' && python3 /work/src/bureau-elt/glue_bureau_job.py --date $(DATE)"
 
 query:
-	docker compose exec warehouse psql -h 127.0.0.1 -p 5433 -U loader -d bureau -c \
+	$(COMPOSE) exec warehouse psql -h 127.0.0.1 -p 5433 -U loader -d bureau -c \
 		"select count(*) as reports from bureau_raw.reports;" -c \
 		"select count(*) as tradelines from bureau_raw.reports__tradelines;" -c \
 		"select column_name from information_schema.columns where table_name = 'reports' order by ordinal_position;"
@@ -54,33 +56,33 @@ oblako-bundle.pem: oblako-ca.pem
 	cat oblako-ca.pem >> oblako-bundle.pem
 
 dbt-run: oblako-bundle.pem
-	$(DBT) run --project-dir bureau-elt/dbt
+	$(DBT) run --project-dir src/bureau-elt/dbt
 
 dbt-test: oblako-bundle.pem
-	$(DBT) test --project-dir bureau-elt/dbt
+	$(DBT) test --project-dir src/bureau-elt/dbt
 
 gold:
-	docker compose exec warehouse psql -h 127.0.0.1 -p 5433 -U loader -d bureau -c \
+	$(COMPOSE) exec warehouse psql -h 127.0.0.1 -p 5433 -U loader -d bureau -c \
 		"select * from bureau_marts.applicant_credit_profile order by score desc limit 10;"
 
 lake-objects:
-	uv run lake-basics/s3_objects.py
+	uv run src/lake-basics/s3_objects.py
 
 lake-parquet:
-	uv run lake-basics/parquet_lake.py
+	uv run src/lake-basics/parquet_lake.py
 
 lake-table:
-	uv run lake-basics/iceberg_applications.py
+	uv run src/lake-basics/iceberg_applications.py
 
 lake-table-query:
-	docker compose exec trino trino --execute \
+	$(COMPOSE) exec trino trino --execute \
 		"select vintage, decision, count(*) as n from iceberg.lake.applications group by 1, 2 order by 1, 2"
 
 features:
-	uv run feature-store/ingest_features.py
+	uv run src/feature-store/ingest_features.py
 
 features-query:
-	docker compose exec trino trino --execute \
+	$(COMPOSE) exec trino trino --execute \
 		"select applicant_id, score, tradeline_count, total_balance from iceberg.features.applicant_credit_profile order by score desc limit 5"
 
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
@@ -107,21 +109,21 @@ test:
 	uv run --with pytest --with httpx --with starlette --with uvicorn --with boto3 --with docker pytest tests/ -q
 
 lint:
-	uvx ruff format bureau-elt/*.py feature-store/*.py lake-basics/*.py
-	uvx ruff check bureau-elt/*.py feature-store/*.py lake-basics/*.py
+	uvx ruff format src/bureau-elt/*.py src/feature-store/*.py src/lake-basics/*.py
+	uvx ruff check src/bureau-elt/*.py src/feature-store/*.py src/lake-basics/*.py
 	uvx mbake format Makefile aws/Makefile
 	uvx mbake validate Makefile aws/Makefile
 	-uvx ty check .
 
 features-lookup:
-	uv run feature-store/lookup_features.py --applicant 10073
+	uv run src/feature-store/lookup_features.py --applicant 10073
 
 feature-api:
 	# the local SageMaker Feature Store, both planes on :8007 (run in its own terminal)
-	uv run sagemaker-local/app.py
+	uv run local/sagemaker-local/app.py
 
 feature-group:
-	FEATURE_STORE_URL=http://localhost:8007 uv run feature-store/extra/feature_group_demo.py --applicant 10046
+	FEATURE_STORE_URL=http://localhost:8007 uv run src/feature-store/extra/feature_group_demo.py --applicant 10046
 
 down:
-	docker compose down -v
+	$(COMPOSE) down -v

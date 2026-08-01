@@ -15,8 +15,10 @@ export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
 export AWS_DEFAULT_REGION ?= us-east-1
 
+COMPOSE := docker compose -f local/fraud-stack.yml
+
 up:
-	docker compose up -d --wait
+	$(COMPOSE) up -d --wait
 
 # synthesize the transaction stream, its labels, and the chronological split
 seed:
@@ -24,36 +26,36 @@ seed:
 
 # fit the fraud classifier and freeze its operating threshold
 train:
-	uv run scoring/train.py --min-precision 0.30
+	uv run src/scoring/train.py --min-precision 0.30
 
 # serve the model locally (same image, same /ping,/invocations as the
 # endpoint): SageMaker starts the serving image as `... serve` and mounts the
 # model tarball at /opt/ml/model; this run does exactly that. The aws/ deploy
 # puts the identical image behind SageMaker Serverless Inference.
 serve:
-	docker build -q -t ch06-scoring:latest scoring/
+	docker build -q -t ch06-scoring:latest src/scoring/
 	docker rm -f ch06-serve 2>/dev/null || true
 	docker run -d --name ch06-serve -p 8080:8080 \
 		-v $(PWD)/artifacts:/opt/ml/model:ro ch06-scoring:latest serve
 
 # replay transactions onto the stream, as the card processor would
 produce:
-	uv run streaming/producer.py --limit 2000
+	uv run src/streaming/producer.py --limit 2000
 
 # drain the stream: score each transaction, blocks to DynamoDB,
 # every decision onward to the analytics stream
 score:
-	uv run streaming/consumer.py
+	uv run src/streaming/consumer.py
 
 # the local Firehose: serves the delivery-stream API and runs the
 # buffer -> stage -> COPY loop; keep it in its own terminal
 firehose:
-	uv run firehose-local/app.py
+	uv run local/firehose-local/app.py
 
 # create the delivery stream — the same destination configuration
 # aws/template.yaml declares, passed to the API instead
 deliver:
-	uv run streaming/downstream.py
+	uv run src/streaming/downstream.py
 
 # the processor's fast-path check: a block found stops the payment,
 # an empty result lets it through. make lookup TX=tx-0000085
@@ -66,7 +68,7 @@ lookup:
 
 # what the analyst sees in the warehouse once decisions are delivered
 query:
-	docker compose exec warehouse psql -h 127.0.0.1 -p 5433 -U analyst -d fraud \
+	$(COMPOSE) exec warehouse psql -h 127.0.0.1 -p 5433 -U analyst -d fraud \
 		-c "SELECT decision, COUNT(*), ROUND(AVG(score)::numeric, 4) AS avg_score \
 		FROM fraud_decisions GROUP BY decision"
 
@@ -74,7 +76,7 @@ query:
 # container, which runs outside compose the way `make serve` started it
 down:
 	docker rm -f ch06-serve 2>/dev/null || true
-	docker compose down -v
+	$(COMPOSE) down -v
 
 # remove what the chapter generated: data, artifacts, training scratch, and
 # the serving image. `make clean` returns the machine to its pre-chapter state.
@@ -95,5 +97,5 @@ diagrams:
 	done
 
 lint:
-	uvx ruff format data/*.py scoring/*.py streaming/*.py firehose-local/*.py
-	uvx ruff check data/*.py scoring/*.py streaming/*.py firehose-local/*.py
+	uvx ruff format data/*.py src/scoring/*.py src/streaming/*.py local/firehose-local/*.py
+	uvx ruff check data/*.py src/scoring/*.py src/streaming/*.py local/firehose-local/*.py

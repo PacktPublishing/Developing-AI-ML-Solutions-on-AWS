@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
 Description: |
-  The batch limit run on AWS: the pipeline's S3 bucket, the step image built in the cloud, the role the pipeline runs as, the EventBridge schedule that starts it, and an SNS topic that hears about failures. The pipeline itself is registered by pipeline/pipeline.py with PIPELINE_MODE=aws; the warehouse is Redshift Serverless from the chapter-01 stack.
+  The batch limit run on AWS: the pipeline's S3 bucket, the step image built in the cloud, the role the pipeline runs as, the EventBridge schedule that starts it, and an SNS topic that hears about failures. The pipeline itself is registered by src/pipeline/pipeline.py with PIPELINE_MODE=aws; the warehouse is Redshift Serverless from the chapter-01 stack.
   Every stateful resource is deliberately disposable: `make teardown` leaves nothing behind.
 
 Metadata:
@@ -357,7 +357,7 @@ Outputs:
     Value: !GetAtt StepRepo.RepositoryUri
 
   PipelineRoleArn:
-    Description: SAGEMAKER_ROLE_ARN for pipeline/pipeline.py
+    Description: SAGEMAKER_ROLE_ARN for src/pipeline/pipeline.py
     Value: !GetAtt PipelineRole.Arn
 
   WarehouseEndpoint:

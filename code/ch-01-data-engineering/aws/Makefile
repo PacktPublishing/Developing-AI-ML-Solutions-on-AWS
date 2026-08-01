@@ -32,17 +32,17 @@ check-account:
 
 lake-objects:
 	cd .. && env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		LAKE_BUCKET=$(LAKE_BUCKET) uv run lake-basics/s3_objects.py \
+		LAKE_BUCKET=$(LAKE_BUCKET) uv run src/lake-basics/s3_objects.py \
 		| tee /tmp/ch01-lake-objects-$(RUN_STAMP).txt
 
 lake-parquet:
 	cd .. && env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		LAKE_BUCKET=$(LAKE_BUCKET) uv run lake-basics/parquet_lake.py \
+		LAKE_BUCKET=$(LAKE_BUCKET) uv run src/lake-basics/parquet_lake.py \
 		| tee /tmp/ch01-lake-parquet-$(RUN_STAMP).txt
 
 lake-table:
 	cd .. && env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		S3TABLES_ARN=$(S3TABLES_ARN) uv run lake-basics/iceberg_applications.py \
+		S3TABLES_ARN=$(S3TABLES_ARN) uv run src/lake-basics/iceberg_applications.py \
 		| tee /tmp/ch01-lake-table-$(RUN_STAMP).txt
 
 glue-run:
@@ -53,7 +53,7 @@ glue-run:
 
 feature-group:
 	cd .. && env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		uv run feature-store/extra/feature_group_demo.py --applicant 10046 \
+		uv run src/feature-store/extra/feature_group_demo.py --applicant 10046 \
 		| tee /tmp/ch01-feature-group-$(RUN_STAMP).txt
 
 clean-feature-group:

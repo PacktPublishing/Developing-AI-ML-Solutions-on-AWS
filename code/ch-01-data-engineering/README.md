@@ -69,33 +69,33 @@ The feature-store demo mirrors a SageMaker Feature Store offline store in
 the Iceberg table format: locally the feature table lives in the REST
 catalog over MinIO and Trino queries it; the AWS counterpart is a feature
 group created with the Iceberg table format. The online-store pattern runs
-on DynamoDB Local behind `sagemaker-local/`, a shim that serves the
+on DynamoDB Local behind `local/sagemaker-local/`, a shim that serves the
 featurestore-runtime API (PutRecord/GetRecord, batch and delete included),
-so the scripts in `feature-store/extra/` make the same calls against the
+so the scripts in `src/feature-store/extra/` make the same calls against the
 shim and against real AWS.
 
 ## Layout
 
 One local cloud for the chapter, one folder per use case:
 
-- `docker-compose.yml`, `trino/`: the chapter's local cloud (MinIO,
+- `local/lakehouse.yml`, `local/trino/`: the chapter's local cloud (MinIO,
   redshift-local, Iceberg REST catalog, Trino, DynamoDB Local)
-- `bureau-elt/`: the daily bureau pipeline
+- `src/bureau-elt/`: the daily bureau pipeline
   - `generate_bureau_files.py`: synthesizes a daily drop of nested bureau JSON
   - `glue_bureau_job.py`: the Glue job (list, read, normalize with dlt, load)
   - `dbt/`: sources with tests, staging views, and the gold mart
     `applicant_credit_profile`
-- `lake-basics/`: the lake section's examples (objects and metadata,
+- `src/lake-basics/`: the lake section's examples (objects and metadata,
   partitioned Parquet with PyArrow, an Iceberg table with PyIceberg).
   S3 Inventory configuration appears in the chapter text only: MinIO does
   not implement the inventory API, and the configuration has not yet been
   applied to a bucket on real S3
-- `feature-store/`: the feature-store demo
+- `src/feature-store/`: the feature-store demo
   - `ingest_features.py`: gold mart to the Iceberg feature table and the
     online store
   - `lookup_features.py`: one applicant's features by key, the serving read
   - `extra/`: the online-store demo and the local/AWS parity matrix
-- `sagemaker-local/`: the Feature Store shim, serving the featurestore-runtime
+- `local/sagemaker-local/`: the Feature Store shim, serving the featurestore-runtime
   API over DynamoDB Local (`make feature-api` / `make feature-group`)
 - `tests/`: the shim's pytest suite, both API planes against DynamoDB Local
 - `Makefile`: all targets above; `make lint` runs ruff

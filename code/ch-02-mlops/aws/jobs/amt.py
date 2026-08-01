@@ -15,7 +15,7 @@ image, and MLFLOW_TRACKING_URI is a serverless MLflow App ARN rather than an
 always-on tracking server.
 
 Requires SageMaker training-job quota (0 on a fresh account — see aws/README).
-For a search that runs without that quota, use tuning/amt.py (Syne Tune Bayesian
+For a search that runs without that quota, use src/tuning/amt.py (Syne Tune Bayesian
 search running the same training code locally, tracked in the same MLflow App).
 
 Env: IMAGE_URI, SAGEMAKER_ROLE_ARN, ARTIFACT_BUCKET, MLFLOW_TRACKING_ARN (required)
@@ -79,7 +79,7 @@ tuner = HyperparameterTuner(
     # file. Each training job's stdout goes to CloudWatch, and SageMaker scrapes it
     # with these regexes, capturing the last match of the (…) group as the metric.
     # So the contract is a print statement: the container must emit a line the regex
-    # matches. Here challenger/train.py prints "validation_auc: 0.882431" and this
+    # matches. Here src/challenger/train.py prints "validation_auc: 0.882431" and this
     # regex captures 0.882431; objective_metric_name must equal one Name below. If
     # the container never prints a matching line, the metric is never captured — the
     # tuner runs but cannot rank trials. (The same metric_definitions on a plain

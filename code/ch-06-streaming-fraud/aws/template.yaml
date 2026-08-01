@@ -220,7 +220,7 @@ Resources:
         Type: S3
         Location: !Sub ${StagingBucket}/ch06/source/scoring.zip
 
-  # The consumer: the cloud twin of streaming/consumer.py. The Kinesis event
+  # The consumer: the cloud twin of src/streaming/consumer.py. The Kinesis event
   # source mapping replaces the polling loop — it tracks shard iterators and
   # hands the function batches — and the function body is the same three
   # moves: invoke the endpoint, write the block, forward the decision.

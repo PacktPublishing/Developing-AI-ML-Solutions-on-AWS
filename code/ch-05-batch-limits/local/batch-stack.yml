@@ -1,3 +1,5 @@
+name: ch05-batch
+
 services:
   s3:
     # real S3-compatible object store, composed from source: S3Proxy (Apache-2.0).
