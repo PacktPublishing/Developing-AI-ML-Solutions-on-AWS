@@ -1,9 +1,15 @@
 # The gateway on EKS: one pod that orchestrates the SageMaker endpoints (the same
-# ones the ECS path invokes), behind a Service and an Ingress (the ALB's job). The
-# models are not in the cluster on AWS — they are SageMaker endpoints — so this is
-# the gateway alone. `make deploy COMPUTE=eks` swaps the image for the stack's ECR
-# URI and sets imagePullPolicy to Always. The pod invokes and logs through the
-# `gateway` service account (its IAM role is created with the cluster).
+# ones the ECS path invokes). The models are not in the cluster on AWS — they are
+# SageMaker endpoints — so this is the gateway alone. `make deploy COMPUTE=eks`
+# swaps the image for the stack's ECR URI and sets imagePullPolicy to Always. The
+# pod invokes the endpoints and writes the log through the `gateway` service
+# account (its IAM role is created with the cluster).
+#
+# There is no Ingress here on purpose: eksctl does not install the AWS Load Balancer
+# Controller, so an Ingress would sit with no address and no ALB would appear.
+# Reaching the pod is deliberately out of scope — `make decide COMPUTE=eks` uses a
+# kubectl port-forward. A production ingress on EKS/Fargate needs the AWS Load
+# Balancer Controller (its own IAM policy and service account), beyond this chapter.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -43,18 +49,3 @@ metadata:
 spec:
   selector: { app: gateway }
   ports: [{ port: 80, targetPort: 8000 }]
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: gateway
-spec:
-  rules:
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: gateway
-                port: { number: 80 }

@@ -1,6 +1,10 @@
 .PHONY: iam lint push-models endpoints endpoints-teardown deploy deploy-ecs deploy-eks image scale-up scale-down decide decide-ecs decide-eks teardown teardown-ecs teardown-eks
 
-REGION ?= us-east-1
+# single-region chapter: the EKS config (eks/create-cluster.yaml) and the gateway
+# manifest hardcode us-east-1 (region, IRSA policy ARNs, AWS_DEFAULT_REGION), so do
+# not override this for COMPUTE=eks — the stack and the cluster would land in
+# different regions. Templating the region everywhere is left out for clarity.
+REGION := us-east-1
 STACK := realtime-scoring-ch04
 
 output = $(shell aws cloudformation describe-stacks --region $(REGION) \
@@ -113,10 +117,12 @@ decide-ecs:
 
 decide-eks:
 	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed"; exit 1; }
+	kubectl wait --for=condition=ready pod -l app=gateway --timeout=120s
 	@kubectl port-forward svc/gateway 8085:80 >/dev/null 2>&1 & \
-	PF=$$!; sleep 3; \
-	curl -s localhost:8085/decision -H 'content-type: application/json' -d $(DECIDE_BODY); \
-	echo; kill $$PF
+	PF=$$!; trap "kill $$PF 2>/dev/null" EXIT; sleep 2; \
+	curl -s --retry 5 --retry-delay 1 --retry-all-errors \
+	localhost:8085/decision -H 'content-type: application/json' -d $(DECIDE_BODY); \
+	echo
 
 teardown-ecs:
 	-aws ecs update-service --region $(REGION) --cluster ch04-decision \

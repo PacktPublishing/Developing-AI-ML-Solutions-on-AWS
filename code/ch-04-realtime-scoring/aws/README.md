@@ -43,3 +43,30 @@ runs (its ECS task role and its EKS service account both carry `InvokeEndpoint`)
 `make scale-down` stops the ECS task without tearing the stack down.
 `make endpoints-teardown` removes the endpoints without touching the gateway. EKS's
 control plane bills hourly — create, run, delete.
+
+## Where the two paths differ (and why)
+
+- **The identity, side by side.** On ECS the pod's permissions come from the
+  `TaskRole` in `template.yaml`; on EKS they come from the `gateway` service account,
+  whose IAM role is bound with `iam.withOIDC: true` in `eks/create-cluster.yaml`.
+  That contrast is the point: ECS hands a task its role directly, while Kubernetes
+  needs a federation bridge (IRSA, an OIDC issuer). Note that EKS **Pod Identity**
+  (`podIdentityAssociations`) is now the closer parallel to a task role — an agent
+  vends credentials, like the ECS task-metadata endpoint, with no OIDC issuer. This
+  chapter uses IRSA to show the mechanism; Pod Identity is the current default.
+
+- **Reaching the pod on EKS is a port-forward, on purpose.** `eksctl` does not
+  install the AWS Load Balancer Controller, so an Ingress would never get an address.
+  `make decide COMPUTE=eks` uses a `kubectl port-forward`; a real ingress needs the
+  controller (its own IAM policy and service account), out of scope here. The ECS
+  path has the ALB the stack builds.
+
+- **Logging is asymmetric.** ECS uses the `awslogs` driver, so decisions land in
+  CloudWatch. EKS Fargate has no node and no log agent unless you create the
+  `aws-observability` namespace with the Fluent Bit config; this chapter does not, so
+  on EKS use `kubectl logs deploy/gateway` — nothing reaches CloudWatch.
+
+- **Tear down before switching `COMPUTE`.** Going from a running ECS stack straight
+  to `COMPUTE=eks` asks CloudFormation to delete the ECS service and its VPC in one
+  changeset; ENI cleanup on an active Fargate task can stall the VPC delete for ~20
+  minutes. Run `make teardown` first, then deploy the other backend.
