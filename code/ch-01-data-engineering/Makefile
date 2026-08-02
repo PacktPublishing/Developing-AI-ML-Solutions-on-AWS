@@ -1,4 +1,4 @@
-.PHONY: test up seed seed-drift run run-glue query dbt-run dbt-test gold features features-query features-lookup feature-api feature-group lake-objects lake-parquet lake-table lake-table-query diagrams down lint
+.PHONY: test up seed seed-drift run run-glue query certs dbt-run dbt-test gold features features-query features-lookup feature-api feature-group lake-objects lake-parquet lake-table lake-table-query diagrams down lint
 
 # dbt connects with verified TLS: oblako-ca.pem is the local warehouse cert,
 # trusted via SSL_CERT_FILE, same sslmode as production
@@ -46,19 +46,20 @@ query:
 		"select count(*) as tradelines from bureau_raw.reports__tradelines;" -c \
 		"select column_name from information_schema.columns where table_name = 'reports' order by ordinal_position;"
 
-oblako-ca.pem:
+# Refetch the warehouse's self-signed cert and rebuild the trust bundle on every
+# run: the local warehouse issues a fresh cert on each container start, so a
+# cached bundle goes stale after a teardown/up and does not exist on a fresh
+# clone. certifi's CAs plus the warehouse cert let redshift_connector verify the
+# local warehouse while uv itself still verifies PyPI.
+certs:
 	openssl s_client -starttls postgres -connect localhost:5439 </dev/null 2>/dev/null | openssl x509 -outform pem > oblako-ca.pem
-
-# system CAs plus the warehouse cert: redshift_connector verifies the local
-# warehouse while uv itself can still verify PyPI
-oblako-bundle.pem: oblako-ca.pem
 	uv run --with certifi python -c "import certifi, shutil; shutil.copy(certifi.where(), 'oblako-bundle.pem')"
 	cat oblako-ca.pem >> oblako-bundle.pem
 
-dbt-run: oblako-bundle.pem
+dbt-run: certs
 	$(DBT) run --project-dir src/bureau-elt/dbt
 
-dbt-test: oblako-bundle.pem
+dbt-test: certs
 	$(DBT) test --project-dir src/bureau-elt/dbt
 
 gold:

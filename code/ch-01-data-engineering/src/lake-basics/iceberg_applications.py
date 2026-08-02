@@ -14,6 +14,7 @@ Usage:
 import os
 import random
 
+import boto3
 import pyarrow as pa
 from pyiceberg.catalog import load_catalog
 from pyiceberg.exceptions import NamespaceAlreadyExistsError, NoSuchTableError
@@ -53,6 +54,13 @@ if arn := os.environ.get("S3TABLES_ARN"):
         },
     )
 else:
+    # the catalog writes table data and metadata under the warehouse bucket;
+    # create it if this is a fresh local stack (S3 Tables manages it on AWS)
+    s3 = boto3.client("s3")
+    try:
+        s3.create_bucket(Bucket="feature-store")
+    except s3.exceptions.BucketAlreadyOwnedByYou:
+        pass
     catalog = load_catalog(
         "local",
         uri=os.environ.get("ICEBERG_REST_URI", "http://localhost:8181"),
