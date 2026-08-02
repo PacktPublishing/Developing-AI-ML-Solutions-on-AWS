@@ -19,6 +19,10 @@ Definitions:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "lambda-coin.png"}
     Label: {Title: "AWS Lambda", Color: "rgba(0, 0, 0, 255)"}
+  Docker:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "docker.png"}
+    Label: {Title: "Docker", Color: "rgba(0, 0, 0, 255)"}
   MinIO:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "minio.png"}
