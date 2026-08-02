@@ -1,0 +1,53 @@
+# Option 1 — the decision service fully offline: Docker Compose runs the gateway
+# and both model containers, and the gateway writes to DynamoDB Local. No AWS
+# account, no credentials; the gateway reaches each model on the compose network.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Applicant, Local]
+
+    Applicant:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Applicant"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Docker Compose (offline, no AWS account)"
+      Children: [Gateway, Backend]
+
+    Gateway:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "gateway :8080"
+    Backend:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Scorecard, Challenger, Dynamo]
+    Scorecard:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "scorecard\ncontainer"
+    Challenger:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "challenger\ncontainer"
+    Dynamo:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon DynamoDB"
+      Title: "DynamoDB :8000"
+
+  Links:
+    - {Source: Applicant, SourcePosition: E, Target: Gateway, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: E, Target: Scorecard, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: E, Target: Challenger, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: E, Target: Dynamo, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

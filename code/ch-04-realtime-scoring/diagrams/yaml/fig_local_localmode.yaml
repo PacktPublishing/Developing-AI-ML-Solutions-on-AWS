@@ -1,0 +1,50 @@
+# Option 2 — SageMaker local mode: the SDK's ModelBuilder deploys the same model
+# images as local endpoints (Mode.LOCAL_CONTAINER), run through the SageMaker SDK
+# rather than plain Docker. The only change to reach the cloud is the mode
+# (Mode.SAGEMAKER_ENDPOINT). Needs AWS credentials and a SageMaker execution role;
+# it creates no cloud resources.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Developer, Local]
+
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Developer"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "SageMaker local mode (swap Mode to deploy to the cloud)"
+      Children: [ModelBuilder, Endpoints]
+
+    ModelBuilder:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "ModelBuilder\nLOCAL_CONTAINER"
+    Endpoints:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Scorecard, Challenger]
+    Scorecard:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "scorecard\nlocal endpoint"
+    Challenger:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "challenger\nlocal endpoint"
+
+  Links:
+    - {Source: Developer, SourcePosition: E, Target: ModelBuilder, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: ModelBuilder, SourcePosition: E, Target: Scorecard, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: ModelBuilder, SourcePosition: E, Target: Challenger, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

@@ -1,4 +1,4 @@
-.PHONY: up decide refer decline log kube-up kube-decide kube-down eks-up eks-deploy eks-decide eks-down down clean lint
+.PHONY: up decide refer decline log sm-local kube-up kube-decide kube-down down clean lint
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
@@ -6,19 +6,20 @@ export AWS_DEFAULT_REGION ?= us-east-1
 
 COMPOSE := docker compose -f local/decision-service.yml
 
+# both model endpoints, the gateway, and the decision log — built and healthy
 up:
 	$(COMPOSE) up -d --build --wait
 
-# one clean application: expect APPROVE
+# one clean application: expect APPROVE (both models, and the average, below cutoff)
 decide:
 	curl -s localhost:8080/decision -H 'content-type: application/json' \
-	  -d '{"application_id":"app-1042","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.20,"utilization":0.15}'
+	  -d '{"application_id":"app-1042","age":40,"monthly_income":6000,"requested_amount":5000,"dti":0.10,"utilization":0.10}'
 	@echo
 
-# nudge utilization into the gray band: expect REFER
+# nudge into the gray band: expect REFER (ensemble PD between the cutoffs)
 refer:
 	curl -s localhost:8080/decision -H 'content-type: application/json' \
-	  -d '{"application_id":"app-1043","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.25,"utilization":0.38}'
+	  -d '{"application_id":"app-1043","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.20,"utilization":0.20}'
 	@echo
 
 # fail KYC: expect DECLINE with the reason code, whatever the score
@@ -27,61 +28,52 @@ decline:
 	  -d '{"application_id":"app-1044","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.20,"utilization":0.15,"kyc_passed":false}'
 	@echo
 
-# the audit trail: decisions logged to DynamoDB, newest last
+# the audit trail: one row per application, the ensemble and each model's PD
 log:
 	aws dynamodb scan --endpoint-url http://localhost:8000 \
 		--table-name decision_log --select COUNT --query Count
 
-# the same image on Kubernetes: a k3d cluster (k3s in docker), the image
-# imported, the manifests applied. Needs k3d and kubectl installed.
+# Option 2 — SageMaker local mode: deploy a model with the same ModelBuilder code
+# the cloud uses, only Mode.LOCAL_CONTAINER instead of SAGEMAKER_ENDPOINT. Unlike
+# the offline stack above this needs real AWS credentials, a SageMaker execution
+# role (SM_ROLE), and the model image in ECR (make -C aws push-models); `env -u`
+# strips the offline placeholders so your profile is used. MODEL=scorecard|challenger.
+ACCOUNT ?= $(shell env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY aws sts get-caller-identity --query Account --output text)
+ECR := $(ACCOUNT).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com
+SM_ROLE ?=
+MODEL ?= scorecard
+sm-local:
+	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn> (make -C aws iam prints it)"; exit 1; }
+	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
+		MODE=local MODEL_IMAGE=$(ECR)/ch04-$(MODEL)-model:latest \
+		SAGEMAKER_ROLE_ARN=$(SM_ROLE) uv run --no-project src/deploy.py
+
+# the same gateway and models on Kubernetes: a k3d cluster (k3s in docker), the
+# three images imported, the ensemble manifest applied. Needs k3d and kubectl.
 kube-up:
 	k3d cluster create decision --port "8085:80@loadbalancer" --wait
-	docker build -q -t ch04-decision:local src/
-	k3d image import -c decision ch04-decision:local
-	kubectl apply -f k8s/decision-service.yaml
-	kubectl rollout status deployment/decision-service --timeout=120s
+	docker build -q -t ch04-scorecard-model src/models/scorecard
+	docker build -q -t ch04-challenger-model src/models/challenger
+	docker build -q -t ch04-gateway src/gateway
+	k3d image import -c decision ch04-scorecard-model ch04-challenger-model ch04-gateway
+	kubectl apply -f k8s/ensemble.yaml
+	kubectl rollout status deployment/gateway --timeout=120s
 
 kube-decide:
 	curl -s --retry 10 --retry-delay 2 --retry-all-errors \
 	  localhost:8085/decision -H 'content-type: application/json' \
-	  -d '{"application_id":"app-1042","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.20,"utilization":0.15}'
+	  -d '{"application_id":"app-1042","age":40,"monthly_income":6000,"requested_amount":5000,"dti":0.10,"utilization":0.10}'
 	@echo
 
 kube-down:
 	k3d cluster delete decision
 
-# the same manifests on EKS with a Fargate profile: create the cluster,
-# swap the image for the ECR copy, apply. The control plane bills hourly —
-# create, run, delete. Needs eksctl; the image comes from the aws/ stack.
-eks-up:
-	eksctl create cluster -f aws/eks/create-cluster.yaml
-
-REPO = $(shell aws cloudformation describe-stacks --region us-east-1 \
-	--stack-name realtime-scoring-ch04 \
-	--query "Stacks[0].Outputs[?OutputKey=='ServiceRepoUri'].OutputValue" --output text)
-eks-deploy:
-	sed -e "s|ch04-decision:local|$(REPO):latest|" \
-		-e "s|imagePullPolicy: Never|imagePullPolicy: Always|" \
-		k8s/decision-service.yaml | kubectl apply -f -
-	kubectl rollout status deployment/decision-service --timeout=300s
-
-# no load balancer controller in scope: smoke-test through a port-forward
-eks-decide:
-	@kubectl port-forward svc/decision-service 8085:80 >/dev/null 2>&1 & \
-	PF=$$!; sleep 3; \
-	curl -s localhost:8085/decision -H 'content-type: application/json' \
-	-d '{"application_id":"app-1042","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.20,"utilization":0.15}'; \
-	echo; kill $$PF
-
-eks-down:
-	eksctl delete cluster -f aws/eks/create-cluster.yaml
-
 down:
 	$(COMPOSE) down -v
 
 clean: down
-	docker rmi ch04-service ch04-decision:local 2>/dev/null || true
+	docker rmi ch04-scorecard-model ch04-challenger-model ch04-gateway 2>/dev/null || true
 
 lint:
-	uvx ruff format src/*.py
-	uvx ruff check src/*.py
+	uvx ruff format src/
+	uvx ruff check src/

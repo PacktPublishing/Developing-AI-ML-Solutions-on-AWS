@@ -1,4 +1,4 @@
-.PHONY: iam lint deploy image scale-up scale-down decide teardown
+.PHONY: iam lint push-models endpoints endpoints-teardown deploy deploy-ecs deploy-eks image scale-up scale-down decide decide-ecs decide-eks teardown teardown-ecs teardown-eks
 
 REGION ?= us-east-1
 STACK := realtime-scoring-ch04
@@ -11,14 +11,71 @@ lint:
 	uvx cfn-lint template.yaml
 	rain fmt --verify template.yaml
 
-deploy:
-	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+# --- compute target: ecs (ALB + Fargate service, the default) or eks (an eksctl
+# Fargate cluster). Both run the same container image and write to the same
+# DynamoDB — the SAM stack supplies both — they differ only in where the pods
+# run. Pick the other with COMPUTE=eks. ----------------------------------------
+COMPUTE ?= ecs
+REPO = $(call output,ServiceRepoUri)
 
-# build the service image in the cloud and push it to the stack's ECR repo
+# --- models: the two SageMaker endpoints the gateway ensembles, built and
+# deployed apart from the gateway stack. push-models builds each BYOC image
+# (linux/amd64, docker v2 manifest — what SageMaker requires) and pushes it;
+# endpoints deploys them serverless and needs a SageMaker execution role. -------
+ACCOUNT = $(shell aws sts get-caller-identity --query Account --output text)
+ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
+SM_ROLE ?=
+MODELS := scorecard challenger
+
+push-models:
+	aws ecr get-login-password --region $(REGION) | docker login --username AWS --password-stdin $(ECR)
+	@for m in $(MODELS); do \
+		aws ecr describe-repositories --repository-names ch04-$$m-model --region $(REGION) >/dev/null 2>&1 || \
+		aws ecr create-repository --repository-name ch04-$$m-model --region $(REGION) >/dev/null; \
+		docker buildx build --platform linux/amd64 --provenance=false \
+		-t $(ECR)/ch04-$$m-model:latest --push ../src/models/$$m; \
+	done
+
+endpoints:
+	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn> (make iam prints it)"; exit 1; }
+	@for m in $(MODELS); do \
+		MODE=cloud MODEL_IMAGE=$(ECR)/ch04-$$m-model:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
+		ENDPOINT_NAME=ch04-$$m uv run --no-project ../src/deploy.py; \
+	done
+
+endpoints-teardown:
+	@for m in $(MODELS); do \
+		aws sagemaker delete-endpoint --endpoint-name ch04-$$m --region $(REGION) 2>/dev/null || true; \
+		aws sagemaker delete-endpoint-config --endpoint-config-name ch04-$$m --region $(REGION) 2>/dev/null || true; \
+		aws sagemaker delete-model --model-name ch04-$$m --region $(REGION) 2>/dev/null || true; \
+	done
+
+deploy: deploy-$(COMPUTE)
+decide: decide-$(COMPUTE)
+teardown: endpoints-teardown teardown-$(COMPUTE)
+
+# ECS: the SAM stack runs the service behind the ALB (deploy, build, scale to 1).
+deploy-ecs:
+	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+	$(MAKE) image
+	$(MAKE) scale-up
+
+# EKS: the SAM stack still supplies the ECR image and the DynamoDB table; the pods
+# run on an eksctl Fargate cluster (its own VPC) instead of ECS.
+deploy-eks:
+	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+	$(MAKE) image
+	eksctl create cluster -f eks/create-cluster.yaml
+	sed -e "s|ch04-decision:local|$(REPO):latest|" \
+		-e "s|imagePullPolicy: Never|imagePullPolicy: Always|" \
+		../k8s/gateway.yaml | kubectl apply -f -
+	kubectl rollout status deployment/gateway --timeout=300s
+
+# build the gateway image in the cloud and push it to the stack's ECR repo
 image:
 	$(eval BUCKET := $(call output,StagingBucketName))
 	cd .. && rm -f /tmp/ch04-app-src.zip && \
-		zip -q -j /tmp/ch04-app-src.zip src/Dockerfile src/app.py src/scorecard.py \
+		zip -q -j /tmp/ch04-app-src.zip src/gateway/Dockerfile src/gateway/app.py \
 		aws/image/buildspec.yml
 	aws s3 cp /tmp/ch04-app-src.zip s3://$(BUCKET)/ch04/source/app.zip
 	@ID=$$(aws codebuild start-build --region $(REGION) --project-name ch04-decision-build \
@@ -41,16 +98,26 @@ scale-down:
 	aws ecs update-service --region $(REGION) --cluster ch04-decision \
 		--service decision-service --desired-count 0 >/dev/null
 
-# one application through the real endpoint
-decide:
-	curl -s $(call output,ServiceUrl)/decision -H 'content-type: application/json' -d '{ \
-	  "application_id": "app-1042", "age": 34, "monthly_income": 4200, \
-	  "requested_amount": 8000, "dti": 0.20, "utilization": 0.15 }'
+# one application through the real endpoint: the ALB for ecs, a port-forward for eks
+DECIDE_BODY = '{"application_id":"app-1042","age":40,"monthly_income":6000,"requested_amount":5000,"dti":0.10,"utilization":0.10}'
+decide-ecs:
+	curl -s $(call output,ServiceUrl)/decision -H 'content-type: application/json' -d $(DECIDE_BODY)
 	@echo
 
-teardown:
+decide-eks:
+	@kubectl port-forward svc/gateway 8085:80 >/dev/null 2>&1 & \
+	PF=$$!; sleep 3; \
+	curl -s localhost:8085/decision -H 'content-type: application/json' -d $(DECIDE_BODY); \
+	echo; kill $$PF
+
+teardown-ecs:
 	-aws ecs update-service --region $(REGION) --cluster ch04-decision \
 		--service decision-service --desired-count 0
+	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
+	sam delete --no-prompts --region $(REGION)
+
+teardown-eks:
+	-eksctl delete cluster -f eks/create-cluster.yaml
 	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
 	sam delete --no-prompts --region $(REGION)
 
@@ -67,3 +134,9 @@ iam:
 		|| aws iam update-assume-role-policy --role-name ch04-user --policy-document '$(TRUST)'
 	aws iam put-role-policy --role-name ch04-user --policy-name deploy --policy-document file://iam/deploy.json
 	@echo "ch04-user ready"
+	@aws iam create-role --role-name ch04-sagemaker --description "SageMaker endpoint execution role for ch-04" \
+		--assume-role-policy-document file://iam/sagemaker-trust.json 2>/dev/null \
+		|| aws iam update-assume-role-policy --role-name ch04-sagemaker --policy-document file://iam/sagemaker-trust.json
+	aws iam put-role-policy --role-name ch04-sagemaker --policy-name serve --policy-document file://iam/sagemaker-policy.json
+	@echo "ch04-sagemaker ready — pass its ARN as SM_ROLE to make endpoints / sm-local:"
+	@aws iam get-role --role-name ch04-sagemaker --query Role.Arn --output text

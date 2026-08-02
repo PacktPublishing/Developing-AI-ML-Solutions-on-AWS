@@ -259,10 +259,18 @@ Resources:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: log-decisions
+        - PolicyName: score-and-log
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+
+              # invoke the model endpoints the gateway ensembles
+              - Effect: Allow
+                Action:
+                  - sagemaker:InvokeEndpoint
+                Resource:
+                  - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/ch04-scorecard
+                  - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/ch04-challenger
               - Effect: Allow
                 Action:
                   - dynamodb:PutItem
@@ -287,6 +295,10 @@ Resources:
           Environment:
             - Name: DECISIONS_TABLE
               Value: !Ref DecisionLog
+
+            # the model endpoints to ensemble (name=SageMaker endpoint name)
+            - Name: ENDPOINTS
+              Value: scorecard=ch04-scorecard,challenger=ch04-challenger
           LogConfiguration:
             LogDriver: awslogs
             Options:

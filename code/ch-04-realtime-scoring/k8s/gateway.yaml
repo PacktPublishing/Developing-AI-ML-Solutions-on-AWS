@@ -1,0 +1,60 @@
+# The gateway on EKS: one pod that orchestrates the SageMaker endpoints (the same
+# ones the ECS path invokes), behind a Service and an Ingress (the ALB's job). The
+# models are not in the cluster on AWS — they are SageMaker endpoints — so this is
+# the gateway alone. `make deploy COMPUTE=eks` swaps the image for the stack's ECR
+# URI and sets imagePullPolicy to Always. The pod invokes and logs through the
+# `gateway` service account (its IAM role is created with the cluster).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: gateway }
+  template:
+    metadata:
+      labels: { app: gateway }
+    spec:
+      serviceAccountName: gateway
+      containers:
+        - name: gateway
+          image: ch04-decision:local
+          imagePullPolicy: Never
+          env:
+            - name: ENDPOINTS
+              value: scorecard=ch04-scorecard,challenger=ch04-challenger
+            - name: DECISIONS_TABLE
+              value: decision_log
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+          ports: [{ containerPort: 8000 }]
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector: { app: gateway }
+  ports: [{ port: 80, targetPort: 8000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port: { number: 80 }

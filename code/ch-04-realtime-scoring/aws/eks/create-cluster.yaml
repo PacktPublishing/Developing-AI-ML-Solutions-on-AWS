@@ -12,6 +12,27 @@ metadata:
   name: ch04-decision
   region: us-east-1
 
+# the gateway pod's identity: an IAM role bound to the `gateway` service account
+# (IRSA), letting it invoke the model endpoints and write the decision log — the
+# EKS counterpart of the ECS task role.
+iam:
+  withOIDC: true
+  serviceAccounts:
+    - metadata:
+        name: gateway
+        namespace: default
+      attachPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sagemaker:InvokeEndpoint
+            Resource:
+              - arn:aws:sagemaker:us-east-1:*:endpoint/ch04-scorecard
+              - arn:aws:sagemaker:us-east-1:*:endpoint/ch04-challenger
+          - Effect: Allow
+            Action: dynamodb:PutItem
+            Resource: arn:aws:dynamodb:us-east-1:*:table/decision_log
+
 fargateProfiles:
   - name: default
     selectors:
