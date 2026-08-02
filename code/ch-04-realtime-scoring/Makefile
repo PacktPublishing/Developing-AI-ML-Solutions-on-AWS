@@ -4,29 +4,27 @@ export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
 export AWS_DEFAULT_REGION ?= us-east-1
 
+COMPOSE := docker compose -f local/decision-service.yml
+
 up:
-	docker compose up -d --build --wait
+	$(COMPOSE) up -d --build --wait
 
 # one clean application: expect APPROVE
 decide:
-	curl -s localhost:8080/decision -H 'content-type: application/json' -d '{ \
-	  "application_id": "app-1042", "age": 34, "monthly_income": 4200, \
-	  "requested_amount": 8000, "dti": 0.20, "utilization": 0.15 }'
+	curl -s localhost:8080/decision -H 'content-type: application/json' \
+	  -d '{"application_id":"app-1042","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.20,"utilization":0.15}'
 	@echo
 
 # nudge utilization into the gray band: expect REFER
 refer:
-	curl -s localhost:8080/decision -H 'content-type: application/json' -d '{ \
-	  "application_id": "app-1043", "age": 34, "monthly_income": 4200, \
-	  "requested_amount": 8000, "dti": 0.25, "utilization": 0.38 }'
+	curl -s localhost:8080/decision -H 'content-type: application/json' \
+	  -d '{"application_id":"app-1043","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.25,"utilization":0.38}'
 	@echo
 
 # fail KYC: expect DECLINE with the reason code, whatever the score
 decline:
-	curl -s localhost:8080/decision -H 'content-type: application/json' -d '{ \
-	  "application_id": "app-1044", "age": 34, "monthly_income": 4200, \
-	  "requested_amount": 8000, "dti": 0.20, "utilization": 0.15, \
-	  "kyc_passed": false }'
+	curl -s localhost:8080/decision -H 'content-type: application/json' \
+	  -d '{"application_id":"app-1044","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.20,"utilization":0.15,"kyc_passed":false}'
 	@echo
 
 # the audit trail: decisions logged to DynamoDB, newest last
@@ -45,9 +43,8 @@ kube-up:
 
 kube-decide:
 	curl -s --retry 10 --retry-delay 2 --retry-all-errors \
-	  localhost:8085/decision -H 'content-type: application/json' -d '{ \
-	  "application_id": "app-1042", "age": 34, "monthly_income": 4200, \
-	  "requested_amount": 8000, "dti": 0.20, "utilization": 0.15 }'
+	  localhost:8085/decision -H 'content-type: application/json' \
+	  -d '{"application_id":"app-1042","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.20,"utilization":0.15}'
 	@echo
 
 kube-down:
@@ -72,19 +69,18 @@ eks-deploy:
 eks-decide:
 	@kubectl port-forward svc/decision-service 8085:80 >/dev/null 2>&1 & \
 	PF=$$!; sleep 3; \
-	curl -s localhost:8085/decision -H 'content-type: application/json' -d '{ \
-	"application_id": "app-1042", "age": 34, "monthly_income": 4200, \
-	"requested_amount": 8000, "dti": 0.20, "utilization": 0.15 }'; \
+	curl -s localhost:8085/decision -H 'content-type: application/json' \
+	-d '{"application_id":"app-1042","age":34,"monthly_income":4200,"requested_amount":8000,"dti":0.20,"utilization":0.15}'; \
 	echo; kill $$PF
 
 eks-down:
 	eksctl delete cluster -f aws/eks/create-cluster.yaml
 
 down:
-	docker compose down -v
+	$(COMPOSE) down -v
 
 clean: down
-	docker rmi ch-04-realtime-scoring-service ch04-decision:local 2>/dev/null || true
+	docker rmi ch04-service ch04-decision:local 2>/dev/null || true
 
 lint:
 	uvx ruff format src/*.py
