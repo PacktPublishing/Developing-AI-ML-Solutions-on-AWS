@@ -70,7 +70,7 @@ full table later. (Behaviour of the enrol handler's bootstrap.)
 - [ ] SFHQ-T2I license confirms redistribution.
 - [ ] Benchmark incremental-HNSW insert vs. bulk build.
 
-## Code layout (`code/ch-07-serverless-vision-rag-kyc/`)
+## Code layout (`code/ch-07-vision-rag/`)
 ```
 src/            face_embedder.py (facenet), face_explainer.py (captum)
 data/           fetch_faces.py (SFHQ sample)
