@@ -2,7 +2,9 @@ COMPOSE := docker compose -f local/batch-stack.yml
 
 .PHONY: up seed run pipeline events schedule query down clean lint diagrams
 
-include ../aws.mk
+# The local stack sees dummy credentials (below); real-AWS targets shed them so
+# boto3 falls through to the profile chain. Run those through $(REAL_AWS).
+REAL_AWS := env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
