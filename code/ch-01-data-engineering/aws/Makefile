@@ -13,8 +13,15 @@ RUN_STAMP := $(shell date +%Y-%m-%d)
 # Airflow on EC2 (Postgres metadata + LocalExecutor, nightly pg_dump to S3).
 # AllowedCidr is set to your current public IP so only you reach the UI on :8080;
 # stack name, region, and capabilities come from airflow-ec2/samconfig.toml.
+# WAREHOUSE=local (default, free tier: redshift-local on the instance) or
+# WAREHOUSE=serverless (SAM also provisions Redshift Serverless in this stack —
+# pass SUBNETS=subnet-a,subnet-b,subnet-c across >= 3 AZs for the workgroup).
+WAREHOUSE ?= local
+SUBNETS ?=
 airflow-deploy:
-	cd airflow-ec2 && sam deploy --parameter-overrides AllowedCidr=$$(curl -4 -s ifconfig.me)/32 --no-fail-on-empty-changeset
+	cd airflow-ec2 && sam deploy --no-fail-on-empty-changeset \
+		--parameter-overrides AllowedCidr=$$(curl -4 -s ifconfig.me)/32 \
+		WarehouseMode=$(WAREHOUSE) WorkgroupSubnetIds="$(SUBNETS)"
 
 # S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
 # backup bucket (read from the stack outputs) before sam delete tears it down.

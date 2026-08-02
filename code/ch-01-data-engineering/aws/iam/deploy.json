@@ -65,6 +65,7 @@
       "Resource": "*"
     },
     {"Sid": "AmiIdParameter", "Effect": "Allow", "Action": ["ssm:GetParameter", "ssm:GetParameters"], "Resource": "arn:aws:ssm:us-east-1::parameter/aws/service/ami-*"},
+    {"Sid": "WarehouseSecret", "Effect": "Allow", "Action": ["secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:GetRandomPassword", "secretsmanager:TagResource"], "Resource": "*"},
     {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": "*"}
   ]
 }
