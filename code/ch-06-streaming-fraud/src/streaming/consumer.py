@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.12"
 # dependencies = ["boto3"]
 # ///
 """Score the transaction stream and block the transactions that look like fraud.

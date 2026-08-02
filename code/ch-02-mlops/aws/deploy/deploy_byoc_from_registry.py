@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.10,<3.13"
+# requires-python = ">=3.12,<3.13"
 # dependencies = ["mlflow>=3.10,<4", "sagemaker-mlflow", "boto3"]
 # ///
 """Deploy a registered model from the MLflow App on the BYOC image.

@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.12"
 # dependencies = ["starlette", "uvicorn", "boto3", "psycopg2-binary"]
 # ///
 """A local Amazon Data Firehose: delivery streams as a generic service.

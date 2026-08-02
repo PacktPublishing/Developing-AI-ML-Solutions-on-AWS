@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.12"
 # dependencies = ["pandas", "scikit-learn", "catboost"]
 # ///
 """Train the CatBoost fraud classifier the streaming consumer scores with.

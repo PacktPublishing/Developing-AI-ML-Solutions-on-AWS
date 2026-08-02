@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.10,<3.13"
+# requires-python = ">=3.12,<3.13"
 # dependencies = ["sagemaker>=3,<4", "sagemaker-serve", "botocore[crt]", "boto3"]
 # ///
 """Deploy the fraud model behind the SageMaker serving contract.

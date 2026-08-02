@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.12"
 # dependencies = ["boto3", "pandas", "catboost"]
 # ///
 """Train the behavior model on labeled history and score the shortlist.

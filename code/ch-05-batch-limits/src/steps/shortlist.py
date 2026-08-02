@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.12"
 # dependencies = ["boto3", "psycopg2-binary"]
 # ///
 """Shortlist the customers eligible for a limit review.

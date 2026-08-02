@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.12"
 # dependencies = ["numpy", "pandas"]
 # ///
 """Synthesize the chapter's card-transaction stream and its training data.

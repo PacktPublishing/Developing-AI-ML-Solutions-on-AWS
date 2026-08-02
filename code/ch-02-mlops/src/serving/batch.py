@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.12"
 # dependencies = ["boto3", "pandas"]
 # ///
 """Batch-score a file through the BYOC serverless endpoint.

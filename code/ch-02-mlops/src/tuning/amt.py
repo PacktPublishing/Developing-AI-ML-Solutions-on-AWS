@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.10,<3.13"
+# requires-python = ">=3.12,<3.13"
 # dependencies = ["syne-tune", "xgboost", "scikit-learn", "pandas", "mlflow"]
 # ///
 """Local hyperparameter tuning for the challenger — Syne Tune, no instance, no quota.
