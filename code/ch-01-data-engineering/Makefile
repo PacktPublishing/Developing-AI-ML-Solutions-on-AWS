@@ -98,10 +98,8 @@ ICON_HEIGHT ?= 500
 diagrams:
 	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
 	@for s in ../../assets/diagrams/icons/*.svg; do \
-		case "$$(basename $$s)" in fa-*) continue;; esac; \
-			rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
-		done
-	@../../assets/diagrams/icons/render-fa.sh >/dev/null
+		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
+	done
 	@mkdir -p diagrams/png
 	@for f in diagrams/yaml/*.yaml; do \
 		echo "  $$f"; \

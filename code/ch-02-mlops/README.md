@@ -82,11 +82,11 @@ The `aws/` folder reproduces each step on real AWS.
 
 ## Layout
 
-- <img src="../../assets/diagrams/icons/fa-database.png" height="14"> `local/mlflow-stack.yml`: the local cloud (S3Proxy)
-- <img src="../../assets/diagrams/icons/fa-broom.png" height="14"> `data/generate_applications.py`: synthetic credit data + the shared monotone spec
-- <img src="../../assets/diagrams/icons/fa-user-graduate.png" height="14"> `src/scorecard/`: the incumbent WOE scorecard container (fastwoe + LogisticRegression)
-- <img src="../../assets/diagrams/icons/fa-user-graduate.png" height="14"> `src/challenger/`: the monotone XGBoost challenger container
-- <img src="../../assets/diagrams/icons/fa-sliders-h.png" height="14"> `src/tuning/amt.py`: local HPO with Syne Tune (Bayesian TPE, no instance), tracked in MLflow
-- <img src="../../assets/diagrams/icons/fa-play-circle.png" height="14"> `src/serving/batch.py`, `src/serving/lambda/`, `src/serving/fargate/`: the serving options
-- <img src="../../assets/diagrams/icons/fa-rocket.png" height="14"> `aws/`: reproduce on real AWS (SDK v3), with IAM notes
-- <img src="../../assets/diagrams/icons/fa-cog.png" height="14"> `Makefile`: the targets above; `make lint` runs ruff
+- `local/mlflow-stack.yml`: the local cloud (S3Proxy)
+- `data/generate_applications.py`: synthetic credit data + the shared monotone spec
+- `src/scorecard/`: the incumbent WOE scorecard container (fastwoe + LogisticRegression)
+- `src/challenger/`: the monotone XGBoost challenger container
+- `src/tuning/amt.py`: local HPO with Syne Tune (Bayesian TPE, no instance), tracked in MLflow
+- `src/serving/batch.py`, `src/serving/lambda/`, `src/serving/fargate/`: the serving options
+- `aws/`: reproduce on real AWS (SDK v3), with IAM notes
+- `Makefile`: the targets above; `make lint` runs ruff
