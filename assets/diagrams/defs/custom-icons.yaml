@@ -5,7 +5,6 @@
 # consumes. Presets:
 #   - Strands / LambdaCoin: the agent mark and the classic AWS Lambda coin.
 #   - MinIO, MLflow, Ollama, Postgres, Iceberg, Trino: local-stack tools (SVG).
-#   - Oblako: local-stack tool (raster only, no vector source).
 Definitions:
   CustomIcons:
     Type: Directory
@@ -47,10 +46,6 @@ Definitions:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "trino.png"}
     Label: {Title: "Trino", Color: "rgba(0, 0, 0, 255)"}
-  Oblako:
-    Type: Preset
-    Icon: {Source: CustomIcons, Path: "oblako.png"}
-    Label: {Title: "oblako", Color: "rgba(0, 0, 0, 255)"}
   RedshiftLocal:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "redshift-local.png"}
