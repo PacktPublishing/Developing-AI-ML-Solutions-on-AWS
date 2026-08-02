@@ -16,8 +16,36 @@ make clean-feature-group
 make clean-lake      # remove the verification lake bucket
 make airflow-deploy  # Airflow on EC2 (SAM, airflow-ec2/); free-tier redshift-local warehouse
                      #   WAREHOUSE=serverless SUBNETS=subnet-a,subnet-b,subnet-c -> Redshift Serverless
+make airflow-password  # fetch the generated UI password (user: admin) over SSM
 make airflow-delete
 ```
+
+The Airflow UI is at the stack's `AirflowUrl` output, on port 8080 (open only to
+your IP). Airflow 3 standalone generates the `admin` password on the instance;
+`make airflow-password` reads it back over SSM — no SSH and no extra open port.
+
+### Trigger the DAG without the UI (REST API)
+
+Airflow 3 serves a REST API on the same `:8080`. Get a bearer token with the
+admin password, then unpause and trigger the DAG — the same calls a scheduler
+or CI would make (no SSH into the box):
+
+```bash
+URL=http://<AirflowUrl>        # the stack output
+PW=<make airflow-password>     # the admin password
+TOKEN=$(curl -s -X POST "$URL/auth/token" -H 'content-type: application/json' \
+  -d "{\"username\":\"admin\",\"password\":\"$PW\"}" | jq -r .access_token)
+
+curl -s -X PATCH "$URL/api/v2/dags/bureau_pipeline?update_mask=is_paused" \
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"is_paused": false}'
+curl -s -X POST "$URL/api/v2/dags/bureau_pipeline/dagRuns" \
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"logical_date": null}'
+```
+
+Poll the run's `state` at `GET /api/v2/dags/bureau_pipeline/dagRuns/{run_id}` until
+it reads `success`.
 
 ## Observed Feature Store semantics (verify against docs before print)
 

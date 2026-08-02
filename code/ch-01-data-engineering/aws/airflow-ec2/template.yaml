@@ -3,7 +3,7 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: |
   Airflow on EC2 for the data engineering chapter: one free-tier instance running
   Airflow (Postgres metadata + LocalExecutor) and redshift-local under docker
-  compose, with the bureau smoke DAG installed and a nightly pg_dump of Airflow's
+  compose, with the bureau pipeline DAG installed and a nightly pg_dump of Airflow's
   metadata to S3. Deploy with: sam deploy --guided
 
 Parameters:
@@ -12,8 +12,12 @@ Parameters:
     Type: String
 
   InstanceType:
+
+    # Airflow 3 standalone (scheduler + api + dag-processor) plus the metadata
+    # Postgres and redshift-local need real memory; t3.micro (1 GB) starves them
+    # and tasks never run. t3.medium (4 GB) is the smallest that works reliably.
     Type: String
-    Default: t3.micro
+    Default: t3.medium
 
   SubnetId:
     Description: Subnet to launch into; empty uses the default VPC's default subnet
@@ -189,8 +193,11 @@ Resources:
               -o /usr/local/lib/docker/cli-plugins/docker-compose
             chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
             mkdir -p /opt/af/dags
-            cat > /opt/af/dags/bureau_smoke.py <<'DAG'
-            """Smoke DAG: orchestrate warehouse steps, the chapter's pipeline shape."""
+            cat > /opt/af/dags/bureau_pipeline.py <<'DAG'
+            """The nightly bureau pipeline as a DAG: stage raw bureau reports,
+            transform them into the credit-profile mart, then gate on a data
+            quality check. The same shape the chapter runs locally, orchestrated
+            here against the warehouse (redshift-local or Redshift Serverless)."""
             import json
             import os
             from datetime import datetime
@@ -213,22 +220,41 @@ Resources:
             else:
                 DSN = "postgresql://loader:loader@warehouse:5439/bureau"
 
+            STAGE = """
+            create table if not exists bureau_reports (applicant_id int, state varchar(2), score int);
+            truncate bureau_reports;
+            insert into bureau_reports values
+                (10001, 'CA', 712), (10002, 'TX', 668), (10003, 'NY', 741),
+                (10004, 'CA', 590), (10005, 'TX', 805);
+            """
+            TRANSFORM = """
+            drop table if exists applicant_credit_profile;
+            create table applicant_credit_profile as
+                select state, count(*) as applicants, round(avg(score)) as avg_score
+                from bureau_reports group by state;
+            """
+
 
             def run_sql(sql):
-                """Run one statement against the target warehouse."""
+                """Run a statement against the target warehouse."""
                 with psycopg2.connect(DSN) as conn, conn.cursor() as cur:
                     cur.execute(sql)
-                    if cur.description:
-                        print(cur.fetchall())
 
 
-            with DAG("bureau_smoke", start_date=datetime(2026, 1, 1),
-                     schedule=None, catchup=False) as dag:
-                load = PythonOperator(task_id="load", python_callable=run_sql,
-                    op_args=["create table if not exists smoke(id int); insert into smoke select 1"])
-                check = PythonOperator(task_id="check", python_callable=run_sql,
-                    op_args=["select count(*) from smoke"])
-                load >> check
+            def check_profile():
+                """Data-quality gate: the credit-profile mart must not be empty."""
+                with psycopg2.connect(DSN) as conn, conn.cursor() as cur:
+                    cur.execute("select count(*) from applicant_credit_profile")
+                    if not cur.fetchone()[0]:
+                        raise ValueError("applicant_credit_profile is empty")
+
+
+            with DAG("bureau_pipeline", start_date=datetime(2026, 1, 1),
+                     schedule="@daily", catchup=False) as dag:
+                stage = PythonOperator(task_id="stage", python_callable=run_sql, op_args=[STAGE])
+                transform = PythonOperator(task_id="transform", python_callable=run_sql, op_args=[TRANSFORM])
+                check = PythonOperator(task_id="check", python_callable=check_profile)
+                stage >> transform >> check
             DAG
             cat > /opt/af/compose.yml <<'YML'
             services:

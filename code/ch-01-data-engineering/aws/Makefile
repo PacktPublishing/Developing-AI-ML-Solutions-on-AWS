@@ -1,4 +1,4 @@
-.PHONY: airflow-deploy airflow-delete lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
+.PHONY: airflow-deploy airflow-password airflow-delete lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
 
 S3TABLES_ARN ?= arn:aws:s3tables:us-east-1:$(ACCOUNT):bucket/ch01-lake
 
@@ -21,7 +21,19 @@ SUBNETS ?=
 airflow-deploy:
 	cd airflow-ec2 && sam deploy --no-fail-on-empty-changeset \
 		--parameter-overrides AllowedCidr=$$(curl -4 -s ifconfig.me)/32 \
-		WarehouseMode=$(WAREHOUSE) WorkgroupSubnetIds="$(SUBNETS)"
+		WarehouseMode=$(WAREHOUSE) $(if $(SUBNETS),WorkgroupSubnetIds=$(SUBNETS),)
+
+# Airflow 3 standalone generates the admin password on the instance; fetch it
+# over SSM (no SSH, no extra open port). Log in to the UI as user "admin".
+airflow-password:
+	@IID=$$(aws ec2 describe-instances --filters Name=tag:Name,Values=ch01-airflow \
+	  Name=instance-state-name,Values=running \
+	  --query 'Reservations[0].Instances[0].InstanceId' --output text); \
+	  CID=$$(aws ssm send-command --instance-ids $$IID --document-name AWS-RunShellScript \
+	  --parameters commands='docker exec af-airflow-1 cat /opt/airflow/simple_auth_manager_passwords.json.generated' \
+	  --query Command.CommandId --output text); \
+	  aws ssm wait command-executed --command-id $$CID --instance-id $$IID 2>/dev/null || true; \
+	  aws ssm get-command-invocation --command-id $$CID --instance-id $$IID --query StandardOutputContent --output text
 
 # S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
 # backup bucket (read from the stack outputs) before sam delete tears it down.
