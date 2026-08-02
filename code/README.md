@@ -31,7 +31,7 @@ offline (Iceberg) and online (DynamoDB) store.
 A champion/challenger scorecard trained on SageMaker, tracked in MLflow and tuned
 with AMT, then served three ways — endpoint, Lambda, and Fargate — from one image.
 
-![Serving surfaces](ch-02-mlops/diagrams/png/fig_serving_surfaces.png)
+![The serving layer](ch-02-mlops/diagrams/png/fig_serving_surfaces.png)
 
 - **AWS services:** Amazon SageMaker AI (training, endpoints, Pipelines, MLflow,
   AMT), Amazon ECR, AWS CodeBuild, AWS Deep Learning Containers, AWS Lambda, AWS
@@ -98,8 +98,8 @@ make -C code/ch-04-realtime-scoring/aws iam    # creates ch04-user from its depl
 ```
 
 `make iam` creates `chNN-user` trusting you to `sts:AssumeRole` and attaches that
-chapter's `deploy.json` inline. Re-run it after editing the policy (updates in
-place). (ch-08 has no `aws/Makefile`, so its target is `make -C
+chapter's `deploy.json` inline. Re-run it after editing the policy. (ch-08 has no
+`aws/Makefile`, so its target is `make -C
 code/ch-08-selfservice-analytics iam`.)
 
 Then add a profile for the chapter to `~/.aws/config` and deploy under it:
