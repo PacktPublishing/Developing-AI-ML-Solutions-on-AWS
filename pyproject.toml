@@ -54,5 +54,8 @@ division-by-zero = "ignore"
 unresolved-import = "ignore"
 
 [tool.ty.analysis]
-replace-imports-with-any = ["pandas.**", "numpy.**"]
+replace-imports-with-any = [
+    "pandas.**", "numpy.**", "sklearn.**", "sagemaker.**", "mlflow.**",
+    "fastwoe.**", "xgboost.**", "catboost.**", "boto3.**", "botocore.**",
+]
 respect-type-ignore-comments = false

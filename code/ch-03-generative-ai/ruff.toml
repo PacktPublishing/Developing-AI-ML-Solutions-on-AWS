@@ -1,5 +1,0 @@
-extend = "../../pyproject.toml"
-
-[lint.per-file-ignores]
-# test functions do not need docstrings
-"tests/*" = ["D103"]

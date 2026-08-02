@@ -138,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
             _STATEMENTS.get(body["Id"], {}).update(Status="ABORTED")
         return {"Status": True}
 
-    def log_message(self, *args):  # quiet
+    def log_message(self, format: str, *args) -> None:  # quiet
         """Keep the server quiet."""
         pass
 
