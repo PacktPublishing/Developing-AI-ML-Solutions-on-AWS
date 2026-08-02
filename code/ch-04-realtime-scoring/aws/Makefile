@@ -68,6 +68,8 @@ deploy-ecs:
 # and the image build — no VPC/ALB/ECS. The gateway pod runs on an eksctl Fargate
 # cluster (its own VPC) and invokes the same endpoints.
 deploy-eks:
+	@command -v eksctl >/dev/null 2>&1 || { echo "eksctl is not installed — https://eksctl.io/installation/"; exit 1; }
+	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed — https://kubernetes.io/docs/tasks/tools/"; exit 1; }
 	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides Compute=eks
 	$(MAKE) image
 	eksctl create cluster -f eks/create-cluster.yaml
@@ -110,6 +112,7 @@ decide-ecs:
 	@echo
 
 decide-eks:
+	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed"; exit 1; }
 	@kubectl port-forward svc/gateway 8085:80 >/dev/null 2>&1 & \
 	PF=$$!; sleep 3; \
 	curl -s localhost:8085/decision -H 'content-type: application/json' -d $(DECIDE_BODY); \
@@ -122,6 +125,7 @@ teardown-ecs:
 	sam delete --no-prompts --region $(REGION)
 
 teardown-eks:
+	@command -v eksctl >/dev/null 2>&1 || { echo "eksctl is not installed — https://eksctl.io/installation/"; exit 1; }
 	-eksctl delete cluster -f eks/create-cluster.yaml
 	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
 	sam delete --no-prompts --region $(REGION)

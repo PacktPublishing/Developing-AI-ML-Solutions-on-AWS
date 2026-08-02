@@ -51,6 +51,8 @@ sm-local:
 # the same gateway and models on Kubernetes: a k3d cluster (k3s in docker), the
 # three images imported, the ensemble manifest applied. Needs k3d and kubectl.
 kube-up:
+	@command -v k3d >/dev/null 2>&1 || { echo "k3d is not installed — https://k3d.io/#installation"; exit 1; }
+	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed"; exit 1; }
 	k3d cluster create decision --port "8085:80@loadbalancer" --wait
 	docker build -q -t ch04-scorecard-model src/models/scorecard
 	docker build -q -t ch04-challenger-model src/models/challenger

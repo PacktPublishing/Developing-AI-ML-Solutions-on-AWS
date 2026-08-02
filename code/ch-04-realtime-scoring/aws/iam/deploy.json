@@ -52,16 +52,7 @@
     {
       "Sid": "Network",
       "Effect": "Allow",
-      "Action": [
-        "ec2:*Vpc*",
-        "ec2:*Subnet*",
-        "ec2:*Route*",
-        "ec2:*InternetGateway*",
-        "ec2:*SecurityGroup*",
-        "ec2:*Address*",
-        "ec2:Describe*",
-        "ec2:*Tags"
-      ],
+      "Action": "ec2:*",
       "Resource": "*"
     },
     {
@@ -171,10 +162,19 @@
       "Sid": "Eks",
       "Effect": "Allow",
       "Action": "eks:*",
-      "Resource": [
-        "arn:aws:eks:us-east-1:*:cluster/ch04-*",
-        "arn:aws:eks:us-east-1:*:fargateprofile/ch04-*/*/*"
-      ]
+      "Resource": "*"
+    },
+    {
+      "Sid": "EksServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/*"
+    },
+    {
+      "Sid": "EksReadRoles",
+      "Effect": "Allow",
+      "Action": "iam:GetRole",
+      "Resource": "*"
     },
     {
       "Sid": "EksCtlStacks",
