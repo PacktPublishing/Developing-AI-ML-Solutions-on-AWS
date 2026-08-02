@@ -1,13 +1,13 @@
 # /// script
-# dependencies = ["boto3", "pandas", "pyarrow", "s3fs"]
+# dependencies = ["awswrangler", "pandas"]
 # ///
 """Why Parquet wins: write a partitioned dataset, query it in place.
 
 Builds a small applications table, writes it to the lake as Parquet
 partitioned by vintage, and answers "average default rate by vintage" by
-reading only the columns and partitions the query needs. PyArrow's dataset
-reader does the pruning on the laptop; on AWS the same files are Athena's
-territory.
+reading only the columns and partitions the query needs. awswrangler (the AWS
+SDK for pandas) does the pruning; the same calls run against the local S3
+stand-in or real S3 — only the endpoint changes.
 
 Usage:
   uv run lake-basics/parquet_lake.py
@@ -16,12 +16,20 @@ Usage:
 import os
 import random
 
+import awswrangler as wr
 import boto3
 import pandas as pd
-import pyarrow.dataset as ds
-import pyarrow.fs as pafs
 
 BUCKET = os.environ.get("LAKE_BUCKET", "credit-lake")
+
+# One library, one code path, local or AWS. awswrangler resolves credentials
+# through the boto3 session — env vars, a named profile, or an assumed role such
+# as ch01-user — and talks to whichever S3 endpoint is set: the local S3 stand-in
+# when AWS_ENDPOINT_URL points at it, real S3 otherwise.
+endpoint = os.environ.get("AWS_ENDPOINT_URL")
+if endpoint:
+    wr.config.s3_endpoint_url = endpoint
+session = boto3.Session()
 
 random.seed("parquet-lake")
 applications = pd.DataFrame(
@@ -35,62 +43,35 @@ applications = pd.DataFrame(
     }
 )
 
-s3 = boto3.client("s3")
+# create the lake bucket if this is a fresh stack (idempotent)
+s3 = session.client("s3", endpoint_url=endpoint)
 try:
     s3.create_bucket(Bucket=BUCKET)
 except s3.exceptions.BucketAlreadyOwnedByYou:
     pass
 
-# endpoint set -> the local cloud; unset -> real AWS via the credential chain
-endpoint = os.environ.get("AWS_ENDPOINT_URL")
-storage_options = {"client_kwargs": {"endpoint_url": endpoint}} if endpoint else None
-applications.to_parquet(
-    f"s3://{BUCKET}/curated/applications/",
+wr.s3.to_parquet(
+    df=applications,
+    path=f"s3://{BUCKET}/curated/applications/",
+    dataset=True,
     partition_cols=["vintage"],
-    storage_options=storage_options,
+    boto3_session=session,
 )
-print("wrote partitioned Parquet to s3://credit-lake/curated/applications/")
+print(f"wrote partitioned Parquet to s3://{BUCKET}/curated/applications/")
 
-# query in place: PyArrow reads only the two columns the answer needs, and the
-# vintage filter prunes whole partitions before a single file is opened
-if endpoint:
-    host = endpoint.removeprefix("http://").removeprefix("https://")
-    lake_fs = pafs.S3FileSystem(
-        access_key=os.environ.get("AWS_ACCESS_KEY_ID", "local"),
-        secret_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "localsecret"),
-        endpoint_override=host,
-        scheme="http",
-    )
-else:
-    lake_fs = pafs.S3FileSystem()  # region + credentials from the chain
-
-# only the Parquet files: the same prefix also holds a hand-written JSON object
-# (see s3_objects.py), so read the dataset explicitly, the way Athena's table
-# definition scopes itself to the curated files
-parquet_files = [
-    f.path
-    for f in lake_fs.get_file_info(
-        pafs.FileSelector(f"{BUCKET}/curated/applications", recursive=True)
-    )
-    if f.path.endswith(".parquet")
-]
-applications_ds = ds.dataset(
-    parquet_files,
-    filesystem=lake_fs,
-    format="parquet",
-    partitioning=ds.partitioning(flavor="hive"),
-)
-recent = applications_ds.to_table(
+# query in place: read only the two columns the answer needs, and let the vintage
+# filter prune whole partitions before a single file is opened
+recent = wr.s3.read_parquet(
+    path=f"s3://{BUCKET}/curated/applications/",
+    dataset=True,
     columns=["vintage", "default_rate"],  # column pruning
-    filter=ds.field("vintage") >= "2025-12",  # partition pruning
+    partition_filter=lambda part: part["vintage"] >= "2025-12",  # partition pruning
+    boto3_session=session,
 )
 result = (
-    recent.group_by("vintage")
-    .aggregate([("default_rate", "mean"), ("default_rate", "count")])
-    .to_pandas()
-    .rename(
-        columns={"default_rate_mean": "avg_dr", "default_rate_count": "applications"}
-    )
+    recent.groupby("vintage")["default_rate"]
+    .agg(avg_dr="mean", applications="count")
+    .reset_index()
     .sort_values("vintage")
 )
 result["avg_dr"] = result["avg_dr"].round(4)
