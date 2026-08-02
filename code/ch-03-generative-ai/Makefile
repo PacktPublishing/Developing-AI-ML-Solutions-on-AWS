@@ -27,8 +27,10 @@ up:
 seed:
 	uv run src/knowledge-base/corpus.py
 
+# BEDROCK_LOCAL=1 exercises the local shim (no AWS); unset creates the managed
+# Bedrock guardrail on your account.
 guardrail:
-	uv run src/underwriting-agent/guardrails.py create
+	uv run src/underwriting-agent/guardrails.py $(if $(BEDROCK_LOCAL),local,create)
 
 ask:
 	uv run src/underwriting-agent/agent.py ask --query "$(Q)" --guardrail

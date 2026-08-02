@@ -24,7 +24,6 @@ import pathlib
 import re
 
 import boto3
-
 from models import BEDROCK_REGION, TEXT_MODEL, generate
 
 # -------------------------------------------------------------------------------
@@ -201,12 +200,28 @@ def guarded_generate(
 # -------------------------------------------------------------------------------
 # Entry point
 # -------------------------------------------------------------------------------
+def demo_local() -> None:
+    """Exercise the local guardrail shim (no AWS).
+
+    The same input-blocking and output redaction that guarded_generate applies
+    when BEDROCK_LOCAL=1 stands in for the managed guardrail.
+    """
+    off_topic = "Should I invest my own savings in this company?"
+    on_topic = "What DSCR floor applies to a solar project company?"
+    print(f"input blocked?  {off_topic!r} -> {local_input_blocked(off_topic)}")
+    print(f"input blocked?  {on_topic!r} -> {local_input_blocked(on_topic)}")
+    pii = "Reach the sponsor Jane Roe at jane.roe@example.com or +1 555-123-4567."
+    print(f"redacted output: {local_redact(pii)}")
+
+
 def main() -> None:
-    """Run the create, show, or delete command."""
+    """Run the create, show, delete, or local command."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["create", "show", "delete"])
+    parser.add_argument("command", choices=["create", "show", "delete", "local"])
     args = parser.parse_args()
-    {"create": create, "show": show, "delete": delete}[args.command]()
+    {"create": create, "show": show, "delete": delete, "local": demo_local}[
+        args.command
+    ]()
 
 
 if __name__ == "__main__":
