@@ -49,11 +49,13 @@ teardown:
 	-aws s3 rm --recursive s3://$(call output,BatchBucketName)
 	sam delete --no-prompts --region $(REGION)
 
-# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# -------------------------------------------------------------------------------
+# iam: provision THIS chapter's deploy identity, when you start the chapter
 # Creates ch05-user from iam/deploy.json (least-privilege for ch-05 only) and trusts you to
 # assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
 # editing the policy. Then add a [profile ch05] (role_arn + source_profile) and
 # run cloud targets with AWS_PROFILE=ch05.
+# -------------------------------------------------------------------------------
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
 iam:

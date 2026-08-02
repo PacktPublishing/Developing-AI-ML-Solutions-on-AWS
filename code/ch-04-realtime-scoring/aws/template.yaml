@@ -1,127 +1,30 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
 Description: |
-  The decision service on AWS: the same container behind an Application Load Balancer on ECS Fargate, with the decision log in DynamoDB. The service starts at desired count 0 — scale it up when you are ready to pay for a task, and the ALB health check on /health gates traffic.
-  The image is built in the cloud by the stack's CodeBuild project; the laptop never builds or loads an image.
+  The decision gateway on AWS. Always created: the ECR repo the gateway image is built into (by this stack's CodeBuild project — the laptop never builds an image), and the DynamoDB decision log. With Compute=ecs (the default) the stack also builds the ECS Fargate runtime — a VPC, an Application Load Balancer whose /health check gates traffic, and the service at desired count 0. With Compute=eks the runtime is an eksctl cluster instead, so the stack builds none of that; the gateway pod invokes the same endpoints and writes the same table.
   Every stateful resource is deliberately disposable: `make teardown` leaves nothing behind.
+
+Parameters:
+  Compute:
+    Description: where the gateway runs — ecs builds the Fargate runtime, eks builds only the shared repo, log, and image build.
+    Type: String
+    AllowedValues:
+      - ecs
+      - eks
+    Default: ecs
+
+Conditions:
+  IsEcs: !Equals
+    - !Ref Compute
+    - ecs
 
 Transform: AWS::Serverless-2016-10-31
 
 Resources:
-  Vpc:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: 10.0.0.0/16
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
 
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-
-  VpcGateway:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref Vpc
-      InternetGatewayId: !Ref InternetGateway
-
-  SubnetA:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref Vpc
-      CidrBlock: 10.0.1.0/24
-      MapPublicIpOnLaunch: true
-      AvailabilityZone: !Select
-        - 0
-        - !GetAZs
-
-  SubnetB:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref Vpc
-      CidrBlock: 10.0.2.0/24
-      MapPublicIpOnLaunch: true
-      AvailabilityZone: !Select
-        - 1
-        - !GetAZs
-
-  RouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref Vpc
-
-  DefaultRoute:
-    Type: AWS::EC2::Route
-    DependsOn: VpcGateway
-    Properties:
-      RouteTableId: !Ref RouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
-
-  SubnetARoute:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref SubnetA
-      RouteTableId: !Ref RouteTable
-
-  SubnetBRoute:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref SubnetB
-      RouteTableId: !Ref RouteTable
-
-  AlbSg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: decision service alb, http from anywhere
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-
-  ServiceSg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: decision service tasks, traffic from the alb only
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 8000
-          ToPort: 8000
-          SourceSecurityGroupId: !Ref AlbSg
-
-  Alb:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Scheme: internet-facing
-      SecurityGroups:
-        - !Ref AlbSg
-      Subnets:
-        - !Ref SubnetA
-        - !Ref SubnetB
-
-  TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      VpcId: !Ref Vpc
-      Port: 8000
-      Protocol: HTTP
-      TargetType: ip
-      HealthCheckPath: /health
-      HealthCheckIntervalSeconds: 15
-      HealthyThresholdCount: 2
-
-  Listener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref Alb
-      Port: 80
-      Protocol: HTTP
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref TargetGroup
-
+  # -----------------------------------------------------------------------------
+  # shared: the gateway image repo, the decision log, and the cloud image build
+  # -----------------------------------------------------------------------------
   DecisionLog:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
@@ -218,10 +121,142 @@ Resources:
         Type: S3
         Location: !Sub ${StagingBucket}/ch04/source/app.zip
 
+  # -----------------------------------------------------------------------------
+  # ecs runtime (Compute=ecs only): VPC, ALB, and the Fargate service
+  # -----------------------------------------------------------------------------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+    Condition: IsEcs
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: IsEcs
+
+  VpcGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+    Condition: IsEcs
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+    Condition: IsEcs
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+    Condition: IsEcs
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+    Condition: IsEcs
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGateway
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    Condition: IsEcs
+
+  SubnetARoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+    Condition: IsEcs
+
+  SubnetBRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+    Condition: IsEcs
+
+  AlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: decision service alb, http from anywhere
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+    Condition: IsEcs
+
+  ServiceSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: decision service tasks, traffic from the alb only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !Ref AlbSg
+    Condition: IsEcs
+
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref AlbSg
+      Subnets:
+        - !Ref SubnetA
+        - !Ref SubnetB
+    Condition: IsEcs
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref Vpc
+      Port: 8000
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 15
+      HealthyThresholdCount: 2
+    Condition: IsEcs
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+    Condition: IsEcs
+
   Cluster:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: ch04-decision
+    Condition: IsEcs
 
   ExecutionRole:
     Type: AWS::IAM::Role
@@ -247,6 +282,7 @@ Resources:
                 Action:
                   - logs:CreateLogGroup
                 Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/ch04-decision*
+    Condition: IsEcs
 
   TaskRole:
     Type: AWS::IAM::Role
@@ -275,6 +311,7 @@ Resources:
                 Action:
                   - dynamodb:PutItem
                 Resource: !GetAtt DecisionLog.Arn
+    Condition: IsEcs
 
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -306,6 +343,7 @@ Resources:
               awslogs-create-group: "true"
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: service
+    Condition: IsEcs
 
   # desired count 0: the stack deploys without running (or billing) a task;
   # `make scale-up` starts one once the image is pushed
@@ -330,11 +368,13 @@ Resources:
         - ContainerName: service
           ContainerPort: 8000
           TargetGroupArn: !Ref TargetGroup
+    Condition: IsEcs
 
 Outputs:
   ServiceUrl:
-    Description: the decision endpoint
+    Description: the decision endpoint (ecs)
     Value: !Sub http://${Alb.DNSName}
+    Condition: IsEcs
 
   ServiceRepoUri:
     Value: !GetAtt ServiceRepo.RepositoryUri

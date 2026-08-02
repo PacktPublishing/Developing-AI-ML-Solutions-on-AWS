@@ -31,7 +31,9 @@ Transform: AWS::Serverless-2016-10-31
 
 Resources:
 
-  # --- warehouse -------------------------------------------------------------
+  # -----------------------------------------------------------------------------
+  # warehouse
+  # -----------------------------------------------------------------------------
   Namespace:
     Type: AWS::RedshiftServerless::Namespace
     Properties:
@@ -53,7 +55,9 @@ Resources:
       BaseCapacity: 8
       PubliclyAccessible: false
 
-  # --- container plumbing ----------------------------------------------------
+  # -----------------------------------------------------------------------------
+  # container plumbing
+  # -----------------------------------------------------------------------------
   Repository:
     Type: AWS::ECR::Repository
     Properties:
@@ -65,7 +69,9 @@ Resources:
     Properties:
       ClusterName: ch08-analytics
 
-  # --- the image build, in the cloud: no laptop cross-builds ----------------
+  # -----------------------------------------------------------------------------
+  # the image build, in the cloud: no laptop cross-builds
+  # -----------------------------------------------------------------------------
   BuildRole:
     Type: AWS::IAM::Role
     Properties:
@@ -146,7 +152,9 @@ Resources:
           ToPort: 7681
           CidrIp: !Ref AllowedCidr
 
-  # --- the task role: everything the assistant may do, nothing else ----------
+  # -----------------------------------------------------------------------------
+  # the task role: everything the assistant may do, nothing else
+  # -----------------------------------------------------------------------------
   TaskRole:
     Type: AWS::IAM::Role
     Properties:

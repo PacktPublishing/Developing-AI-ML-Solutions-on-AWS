@@ -16,7 +16,9 @@ APP_ARN ?= $(shell aws sagemaker list-mlflow-apps --region $(REGION) --query "Su
 
 MODEL_PATH ?= models:/credit-challenger/1
 
-# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# -------------------------------------------------------------------------------
+# iam: provision THIS chapter's deploy identity, when you start the chapter
+# -------------------------------------------------------------------------------
 # Creates ch02-user from iam/deploy.json (least-privilege for ch-02 only) and
 # trusts you to assume it — no account-wide up-front setup, you provision what the
 # chapter needs when you reach it. Re-run after editing deploy.json. Then add a
@@ -30,7 +32,9 @@ iam:
 	aws iam put-role-policy --role-name ch02-user --policy-name deploy --policy-document file://iam/deploy.json
 	@echo "ch02-user ready: arn:aws:iam::$(ACCOUNT):role/ch02-user"
 
-# --- image: build the container in the cloud (CodeBuild -> ECR) ---------------
+# -------------------------------------------------------------------------------
+# image: build the container in the cloud (CodeBuild -> ECR)
+# -------------------------------------------------------------------------------
 # image-bootstrap creates the ECR repo + CodeBuild project + source bucket
 # (image/build.yaml, once per image). image then zips the build context, uploads
 # it, starts the build, and waits. REPO=ch02-challenger (train_job.py's image) or
@@ -67,7 +71,9 @@ image:
 		[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
 		echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
 
-# --- mlflow app: the serverless tracking server's successor -------------------
+# -------------------------------------------------------------------------------
+# mlflow app: the serverless tracking server's successor
+# -------------------------------------------------------------------------------
 mlflow-app:
 	MLFLOW_APP_ARTIFACT_URI=s3://$(BUCKET)/ch02-mlflow SAGEMAKER_ROLE_ARN=$(ROLE) \
 		AWS_DEFAULT_REGION=$(REGION) sh mlflow_app.sh create
@@ -78,7 +84,9 @@ mlflow-app-delete:
 	SAGEMAKER_ROLE_ARN=$(ROLE) MLFLOW_APP_ARTIFACT_URI=s3://$(BUCKET)/ch02-mlflow \
 		AWS_DEFAULT_REGION=$(REGION) sh mlflow_app.sh delete
 
-# --- jobs: training and tuning (need training-instance quota) -----------------
+# -------------------------------------------------------------------------------
+# jobs: training and tuning (need training-instance quota)
+# -------------------------------------------------------------------------------
 train:
 	IMAGE_URI=$(CHALLENGER_IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
 		MLFLOW_TRACKING_URI=$(APP_ARN) AWS_DEFAULT_REGION=$(REGION) uv run jobs/train_job.py
@@ -86,7 +94,9 @@ amt:
 	IMAGE_URI=$(CHALLENGER_IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
 		MLFLOW_TRACKING_ARN=$(APP_ARN) AWS_DEFAULT_REGION=$(REGION) uv run jobs/amt.py
 
-# --- deploy: a registered model, two ways -------------------------------------
+# -------------------------------------------------------------------------------
+# deploy: a registered model, two ways
+# -------------------------------------------------------------------------------
 deploy-byoc:
 	IMAGE_URI=$(CHALLENGER_IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
 		MLFLOW_TRACKING_ARN=$(APP_ARN) MLFLOW_MODEL_PATH=$(MODEL_PATH) \

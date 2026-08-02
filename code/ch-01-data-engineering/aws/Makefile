@@ -82,11 +82,13 @@ clean-lake:
 	env -u AWS_ENDPOINT_URL aws s3 rm s3://$(LAKE_BUCKET) --recursive
 	env -u AWS_ENDPOINT_URL aws s3 rb s3://$(LAKE_BUCKET)
 
-# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# -------------------------------------------------------------------------------
+# iam: provision THIS chapter's deploy identity, when you start the chapter
 # Creates ch01-user from iam/deploy.json (least-privilege for ch-01 only) and trusts you to
 # assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
 # editing the policy. Then add a [profile ch01] (role_arn + source_profile) and
 # run cloud targets with AWS_PROFILE=ch01.
+# -------------------------------------------------------------------------------
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
 iam:

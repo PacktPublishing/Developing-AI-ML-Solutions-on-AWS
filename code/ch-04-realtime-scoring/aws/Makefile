@@ -11,17 +11,21 @@ lint:
 	uvx cfn-lint template.yaml
 	rain fmt --verify template.yaml
 
-# --- compute target: ecs (ALB + Fargate service, the default) or eks (an eksctl
+# -------------------------------------------------------------------------------
+# compute target: ecs (ALB + Fargate service, the default) or eks (an eksctl
 # Fargate cluster). Both run the same container image and write to the same
 # DynamoDB — the SAM stack supplies both — they differ only in where the pods
-# run. Pick the other with COMPUTE=eks. ----------------------------------------
+# run. Pick the other with COMPUTE=eks.
+# -------------------------------------------------------------------------------
 COMPUTE ?= ecs
 REPO = $(call output,ServiceRepoUri)
 
-# --- models: the two SageMaker endpoints the gateway ensembles, built and
+# -------------------------------------------------------------------------------
+# models: the two SageMaker endpoints the gateway ensembles, built and
 # deployed apart from the gateway stack. push-models builds each BYOC image
 # (linux/amd64, docker v2 manifest — what SageMaker requires) and pushes it;
-# endpoints deploys them serverless and needs a SageMaker execution role. -------
+# endpoints deploys them serverless and needs a SageMaker execution role.
+# -------------------------------------------------------------------------------
 ACCOUNT = $(shell aws sts get-caller-identity --query Account --output text)
 ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
 SM_ROLE ?=
@@ -54,16 +58,17 @@ deploy: deploy-$(COMPUTE)
 decide: decide-$(COMPUTE)
 teardown: endpoints-teardown teardown-$(COMPUTE)
 
-# ECS: the SAM stack runs the service behind the ALB (deploy, build, scale to 1).
+# ECS: the SAM stack builds the Fargate runtime behind the ALB (deploy, build, scale to 1).
 deploy-ecs:
-	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides Compute=ecs
 	$(MAKE) image
 	$(MAKE) scale-up
 
-# EKS: the SAM stack still supplies the ECR image and the DynamoDB table; the pods
-# run on an eksctl Fargate cluster (its own VPC) instead of ECS.
+# EKS: with Compute=eks the SAM stack builds only the ECR repo, the DynamoDB table,
+# and the image build — no VPC/ALB/ECS. The gateway pod runs on an eksctl Fargate
+# cluster (its own VPC) and invokes the same endpoints.
 deploy-eks:
-	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides Compute=eks
 	$(MAKE) image
 	eksctl create cluster -f eks/create-cluster.yaml
 	sed -e "s|ch04-decision:local|$(REPO):latest|" \
@@ -121,11 +126,13 @@ teardown-eks:
 	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
 	sam delete --no-prompts --region $(REGION)
 
-# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# -------------------------------------------------------------------------------
+# iam: provision THIS chapter's deploy identity, when you start the chapter
 # Creates ch04-user from iam/deploy.json (least-privilege for ch-04 only) and trusts you to
 # assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
 # editing the policy. Then add a [profile ch04] (role_arn + source_profile) and
 # run cloud targets with AWS_PROFILE=ch04.
+# -------------------------------------------------------------------------------
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
 iam:
