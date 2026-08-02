@@ -3,7 +3,7 @@ name = "developing-ai-ml-solutions-on-aws"
 version = "0.1.0"
 description = "Book about developing AI/ML solutions on AWS"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "python-docx>=1.2.0",
 ]
