@@ -31,7 +31,7 @@ offline (Iceberg) and online (DynamoDB) store.
 A champion/challenger scorecard trained on SageMaker, tracked in MLflow and tuned
 with AMT, then served three ways — endpoint, Lambda, and Fargate — from one image.
 
-![The serving layer](ch-02-mlops/diagrams/png/fig_serving_surfaces.png)
+![The serving layer](ch-02-mlops/diagrams/png/fig_serving_layer.png)
 
 - **AWS services:** Amazon SageMaker AI (training, endpoints, Pipelines, MLflow,
   AMT), Amazon ECR, AWS CodeBuild, AWS Deep Learning Containers, AWS Lambda, AWS
