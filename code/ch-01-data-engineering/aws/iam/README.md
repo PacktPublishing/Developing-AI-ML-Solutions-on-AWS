@@ -2,7 +2,7 @@
 
 **Deploy identity.** This chapter deploys with the `ch01-user` role, not admin —
 its permissions are in `deploy.json`. Bootstrap it once and assume it as described
-in [`code/README.md`](../../../README.md) (`code/setup-users.sh`).
+in [`code/README.md`](../../../README.md) (`make iam` in aws/).
 
 **Service roles.** The Glue job needs its own role (Glue assumes it at run time),
 templated here with `<ACCOUNT_ID>`/`<REGION>`:

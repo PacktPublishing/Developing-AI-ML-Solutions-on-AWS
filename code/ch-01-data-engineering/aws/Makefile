@@ -1,4 +1,4 @@
-.PHONY: airflow-deploy airflow-password airflow-delete lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
+.PHONY: iam airflow-deploy airflow-password airflow-delete lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
 
 S3TABLES_ARN ?= arn:aws:s3tables:us-east-1:$(ACCOUNT):bucket/ch01-lake
 
@@ -81,3 +81,17 @@ clean-feature-group:
 clean-lake:
 	env -u AWS_ENDPOINT_URL aws s3 rm s3://$(LAKE_BUCKET) --recursive
 	env -u AWS_ENDPOINT_URL aws s3 rb s3://$(LAKE_BUCKET)
+
+# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# Creates ch01-user from iam/deploy.json (least-privilege for ch-01 only) and trusts you to
+# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
+# editing the policy. Then add a [profile ch01] (role_arn + source_profile) and
+# run cloud targets with AWS_PROFILE=ch01.
+PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
+TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
+iam:
+	@aws iam create-role --role-name ch01-user --description "Deploy/operate ch-01" \
+		--assume-role-policy-document '$(TRUST)' 2>/dev/null \
+		|| aws iam update-assume-role-policy --role-name ch01-user --policy-document '$(TRUST)'
+	aws iam put-role-policy --role-name ch01-user --policy-name deploy --policy-document file://iam/deploy.json
+	@echo "ch01-user ready"

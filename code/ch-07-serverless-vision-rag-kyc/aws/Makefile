@@ -1,4 +1,4 @@
-.PHONY: build-setup image deploy delete
+.PHONY: iam build-setup image deploy delete
 
 STACK ?= ch07-vision-rag
 BUILD_STACK := $(STACK)-build
@@ -29,3 +29,17 @@ deploy:
 delete:
 	cd vision-rag && sam delete --stack-name $(STACK) --no-prompts
 	aws cloudformation delete-stack --stack-name $(BUILD_STACK)
+
+# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# Creates ch07-user from iam/deploy.json (least-privilege for ch-07 only) and trusts you to
+# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
+# editing the policy. Then add a [profile ch07] (role_arn + source_profile) and
+# run cloud targets with AWS_PROFILE=ch07.
+PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
+TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
+iam:
+	@aws iam create-role --role-name ch07-user --description "Deploy/operate ch-07" \
+		--assume-role-policy-document '$(TRUST)' 2>/dev/null \
+		|| aws iam update-assume-role-policy --role-name ch07-user --policy-document '$(TRUST)'
+	aws iam put-role-policy --role-name ch07-user --policy-name deploy --policy-document file://iam/deploy.json
+	@echo "ch07-user ready"

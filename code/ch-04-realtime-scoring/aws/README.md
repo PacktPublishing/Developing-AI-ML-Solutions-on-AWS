@@ -10,7 +10,7 @@ This chapter deploys as `ch04-user`, a role carrying only the grants in
 `iam/deploy.json` (EC2/VPC, ELB, ECS, ECR, DynamoDB, CodeBuild, plus the
 CloudFormation and scoped IAM needed to create the stack). Bootstrap the role
 once and assume it via a profile — see
-[`code/README.md`](../../README.md) (`code/setup-users.sh`). Then deploy under
+[`code/README.md`](../../README.md) (`make iam` in aws/). Then deploy under
 that profile:
 
 ```

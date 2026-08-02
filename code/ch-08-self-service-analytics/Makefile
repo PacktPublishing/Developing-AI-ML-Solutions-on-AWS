@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f local/analytics-stack.yml
 
-.PHONY: llm local local-stop lint
+.PHONY: iam llm local local-stop lint
 
 # Local means local: Claude Code drives gpt-oss:20b on the host through
 # Ollama's Anthropic-compatible API (the model Ollama recommends for Claude
@@ -43,3 +43,17 @@ llm:
 		--enable-prefix-caching \
 		--default-chat-template-kwargs '{"reasoning_effort": "low"}' \
 		--speculative-config '{"method":"ngram","num_speculative_tokens":8,"prompt_lookup_max":4}'
+
+# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# Creates ch08-user from aws/iam/deploy.json (least-privilege for ch-08 only) and trusts you to
+# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
+# editing the policy. Then add a [profile ch08] (role_arn + source_profile) and
+# run cloud targets with AWS_PROFILE=ch08.
+PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
+TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
+iam:
+	@aws iam create-role --role-name ch08-user --description "Deploy/operate ch-08" \
+		--assume-role-policy-document '$(TRUST)' 2>/dev/null \
+		|| aws iam update-assume-role-policy --role-name ch08-user --policy-document '$(TRUST)'
+	aws iam put-role-policy --role-name ch08-user --policy-name deploy --policy-document file://aws/iam/deploy.json
+	@echo "ch08-user ready"

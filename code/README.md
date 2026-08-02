@@ -89,17 +89,20 @@ quota (the "runs out of permissions" failure); one assumable role per chapter av
 that and keeps each chapter least-privilege. Each role's permissions live in that
 chapter's `aws/iam/deploy.json`.
 
-Bootstrap once, from a privileged identity that can create roles:
+**Provision it per chapter, when you reach that chapter's cloud work — not the
+whole book up front.** Each chapter's `aws/Makefile` has an `iam` target; from a
+privileged identity (one that can create roles):
 
 ```bash
-code/setup-users.sh create arn:aws:iam::<ACCOUNT_ID>:user/<your-base-user>
+make -C code/ch-04-realtime-scoring/aws iam    # creates ch04-user from its deploy.json
 ```
 
-That creates all eight roles, each trusting `<your-base-user>` to `sts:AssumeRole`
-and carrying its chapter's `deploy.json` inline. Re-run it after editing any
-`deploy.json` (updates in place); `code/setup-users.sh delete` removes them all.
+`make iam` creates `chNN-user` trusting you to `sts:AssumeRole` and attaches that
+chapter's `deploy.json` inline. Re-run it after editing the policy (updates in
+place). (ch-08 has no `aws/Makefile`, so its target is `make -C
+code/ch-08-self-service-analytics iam`.)
 
-Add a profile per chapter to `~/.aws/config` and deploy under it:
+Then add a profile for the chapter to `~/.aws/config` and deploy under it:
 
 ```ini
 [profile ch04]
@@ -113,8 +116,8 @@ make -C code/ch-04-realtime-scoring deploy AWS_PROFILE=ch04
 ```
 
 **These policies are best-effort and must be author-tested.** Each `deploy.json`
-was derived from the chapter's `aws/` template and Make targets, not from a live
-deploy. Least-privilege is iterative: assume the role, deploy, and if a call returns
-`AccessDenied`, add that one action to the chapter's `deploy.json` and re-run the
-bootstrap. A few statements stay broad (`ec2:*Vpc*`, `glue:*`, `sagemaker:*`) where
-tight ARN scoping isn't practical.
+was derived from the chapter's `aws/` and Make targets. Least-privilege is
+iterative: run the chapter as `chNN-user`, and if a call returns `AccessDenied`,
+add that one action to the chapter's `deploy.json` and re-run `make iam`. A few
+statements stay broad (`ec2:*Vpc*`, `glue:*`, `sagemaker:*`) where tight ARN
+scoping isn't practical.

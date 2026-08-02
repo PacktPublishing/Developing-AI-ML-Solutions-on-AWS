@@ -1,4 +1,4 @@
-.PHONY: lint deploy image scale-up scale-down decide teardown
+.PHONY: iam lint deploy image scale-up scale-down decide teardown
 
 REGION ?= us-east-1
 STACK := realtime-scoring-ch04
@@ -53,3 +53,17 @@ teardown:
 		--service decision-service --desired-count 0
 	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
 	sam delete --no-prompts --region $(REGION)
+
+# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# Creates ch04-user from iam/deploy.json (least-privilege for ch-04 only) and trusts you to
+# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
+# editing the policy. Then add a [profile ch04] (role_arn + source_profile) and
+# run cloud targets with AWS_PROFILE=ch04.
+PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
+TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
+iam:
+	@aws iam create-role --role-name ch04-user --description "Deploy/operate ch-04" \
+		--assume-role-policy-document '$(TRUST)' 2>/dev/null \
+		|| aws iam update-assume-role-policy --role-name ch04-user --policy-document '$(TRUST)'
+	aws iam put-role-policy --role-name ch04-user --policy-name deploy --policy-document file://iam/deploy.json
+	@echo "ch04-user ready"

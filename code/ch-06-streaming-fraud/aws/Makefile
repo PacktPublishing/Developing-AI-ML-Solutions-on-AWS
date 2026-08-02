@@ -1,4 +1,4 @@
-.PHONY: lint deploy image endpoint-local endpoint produce blocks teardown
+.PHONY: iam lint deploy image endpoint-local endpoint produce blocks teardown
 
 # The cloud round, in order: `make deploy` (the SAM stack: streams, table,
 # ECR, Firehose, consumer), `make image` (push the serving image), `make
@@ -79,3 +79,17 @@ teardown:
 	-aws sagemaker delete-model --region $(REGION) --model-name fraud-scoring
 	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
 	sam delete --no-prompts --region $(REGION)
+
+# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# Creates ch06-user from iam/deploy.json (least-privilege for ch-06 only) and trusts you to
+# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
+# editing the policy. Then add a [profile ch06] (role_arn + source_profile) and
+# run cloud targets with AWS_PROFILE=ch06.
+PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
+TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
+iam:
+	@aws iam create-role --role-name ch06-user --description "Deploy/operate ch-06" \
+		--assume-role-policy-document '$(TRUST)' 2>/dev/null \
+		|| aws iam update-assume-role-policy --role-name ch06-user --policy-document '$(TRUST)'
+	aws iam put-role-policy --role-name ch06-user --policy-name deploy --policy-document file://iam/deploy.json
+	@echo "ch06-user ready"
