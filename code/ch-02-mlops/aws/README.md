@@ -42,7 +42,7 @@ aws/
 ```
 
 The one-time setup the `Makefile` assumes (ECR repos, CodeBuild projects, IAM
-roles) is created interactively the first time; the serving surfaces `batch`,
+roles) is created interactively the first time; the serving options `batch`,
 `lambda`, and `fargate` have their own local and cloud paths under `src/serving/`.
 
 ## Cost and quota notes

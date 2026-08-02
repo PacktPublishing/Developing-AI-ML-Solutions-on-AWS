@@ -14,10 +14,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-TUNING = Path(__file__).resolve().parent.parent / "tuning"
+ROOT = Path(__file__).resolve().parent.parent
+TUNING = ROOT / "src" / "tuning"
 TRIAL = TUNING / "trial.py"
 LOCAL_AMT = TUNING / "amt.py"
-CLOUD_AMT = TUNING.parent / "aws" / "jobs" / "amt.py"
+CLOUD_AMT = ROOT / "aws" / "jobs" / "amt.py"
 
 
 # -------------------------------------------------------------------------------

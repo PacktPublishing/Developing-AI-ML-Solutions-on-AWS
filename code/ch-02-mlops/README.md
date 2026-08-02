@@ -1,4 +1,4 @@
-# MLOps on AWS: training, tracking, and the serving surface
+# MLOps on AWS: training, tracking, and the serving layer
 
 The running example for the MLOps chapter. A mid-sized bank is moving its credit
 scoring onto SageMaker. Its established model is a Weight-of-Evidence
@@ -64,7 +64,7 @@ The code never changes; environment seams switch worlds.
 
 The `aws/` folder reproduces each step on real AWS.
 
-## The serving surface (all run on real AWS, parity-checked)
+## The serving layer (all run on real AWS, parity-checked)
 
 - **Real-time**: a serverless SageMaker endpoint from the registry. `make serve`
   is the local equivalent (same image).
@@ -83,6 +83,6 @@ The `aws/` folder reproduces each step on real AWS.
 - `src/scorecard/`: the incumbent WOE scorecard container (fastwoe + LogisticRegression)
 - `src/challenger/`: the monotone XGBoost challenger container
 - `src/tuning/amt.py`: local HPO with Syne Tune (Bayesian TPE, no instance), tracked in MLflow
-- `src/serving/batch.py`, `src/serving/lambda/`, `src/serving/fargate/`: the serving surfaces
+- `src/serving/batch.py`, `src/serving/lambda/`, `src/serving/fargate/`: the serving options
 - `aws/`: reproduce on real AWS (SDK v3), with IAM notes
 - `Makefile`: the targets above; `make lint` runs ruff
