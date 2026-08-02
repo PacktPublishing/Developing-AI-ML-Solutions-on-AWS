@@ -21,13 +21,17 @@ The local cloud is real engines in Docker, no mocks and no LocalStack:
 Models train and serve in **custom containers** (bring-your-own-container): one
 image both trains (the SageMaker `/opt/ml` contract) and serves (`/ping` and
 `/invocations`), so the exact image that produced a model is the one behind the
-endpoint. The chapter uses **SageMaker Python SDK v3** throughout — cloud and
-local (`sagemaker.train.ModelTrainer`, `sagemaker.serve.ModelBuilder`,
-`sagemaker.train.tuner.HyperparameterTuner`, and the pipeline in `src/pipeline/`);
-where v3's local mode has gaps, the chapter fills them in place
-(`src/pipeline/pipeline.py`) rather than falling back to v2. Local hyperparameter
-search runs on **Syne Tune** (the AMT team's open-source tuner, `src/tuning/amt.py`);
-the managed search is SageMaker AMT (`aws/jobs/amt.py`).
+endpoint. The chapter uses **SageMaker Python SDK v3** for the managed work on
+AWS: `sagemaker.train.ModelTrainer` runs the training job,
+`sagemaker.train.tuner.HyperparameterTuner` runs Automatic Model Tuning, and
+`sagemaker.serve.ModelBuilder` deploys the winner to an endpoint. Locally the same
+container runs directly under Docker (`docker run <image> train` and
+`docker run <image> serve`), so the laptop exercises the exact image the cloud
+runs. The one component that also drives the SDK v3 locally is the pipeline
+(`src/pipeline/pipeline.py`), on a `LocalPipelineSession` that works around v3's
+local-mode gaps. Local hyperparameter search runs on **Syne Tune** (the AMT team's
+open-source tuner, `src/tuning/amt.py`); the managed search is SageMaker AMT
+(`aws/jobs/amt.py`).
 
 ## Run it
 
@@ -78,11 +82,11 @@ The `aws/` folder reproduces each step on real AWS.
 
 ## Layout
 
-- `local/mlflow-stack.yml`: the local cloud (S3Proxy)
-- `data/generate_applications.py`: synthetic credit data + the shared monotone spec
-- `src/scorecard/`: the incumbent WOE scorecard container (fastwoe + LogisticRegression)
-- `src/challenger/`: the monotone XGBoost challenger container
-- `src/tuning/amt.py`: local HPO with Syne Tune (Bayesian TPE, no instance), tracked in MLflow
-- `src/serving/batch.py`, `src/serving/lambda/`, `src/serving/fargate/`: the serving options
-- `aws/`: reproduce on real AWS (SDK v3), with IAM notes
-- `Makefile`: the targets above; `make lint` runs ruff
+- <img src="../../assets/diagrams/icons/fa-database.png" height="14"> `local/mlflow-stack.yml`: the local cloud (S3Proxy)
+- <img src="../../assets/diagrams/icons/fa-broom.png" height="14"> `data/generate_applications.py`: synthetic credit data + the shared monotone spec
+- <img src="../../assets/diagrams/icons/fa-user-graduate.png" height="14"> `src/scorecard/`: the incumbent WOE scorecard container (fastwoe + LogisticRegression)
+- <img src="../../assets/diagrams/icons/fa-user-graduate.png" height="14"> `src/challenger/`: the monotone XGBoost challenger container
+- <img src="../../assets/diagrams/icons/fa-sliders-h.png" height="14"> `src/tuning/amt.py`: local HPO with Syne Tune (Bayesian TPE, no instance), tracked in MLflow
+- <img src="../../assets/diagrams/icons/fa-play-circle.png" height="14"> `src/serving/batch.py`, `src/serving/lambda/`, `src/serving/fargate/`: the serving options
+- <img src="../../assets/diagrams/icons/fa-rocket.png" height="14"> `aws/`: reproduce on real AWS (SDK v3), with IAM notes
+- <img src="../../assets/diagrams/icons/fa-cog.png" height="14"> `Makefile`: the targets above; `make lint` runs ruff
