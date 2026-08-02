@@ -12,6 +12,8 @@
       ],
       "Resource": "arn:aws:iam::*:role/ch02-*"
     },
+    {"Sid": "PassSageMakerExecutionRole", "Effect": "Allow", "Action": "iam:PassRole", "Resource": "arn:aws:iam::*:role/*AmazonSageMaker*"},
+    {"Sid": "FindTrainingQuota", "Effect": "Allow", "Action": ["servicequotas:GetServiceQuota", "servicequotas:ListServiceQuotas"], "Resource": "*"},
     {"Sid": "SageMaker", "Effect": "Allow", "Action": "sagemaker:*", "Resource": "*"},
     {"Sid": "SageMakerMlflow", "Effect": "Allow", "Action": ["sagemaker-mlflow:*"], "Resource": "*"},
     {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": ["arn:aws:ecr:us-east-1:*:repository/ch02-*"]},
@@ -31,7 +33,7 @@
     {"Sid": "Ecs", "Effect": "Allow", "Action": "ecs:*", "Resource": "*"},
     {"Sid": "FargateNetworking", "Effect": "Allow", "Action": ["ec2:Describe*", "ec2:*SecurityGroup*", "ec2:*Tags"], "Resource": "*"},
     {"Sid": "ApiGateway", "Effect": "Allow", "Action": "apigateway:*", "Resource": "arn:aws:apigateway:us-east-1::/*"},
-    {"Sid": "ArtifactBuckets", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch02-*", "arn:aws:s3:::ch02-*/*", "arn:aws:s3:::sagemaker-us-east-1-*", "arn:aws:s3:::sagemaker-us-east-1-*/*"]},
+    {"Sid": "ArtifactBuckets", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch02-*", "arn:aws:s3:::ch02-*/*", "arn:aws:s3:::sagemaker-us-east-1-*", "arn:aws:s3:::sagemaker-us-east-1-*/*", "arn:aws:s3:::amazon-sagemaker-*", "arn:aws:s3:::amazon-sagemaker-*/*"]},
     {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch02*"}
   ]
 }
