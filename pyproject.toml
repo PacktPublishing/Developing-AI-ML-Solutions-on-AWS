@@ -46,7 +46,7 @@ ignore = ["D107"]
 convention = "pep257"
 
 [tool.ty.environment]
-python-version = "3.14"
+python-version = "3.12"
 
 [tool.ty.rules]
 possibly-unresolved-reference = "warn"
