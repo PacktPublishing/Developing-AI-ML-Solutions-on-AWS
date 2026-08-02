@@ -100,7 +100,7 @@ make -C code/ch-04-realtime-scoring/aws iam    # creates ch04-user from its depl
 `make iam` creates `chNN-user` trusting you to `sts:AssumeRole` and attaches that
 chapter's `deploy.json` inline. Re-run it after editing the policy (updates in
 place). (ch-08 has no `aws/Makefile`, so its target is `make -C
-code/ch-08-self-service-analytics iam`.)
+code/ch-08-selfservice-analytics iam`.)
 
 Then add a profile for the chapter to `~/.aws/config` and deploy under it:
 
