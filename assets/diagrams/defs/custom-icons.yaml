@@ -50,3 +50,87 @@ Definitions:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "redshift-local.png"}
     Label: {Title: "redshift-local", Color: "rgba(0, 0, 0, 255)"}
+
+  # ML-concept glyphs from Font Awesome Free 5.15.4 (fa-*.svg sources
+  # beside the PNGs). Icons are CC BY 4.0; attribution kept inline in each
+  # SVG and in icons/FONT-AWESOME-LICENSE.md.
+  TrainingJob:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-user-graduate.png"}
+    Label: {Title: "Training job", Color: "rgba(0, 0, 0, 255)"}
+  Metrics:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-chart-bar.png"}
+    Label: {Title: "Metrics", Color: "rgba(0, 0, 0, 255)"}
+  DataCleaning:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-broom.png"}
+    Label: {Title: "Data cleaning", Color: "rgba(0, 0, 0, 255)"}
+  Deployment:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-rocket.png"}
+    Label: {Title: "Deployment", Color: "rgba(0, 0, 0, 255)"}
+  PipelineIcon:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-code-branch.png"}
+    Label: {Title: "Pipeline", Color: "rgba(0, 0, 0, 255)"}
+  Notebook:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-laptop-code.png"}
+    Label: {Title: "Notebook", Color: "rgba(0, 0, 0, 255)"}
+  ProcessingJob:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-cog.png"}
+    Label: {Title: "Processing job", Color: "rgba(0, 0, 0, 255)"}
+  Data:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-database.png"}
+    Label: {Title: "Data", Color: "rgba(0, 0, 0, 255)"}
+  Model:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-brain.png"}
+    Label: {Title: "Model", Color: "rgba(0, 0, 0, 255)"}
+  Tuning:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-sliders-h.png"}
+    Label: {Title: "Tuning", Color: "rgba(0, 0, 0, 255)"}
+  LabelingJob:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-tag.png"}
+    Label: {Title: "Labeling job", Color: "rgba(0, 0, 0, 255)"}
+  Inference:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-play-circle.png"}
+    Label: {Title: "Inference", Color: "rgba(0, 0, 0, 255)"}
+  Monitoring:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-eye.png"}
+    Label: {Title: "Monitoring", Color: "rgba(0, 0, 0, 255)"}
+  AutoML:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-robot.png"}
+    Label: {Title: "AutoML", Color: "rgba(0, 0, 0, 255)"}
+  TransferLearning:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-exchange-alt.png"}
+    Label: {Title: "Transfer learning", Color: "rgba(0, 0, 0, 255)"}
+  ModelRegistry:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-book.png"}
+    Label: {Title: "Model registry", Color: "rgba(0, 0, 0, 255)"}
+  EdgeDevice:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-mobile-alt.png"}
+    Label: {Title: "Edge device", Color: "rgba(0, 0, 0, 255)"}
+  DeepLearning:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-network-wired.png"}
+    Label: {Title: "Deep learning", Color: "rgba(0, 0, 0, 255)"}
+  Experiment:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-flask.png"}
+    Label: {Title: "Experiment", Color: "rgba(0, 0, 0, 255)"}
+  BatchTransform:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fa-sync-alt.png"}
+    Label: {Title: "Batch transform", Color: "rgba(0, 0, 0, 255)"}

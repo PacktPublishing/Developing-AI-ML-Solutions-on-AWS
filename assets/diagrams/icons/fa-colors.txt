@@ -1,0 +1,25 @@
+# Color map for the Font Awesome concept glyphs, applied at render time —
+# the SVGs stay upstream-pure (black), render-fa.sh reads this file.
+# Colors follow the AWS architecture-icon category palette:
+#   #01A88D machine learning   #8C4FFF analytics   #ED7100 compute
+#   #C925D1 database           #7AA116 storage     #E7157B integration
+fa-user-graduate #01A88D
+fa-chart-bar #8C4FFF
+fa-broom #8C4FFF
+fa-rocket #01A88D
+fa-code-branch #01A88D
+fa-laptop-code #01A88D
+fa-cog #01A88D
+fa-database #C925D1
+fa-brain #01A88D
+fa-sliders-h #01A88D
+fa-tag #01A88D
+fa-play-circle #01A88D
+fa-eye #01A88D
+fa-robot #01A88D
+fa-exchange-alt #01A88D
+fa-book #01A88D
+fa-mobile-alt #ED7100
+fa-network-wired #01A88D
+fa-flask #01A88D
+fa-sync-alt #01A88D
