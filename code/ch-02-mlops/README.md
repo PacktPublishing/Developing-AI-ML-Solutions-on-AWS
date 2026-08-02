@@ -24,12 +24,15 @@ image both trains (the SageMaker `/opt/ml` contract) and serves (`/ping` and
 endpoint. The chapter uses **SageMaker Python SDK v3** for the managed work on
 AWS: `sagemaker.train.ModelTrainer` runs the training job,
 `sagemaker.train.tuner.HyperparameterTuner` runs Automatic Model Tuning, and
-`sagemaker.serve.ModelBuilder` deploys the winner to an endpoint. Locally the same
-container runs directly under Docker (`docker run <image> train` and
-`docker run <image> serve`), so the laptop exercises the exact image the cloud
-runs. The one component that also drives the SDK v3 locally is the pipeline
-(`src/pipeline/pipeline.py`), on a `LocalPipelineSession` that works around v3's
-local-mode gaps. Local hyperparameter search runs on **Syne Tune** (the AMT team's
+`sagemaker.serve.ModelBuilder` deploys the winner to an endpoint. The same container
+runs locally two ways. Directly under Docker (`make train`, `make serve`,
+`make batch` — plain `docker run`s), so the laptop exercises the exact image the
+cloud runs. And through the SDK's **local mode**, the same deploy code the cloud
+uses with the mode swapped: `make sm-local` serves it as a local SageMaker endpoint
+(`Mode.LOCAL_CONTAINER`) and `make sm-batch` runs a local SageMaker Batch Transform
+job on it (`make batch` is a hand loop over `/invocations`; `sm-batch` is the real
+managed job, run locally). The pipeline (`src/pipeline/pipeline.py`) runs on a
+`LocalPipelineSession` too. Local hyperparameter search runs on **Syne Tune** (the AMT team's
 open-source tuner, `src/tuning/amt.py`); the managed search is SageMaker AMT
 (`aws/jobs/amt.py`).
 

@@ -1,4 +1,4 @@
-.PHONY: up seed train train-challenger mlflow-train mlflow-ui serve score batch \
+.PHONY: up seed train train-challenger mlflow-train mlflow-ui serve score batch sm-push sm-local sm-batch \
 	amt lambda-build lambda-local fargate-build fargate-local pipeline-parity down lint diagrams
 
 # The local cloud is S3Proxy (S3 API) only; MLflow is serverless — no tracking
@@ -61,6 +61,34 @@ serve:
 
 score:
 	curl -s -X POST http://localhost:8091/invocations -H 'Content-Type: application/json' --data-binary @fixtures/sample.json; echo
+
+# --- SageMaker local mode: the same BYOC image run through the SDK v3 (not a plain
+# docker run), the counterpart of `make serve`/`make batch`. Needs real AWS creds, a
+# SageMaker role (SM_ROLE), and the image in ECR (make sm-push); env -u strips the
+# offline S3Proxy placeholders. First `make seed train`. ----------------------------
+ACCOUNT ?= $(shell env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY aws sts get-caller-identity --query Account --output text)
+ECR := $(ACCOUNT).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com
+SM_ROLE ?=
+
+sm-push:
+	aws ecr describe-repositories --repository-names ch02-scorecard --region $(AWS_DEFAULT_REGION) >/dev/null 2>&1 || \
+		aws ecr create-repository --repository-name ch02-scorecard --region $(AWS_DEFAULT_REGION) >/dev/null
+	aws ecr get-login-password --region $(AWS_DEFAULT_REGION) | docker login --username AWS --password-stdin $(ECR)
+	docker buildx build --platform linux/amd64 --provenance=false -t $(ECR)/ch02-scorecard:latest --push src/scorecard
+
+# real-time: the container as a local SageMaker endpoint (Mode.LOCAL_CONTAINER)
+sm-local:
+	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn>"; exit 1; }
+	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
+		MODEL_IMAGE=$(ECR)/ch02-scorecard:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
+		MODEL_PATH=runs-local/model uv run --no-project src/serving/local_endpoint.py
+
+# batch: the same container as a local SageMaker Batch Transform job
+sm-batch:
+	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn>"; exit 1; }
+	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
+		MODEL_IMAGE=$(ECR)/ch02-scorecard:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
+		MODEL_PATH=runs-local/model uv run --no-project src/serving/local_transform.py
 
 # batch-score a file through a local serving container (parity with the endpoint)
 batch:
