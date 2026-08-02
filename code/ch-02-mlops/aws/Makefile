@@ -1,4 +1,4 @@
-.PHONY: image mlflow-app mlflow-app-status mlflow-app-delete train amt \
+.PHONY: iam image image-bootstrap image-teardown mlflow-app mlflow-app-status mlflow-app-delete train amt \
 	deploy-byoc deploy-modelbuilder
 
 # Reproduce the chapter on real AWS with SDK v3. Account-specific values are
@@ -16,12 +16,56 @@ APP_ARN ?= $(shell aws sagemaker list-mlflow-apps --region $(REGION) --query "Su
 
 MODEL_PATH ?= models:/credit-challenger/1
 
+# --- iam: provision THIS chapter's deploy identity, when you start the chapter -
+# Creates ch02-user from iam/deploy.json (least-privilege for ch-02 only) and
+# trusts you to assume it — no account-wide up-front setup, you provision what the
+# chapter needs when you reach it. Re-run after editing deploy.json. Then add a
+# [profile ch02] (role_arn + source_profile) and run cloud targets AWS_PROFILE=ch02.
+PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
+TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
+iam:
+	@aws iam create-role --role-name ch02-user --description "Deploy/operate ch-02" \
+		--assume-role-policy-document '$(TRUST)' 2>/dev/null \
+		|| aws iam update-assume-role-policy --role-name ch02-user --policy-document '$(TRUST)'
+	aws iam put-role-policy --role-name ch02-user --policy-name deploy --policy-document file://iam/deploy.json
+	@echo "ch02-user ready: arn:aws:iam::$(ACCOUNT):role/ch02-user"
+
 # --- image: build the container in the cloud (CodeBuild -> ECR) ---------------
-# image/buildspec.yml is the build; image/github-actions.yml triggers it on push.
-# Assumes the CodeBuild projects exist (see README for one-time setup).
+# image-bootstrap creates the ECR repo + CodeBuild project + source bucket
+# (image/build.yaml, once per image). image then zips the build context, uploads
+# it, starts the build, and waits. REPO=ch02-challenger (train_job.py's image) or
+# ch02-scorecard; image/github-actions.yml is the CI that triggers the same build.
+REPO ?= ch02-challenger
+SRCDIR = $(if $(filter ch02-scorecard,$(REPO)),scorecard,challenger)
+
+image-bootstrap:
+	aws cloudformation deploy --template-file image/build.yaml \
+		--stack-name $(REPO)-build --capabilities CAPABILITY_IAM \
+		--parameter-overrides RepoName=$(REPO)
+
+# S3 blocks CloudFormation from deleting a non-empty bucket, so empty the source
+# bucket before deleting the stack (EmptyOnDelete clears the ECR image).
+image-teardown:
+	@BKT=$$(aws cloudformation describe-stack-resources --stack-name $(REPO)-build \
+		--query "StackResources[?ResourceType=='AWS::S3::Bucket'].PhysicalResourceId" --output text 2>/dev/null); \
+	if [ -n "$$BKT" ] && [ "$$BKT" != "None" ]; then echo "emptying s3://$$BKT"; aws s3 rm "s3://$$BKT" --recursive; fi
+	aws cloudformation delete-stack --stack-name $(REPO)-build
+	aws cloudformation wait stack-delete-complete --stack-name $(REPO)-build
+	@echo "$(REPO)-build torn down"
+
 image:
-	aws codebuild start-build --project-name ch02-scorecard-build
-	aws codebuild start-build --project-name ch02-challenger-build
+	$(eval BUCKET := $(shell aws cloudformation describe-stacks --stack-name $(REPO)-build \
+		--query "Stacks[0].Outputs[?OutputKey=='SourceBucket'].OutputValue" --output text))
+	rm -f /tmp/$(REPO)-src.zip
+	cd ../src/$(SRCDIR) && zip -q -r /tmp/$(REPO)-src.zip . -x '__pycache__/*'
+	zip -qj /tmp/$(REPO)-src.zip image/buildspec.yml
+	aws s3 cp /tmp/$(REPO)-src.zip s3://$(BUCKET)/src.zip
+	@ID=$$(aws codebuild start-build --project-name $(REPO)-build --query 'build.id' --output text); \
+	echo "build $$ID"; \
+	while STATUS=$$(aws codebuild batch-get-builds --ids $$ID \
+		--query 'builds[0].buildStatus' --output text); \
+		[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
+		echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
 
 # --- mlflow app: the serverless tracking server's successor -------------------
 mlflow-app:
