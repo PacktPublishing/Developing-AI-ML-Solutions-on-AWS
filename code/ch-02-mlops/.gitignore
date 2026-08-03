@@ -1,4 +1,5 @@
 # local run artifacts — nothing here is manuscript
+std.out
 data/*.csv
 data/split/
 model/
