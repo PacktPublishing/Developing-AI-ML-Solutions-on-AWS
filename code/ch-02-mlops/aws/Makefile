@@ -7,6 +7,7 @@
 REGION ?= us-east-1
 ACCOUNT := $(shell aws sts get-caller-identity --query Account --output text)
 REGISTRY := $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
+SCORECARD_IMAGE := $(REGISTRY)/ch02-scorecard:latest
 CHALLENGER_IMAGE := $(REGISTRY)/ch02-challenger:latest
 
 # the SageMaker default bucket, an execution role, and the MLflow App ARN
@@ -90,7 +91,7 @@ mlflow-app-delete:
 # jobs: training and tuning (need training-instance quota)
 # -------------------------------------------------------------------------------
 train:
-	IMAGE_URI=$(CHALLENGER_IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
+	IMAGE_URI=$(SCORECARD_IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
 		MLFLOW_TRACKING_URI=$(APP_ARN) AWS_DEFAULT_REGION=$(REGION) uv run jobs/train_job.py
 amt:
 	IMAGE_URI=$(CHALLENGER_IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \

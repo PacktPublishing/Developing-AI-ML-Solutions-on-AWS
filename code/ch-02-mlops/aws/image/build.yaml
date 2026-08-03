@@ -14,6 +14,7 @@ Parameters:
     AllowedValues:
       - ch02-challenger
       - ch02-scorecard
+      - ch02-pipeline-step
 
 Resources:
 
