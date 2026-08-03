@@ -1,5 +1,5 @@
 # The monthly batch limit run: an EventBridge schedule starts the SageMaker
-# pipeline, which reads the warehouse (Redshift Serverless from chapter 1), scores
+# pipeline, which reads the warehouse (its own Redshift Serverless), scores
 # limits in the step container (image built by CodeBuild -> ECR), and stages
 # results in S3. A failure event fans out to an SNS topic for alerts.
 Diagram:
@@ -56,7 +56,7 @@ Diagram:
     Redshift:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Redshift"
-      Title: "Redshift\nwarehouse (ch-01)"
+      Title: "Redshift\nwarehouse"
     Bucket:
       Type: AWS::S3::Bucket
       Title: "S3\nbatch results"
