@@ -41,6 +41,9 @@ IMAGE_URI = os.environ["IMAGE_URI"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]
 BUCKET = os.environ["ARTIFACT_BUCKET"]
 APP_ARN = os.environ["MLFLOW_TRACKING_ARN"]
+# ml.m5.large. AMT spends training-job instances (MaxParallelTrainingJobs at a time),
+# so it needs "ml.m5.large for training job usage" quota (fresh account = 0). Cold-run
+# on the book account 2026-07-23 (tuning job Completed).
 INSTANCE_TYPE = os.environ.get("INSTANCE_TYPE", "ml.m5.large")
 
 # -------------------------------------------------------------------------------

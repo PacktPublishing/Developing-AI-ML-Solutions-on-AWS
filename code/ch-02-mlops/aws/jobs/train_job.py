@@ -30,6 +30,9 @@ REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 IMAGE_URI = os.environ["IMAGE_URI"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]
 BUCKET = os.environ["ARTIFACT_BUCKET"]
+# ml.m5.large, 1 instance. Needs the SageMaker "ml.m5.large for training job usage"
+# quota >= 1 (a fresh account starts at 0 — request an increase in Service Quotas).
+# Cold-verified on the book account 2026-08-03: training job ran and Completed.
 INSTANCE_TYPE = os.environ.get("INSTANCE_TYPE", "ml.m5.large")
 
 env = {

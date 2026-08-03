@@ -84,6 +84,10 @@ if MODE == "local":
     instance_type = "local"
 else:
     sess = PipelineSession()
+    # ml.m5.large processing instances. train-scorecard and train-challenger run
+    # concurrently, so this needs "ml.m5.large for processing job usage" quota >= 2
+    # (fresh account = 0; request an increase). Cold-verified on the book account
+    # 2026-08-03: the pipeline ran all 5 steps and Succeeded.
     instance_type = os.environ.get("INSTANCE_TYPE", "ml.m5.large")
 
 
