@@ -12,7 +12,8 @@ it — the image already proven to give byte-exact parity. It fits the serverles
 memory quota and needs no dependency resolution at deploy time.
 
 Env: MLFLOW_TRACKING_ARN, SAGEMAKER_ROLE_ARN, ARTIFACT_BUCKET, IMAGE_URI (required)
-     MLFLOW_MODEL_PATH (default models:/credit-challenger/3)
+     MLFLOW_MODEL_PATH (default: the latest registered credit-challenger version)
+     REGISTERED_MODEL (default credit-challenger)
      MODEL_FILES (default "challenger.ubj feature_spec.json")
 """
 
@@ -22,6 +23,7 @@ import tarfile
 
 import boto3
 import mlflow
+from mlflow import MlflowClient
 
 # -------------------------------------------------------------------------------
 # Environment
@@ -31,15 +33,28 @@ ARN = os.environ["MLFLOW_TRACKING_ARN"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]
 BUCKET = os.environ["ARTIFACT_BUCKET"]
 IMAGE_URI = os.environ["IMAGE_URI"]
-MODEL_PATH = os.environ.get("MLFLOW_MODEL_PATH", "models:/credit-challenger/3")
+REGISTERED_MODEL = os.environ.get("REGISTERED_MODEL", "credit-challenger")
+MODEL_PATH = os.environ.get("MLFLOW_MODEL_PATH")  # empty -> resolve latest below
 MODEL_FILES = os.environ.get("MODEL_FILES", "challenger.ubj feature_spec.json").split()
 NAME = os.environ.get("ENDPOINT_NAME", "ch02-challenger-byoc")
 
 # -------------------------------------------------------------------------------
 # Artifact download
 # -------------------------------------------------------------------------------
-# 1. Pull the registered model's artifacts from the App registry.
 mlflow.set_tracking_uri(ARN)
+
+# Resolve the version to deploy. Pinning a fixed number is brittle: the registry
+# accrues versions as you retrain, so `.../1` drifts from the newest model. Default
+# to the highest registered version (override MLFLOW_MODEL_PATH to pin one).
+if not MODEL_PATH:
+    versions = MlflowClient().search_model_versions(f"name='{REGISTERED_MODEL}'")
+    if not versions:
+        raise SystemExit(f"no registered versions of {REGISTERED_MODEL}")
+    latest = max(int(v.version) for v in versions)
+    MODEL_PATH = f"models:/{REGISTERED_MODEL}/{latest}"
+    print("resolved latest registered version:", MODEL_PATH)
+
+# 1. Pull the registered model's artifacts from the App registry.
 local_dir = mlflow.artifacts.download_artifacts(MODEL_PATH)
 print("downloaded", MODEL_PATH, "->", local_dir)
 
@@ -53,7 +68,11 @@ with tarfile.open(tar_path, "w:gz") as tar:
     for fname in MODEL_FILES:
         matches = glob.glob(os.path.join(local_dir, "**", fname), recursive=True)
         if not matches:
-            raise SystemExit(f"{fname} not found under {local_dir}")
+            raise SystemExit(
+                f"{fname} not found in {MODEL_PATH} — this version has no raw serving "
+                f"files (e.g. an opaque-pyfunc log). Pin a version that does via "
+                f"MLFLOW_MODEL_PATH."
+            )
         tar.add(matches[0], arcname=fname)
         print("packed", matches[0])
 

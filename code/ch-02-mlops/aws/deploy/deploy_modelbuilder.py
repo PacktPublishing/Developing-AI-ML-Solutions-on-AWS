@@ -14,12 +14,15 @@ path used elsewhere in the chapter.
 
 Deploys serverless so no instance quota is needed. Env:
   MLFLOW_TRACKING_ARN, SAGEMAKER_ROLE_ARN (required)
-  MLFLOW_MODEL_PATH (default models:/credit-challenger/2)
+  MLFLOW_MODEL_PATH (default: the latest registered credit-challenger version)
+  REGISTERED_MODEL (default credit-challenger)
 """
 
 import os
 
+import mlflow
 import pandas as pd
+from mlflow import MlflowClient
 from sagemaker.serve.builder.schema_builder import SchemaBuilder
 from sagemaker.serve.mode.function_pointers import Mode
 from sagemaker.serve.model_builder import ModelBuilder
@@ -27,7 +30,18 @@ from sagemaker.serve.serverless import ServerlessInferenceConfig
 
 ARN = os.environ["MLFLOW_TRACKING_ARN"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]
-MODEL_PATH = os.environ.get("MLFLOW_MODEL_PATH", "models:/credit-challenger/2")
+REGISTERED_MODEL = os.environ.get("REGISTERED_MODEL", "credit-challenger")
+MODEL_PATH = os.environ.get("MLFLOW_MODEL_PATH")  # empty -> resolve latest below
+
+# Default to the highest registered version rather than a brittle fixed number
+# (the registry accrues versions as you retrain). Override MLFLOW_MODEL_PATH to pin.
+mlflow.set_tracking_uri(ARN)
+if not MODEL_PATH:
+    versions = MlflowClient().search_model_versions(f"name='{REGISTERED_MODEL}'")
+    if not versions:
+        raise SystemExit(f"no registered versions of {REGISTERED_MODEL}")
+    MODEL_PATH = f"models:/{REGISTERED_MODEL}/{max(int(v.version) for v in versions)}"
+    print("resolved latest registered version:", MODEL_PATH)
 
 sample_input = pd.DataFrame(
     [

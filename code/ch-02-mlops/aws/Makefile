@@ -14,7 +14,9 @@ BUCKET ?= $(shell aws s3api list-buckets --query "Buckets[?starts_with(Name,'ama
 ROLE ?= $(shell aws iam list-roles --query "Roles[?contains(RoleName,'AmazonSageMaker-ExecutionRole')].Arn | [0]" --output text)
 APP_ARN ?= $(shell aws sagemaker list-mlflow-apps --region $(REGION) --query "Summaries[?Name=='ch02-mlflow'].Arn | [0]" --output text)
 
-MODEL_PATH ?= models:/credit-challenger/1
+# empty by default: the deploy scripts resolve the latest registered version.
+# Pin one to override, e.g. make deploy-byoc MODEL_PATH=models:/credit-challenger/2
+MODEL_PATH ?=
 
 # -------------------------------------------------------------------------------
 # iam: provision THIS chapter's deploy identity, when you start the chapter
