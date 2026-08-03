@@ -4,11 +4,15 @@ The stack carries the pipeline's bucket, the step image built in the cloud,
 the role the pipeline runs as, the EventBridge schedule that starts it, and
 an SNS topic that hears about failures. The pipeline definition is the same
 `src/pipeline/pipeline.py` that ran locally, registered with
-`PIPELINE_MODE=aws`. The warehouse is the chapter's own Redshift Serverless,
-declared in this `template.yaml` behind the `HasWarehouse` condition — it is
-created only when you pass `VpcId` (it bills per second while active, so add
-it for the run and update the stack back without `VpcId` the same day). Pass
-its endpoint as `WAREHOUSE_DSN`.
+`PIPELINE_MODE=aws`. The warehouse is the chapter's own Redshift Serverless in
+its **own self-contained VPC** (subnets, route table, and the VPC endpoints the
+in-VPC jobs need — all declared in `template.yaml`, so there is nothing to look
+up). It is created only when `DeployWarehouse=true` (it bills per second while
+active, so add it for the run and set it back to `false`, or tear down, the same
+day). The pipeline's jobs run in that VPC and reach the private warehouse with
+`psycopg2` (`sslmode=require`); the one-time seed loads it over the Redshift Data
+API. `make pipeline` reads the endpoint, password, subnets, and job security
+group from the stack outputs, so no values are passed by hand.
 
 ## Before the first deploy
 
@@ -26,22 +30,15 @@ make deploy AWS_PROFILE=ch05
 ## Run it, in order
 
 ```
-make deploy      # bucket, ECR, CodeBuild, roles, schedule, alerts (no warehouse)
+make warehouse   # the stack + the self-contained VPC + Redshift Serverless
 make image       # build the step image in the cloud
-
-# add the warehouse for the run: VpcId turns on the Redshift Serverless
-# resources (admin password is generated into Secrets Manager). Update the
-# stack back without VpcId the same day to stop the per-second billing.
-sam deploy --parameter-overrides \
-  VpcId=vpc-xxxx WarehouseSubnetIds=subnet-a,subnet-b,subnet-c AllowedCidr=x.x.x.x/32
-
-make pipeline WAREHOUSE_DSN=postgresql://...   # register the pipeline
-make run-now     # one execution now; the schedule owns the rest
-make teardown    # remove the pipeline and the stack
+make seed        # load the warehouse over the Data API (upload CSV + COPY FROM S3)
+make pipeline    # register + run; DSN and VpcConfig come from the stack outputs
+make run-now     # a second execution now (the schedule owns the rest)
+make warehouse-down   # drop the warehouse + VPC, keep the cheap stack, when done
+make teardown    # or remove the pipeline and the whole stack
 ```
 
-Deploy with an email to hear about failures:
-
-```
-sam deploy --parameter-overrides AlertEmail=you@example.com
-```
+`make warehouse` is `sam deploy` with `DeployWarehouse=true` — the whole network
+is in the template, so there is nothing to look up. Add an alert email with
+`sam deploy --parameter-overrides DeployWarehouse=true AlertEmail=you@example.com`.
