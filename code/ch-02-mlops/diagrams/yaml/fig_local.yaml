@@ -20,7 +20,7 @@ Diagram:
       Children: [Container, MLflow, S3]
     Container:
       Type: AWS::Diagram::Resource
-      Preset: "Amazon SageMaker AI"
+      Preset: "Docker"
       Title: "scorecard + challenger\ncustom container (docker run)"
     MLflow:
       Type: AWS::Diagram::Resource
