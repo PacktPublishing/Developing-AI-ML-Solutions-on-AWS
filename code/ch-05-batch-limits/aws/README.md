@@ -4,10 +4,11 @@ The stack carries the pipeline's bucket, the step image built in the cloud,
 the role the pipeline runs as, the EventBridge schedule that starts it, and
 an SNS topic that hears about failures. The pipeline definition is the same
 `src/pipeline/pipeline.py` that ran locally, registered with
-`PIPELINE_MODE=aws`. The warehouse is the chapter's own Redshift Serverless
-(`redshift-serverless.yaml`, deployed separately because its lifetime is
-shorter — it bills per second while active); pass its endpoint as
-`WAREHOUSE_DSN`.
+`PIPELINE_MODE=aws`. The warehouse is the chapter's own Redshift Serverless,
+declared in this `template.yaml` behind the `HasWarehouse` condition — it is
+created only when you pass `VpcId` (it bills per second while active, so add
+it for the run and update the stack back without `VpcId` the same day). Pass
+its endpoint as `WAREHOUSE_DSN`.
 
 ## Before the first deploy
 
@@ -25,12 +26,15 @@ make deploy AWS_PROFILE=ch05
 ## Run it, in order
 
 ```
-aws cloudformation deploy --template-file redshift-serverless.yaml \
-  --stack-name ch05-redshift --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides VpcId=... SubnetIds=... AllowedCidr=x.x.x.x/32 \
-  AdminPassword=...   # the warehouse; delete it the same day
-make deploy      # bucket, ECR, CodeBuild, roles, schedule, alerts
+make deploy      # bucket, ECR, CodeBuild, roles, schedule, alerts (no warehouse)
 make image       # build the step image in the cloud
+
+# add the warehouse for the run: VpcId turns on the Redshift Serverless
+# resources (admin password is generated into Secrets Manager). Update the
+# stack back without VpcId the same day to stop the per-second billing.
+sam deploy --parameter-overrides \
+  VpcId=vpc-xxxx WarehouseSubnetIds=subnet-a,subnet-b,subnet-c AllowedCidr=x.x.x.x/32
+
 make pipeline WAREHOUSE_DSN=postgresql://...   # register the pipeline
 make run-now     # one execution now; the schedule owns the rest
 make teardown    # remove the pipeline and the stack

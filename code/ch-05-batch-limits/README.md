@@ -22,9 +22,9 @@ make down    # stop and clean
 | --- | --- |
 | the four step scripts, run in order | the same four steps as a SageMaker Pipeline |
 | `make pipeline`: local executor, real S3 | `PIPELINE_MODE=aws`: SageMaker jobs |
-| `src/steps/decide.py` | the limit-manager Lambda |
+| `src/steps/decide.py` | the `decide` step in the pipeline |
 | S3Proxy | Amazon S3 |
-| redshift-local | the chapter's Redshift Serverless (aws/redshift-serverless.yaml) |
+| redshift-local | the chapter's Redshift Serverless (in aws/template.yaml, when VpcId is set) |
 | the events-local shim | EventBridge and SNS |
 | `make schedule`: rule + topic via the API | the same resources in aws/template.yaml |
 
