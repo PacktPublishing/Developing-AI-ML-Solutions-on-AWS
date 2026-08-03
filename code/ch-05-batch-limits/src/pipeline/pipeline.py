@@ -47,7 +47,7 @@ BUCKET = os.environ["BATCH_BUCKET"]
 WAREHOUSE_DSN = os.environ["WAREHOUSE_DSN"]
 IO_PREFIX = os.environ.get("IO_PREFIX", "batch/pipeline-io")
 
-with open(os.path.join(HERE, "..", "data", "feature_spec.json")) as f:
+with open(os.path.join(HERE, "..", "..", "data", "feature_spec.json")) as f:
     FEATURES = ",".join(json.load(f)["features"])
 
 
