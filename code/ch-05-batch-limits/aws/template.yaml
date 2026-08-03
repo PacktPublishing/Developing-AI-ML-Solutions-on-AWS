@@ -29,21 +29,15 @@ Parameters:
     Type: String
     Default: ""
 
-  VpcId:
-    Description: |
-      VPC for the warehouse (the default VPC is fine). Empty deploys the stack without the warehouse — it bills per second while active, so create it for the run and update the stack back without it the same day.
+  # true creates the warehouse and its own VPC/subnets/endpoints (self-contained,
+  # no VPC lookups); it bills per second while active, so deploy it for the run and
+  # update the stack back to false the same day. An empty stack (false) is free.
+  DeployWarehouse:
     Type: String
-    Default: ""
-
-  WarehouseSubnetIds:
-    Description: at least 3 comma-separated subnets in different AZs (default VPC subnets work)
-    Type: String
-    Default: ""
-
-  AllowedCidr:
-    Description: your IP in CIDR form (x.x.x.x/32) for psql on 5439
-    Type: String
-    Default: 127.0.0.1/32
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
 
 Conditions:
   HasEmail: !Not
@@ -51,10 +45,9 @@ Conditions:
       - !Ref AlertEmail
       - ""
 
-  HasWarehouse: !Not
-    - !Equals
-      - !Ref VpcId
-      - ""
+  HasWarehouse: !Equals
+    - !Ref DeployWarehouse
+    - "true"
 
 Resources:
   BatchBucket:
@@ -294,9 +287,183 @@ Resources:
         - Id: alerts
           Arn: !Ref Alerts
 
-  # the warehouse, in the same stack: Redshift Serverless namespace +
-  # workgroup, admin credentials generated into Secrets Manager, 5439 open
-  # to one address. Deployed only when VpcId is set.
+  # -----------------------------------------------------------------------------
+  # the warehouse, in its own VPC (the ch-07 self-contained pattern): a small VPC
+  # with three subnets (Redshift Serverless spans three AZs), a route table, and
+  # VPC endpoints so the in-VPC SageMaker jobs reach ECR/S3/CloudWatch and the
+  # private warehouse with no NAT. All of it exists only when DeployWarehouse=true,
+  # so nothing here needs a VPC id, subnet id, or route table looked up by hand.
+  # -----------------------------------------------------------------------------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+    Condition: HasWarehouse
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+    Condition: HasWarehouse
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+    Condition: HasWarehouse
+
+  SubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [2, !GetAZs ""]
+    Condition: HasWarehouse
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+    Condition: HasWarehouse
+
+  SubnetARoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  SubnetBRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  SubnetCRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetC
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  JobSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: the batch pipeline SageMaker jobs
+      VpcId: !Ref Vpc
+    Condition: HasWarehouse
+
+  WarehouseSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: portfolio warehouse, 5439 from the pipeline jobs only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          SourceSecurityGroupId: !Ref JobSg
+    Condition: HasWarehouse
+
+  EndpointSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: interface endpoints, https from the jobs
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref JobSg
+    Condition: HasWarehouse
+
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref RouteTable
+    Condition: HasWarehouse
+
+  EcrApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !Ref EndpointSg
+    Condition: HasWarehouse
+
+  EcrDkrEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.dkr
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !Ref EndpointSg
+    Condition: HasWarehouse
+
+  LogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !Ref EndpointSg
+    Condition: HasWarehouse
+
+  # the role Redshift assumes to COPY the seed in from S3
+  CopyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: redshift.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-seed
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt BatchBucket.Arn
+                  - !Sub ${BatchBucket.Arn}/*
+    Condition: HasWarehouse
+
   WarehouseSecret:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
@@ -310,18 +477,6 @@ Resources:
         PasswordLength: 24
     Condition: HasWarehouse
 
-  WarehouseSg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: portfolio warehouse, 5439 from one address
-      VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 5439
-          ToPort: 5439
-          CidrIp: !Ref AllowedCidr
-    Condition: HasWarehouse
-
   PortfolioNamespace:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
@@ -331,6 +486,9 @@ Resources:
       DbName: portfolio
       AdminUsername: analyst
       AdminUserPassword: !Sub '{{resolve:secretsmanager:${WarehouseSecret}:SecretString:password}}'
+      IamRoles:
+        - !GetAtt CopyRole.Arn
+      DefaultIamRoleArn: !GetAtt CopyRole.Arn
     Condition: HasWarehouse
 
   PortfolioWorkgroup:
@@ -341,10 +499,11 @@ Resources:
       WorkgroupName: portfolio-wg
       NamespaceName: !Ref PortfolioNamespace
       BaseCapacity: 8
-      PubliclyAccessible: true
-      SubnetIds: !Split
-        - ','
-        - !Ref WarehouseSubnetIds
+      PubliclyAccessible: false
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
       SecurityGroupIds:
         - !GetAtt WarehouseSg.GroupId
     Condition: HasWarehouse
@@ -368,4 +527,24 @@ Outputs:
   WarehouseSecretArn:
     Description: admin credentials (username analyst, key password)
     Value: !Ref WarehouseSecret
+    Condition: HasWarehouse
+
+  WorkgroupName:
+    Description: Redshift Serverless workgroup, for the Data API seed
+    Value: !Ref PortfolioWorkgroup
+    Condition: HasWarehouse
+
+  JobSubnetIds:
+    Description: NETWORK_SUBNETS for src/pipeline/pipeline.py (VpcConfig)
+    Value: !Join [",", [!Ref SubnetA, !Ref SubnetB, !Ref SubnetC]]
+    Condition: HasWarehouse
+
+  JobSecurityGroupId:
+    Description: NETWORK_SG for src/pipeline/pipeline.py (VpcConfig)
+    Value: !GetAtt JobSg.GroupId
+    Condition: HasWarehouse
+
+  CopyRoleArn:
+    Description: IAM role for the Redshift COPY-from-S3 seed
+    Value: !GetAtt CopyRole.Arn
     Condition: HasWarehouse

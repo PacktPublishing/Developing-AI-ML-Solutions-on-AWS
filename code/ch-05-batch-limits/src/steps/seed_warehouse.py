@@ -4,6 +4,9 @@
 # ///
 """Load the portfolio into the warehouse (rebuilds the customers table).
 
+The local loader: COPY FROM STDIN is fast against redshift-local. The cloud
+warehouse is seeded once with COPY FROM S3 (aws/), which Redshift does support.
+
 Usage:
   uv run steps/seed_warehouse.py
 """

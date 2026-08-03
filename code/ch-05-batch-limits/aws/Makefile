@@ -1,4 +1,4 @@
-.PHONY: iam lint deploy image pipeline run-now teardown
+.PHONY: iam lint deploy warehouse warehouse-down seed image pipeline run-now teardown
 
 REGION ?= us-east-1
 STACK := batch-limits-ch05
@@ -13,6 +13,24 @@ lint:
 
 deploy:
 	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+
+# add the warehouse + its self-contained VPC for the run. It bills per second, so
+# `make warehouse-down` (DeployWarehouse=false) or `make teardown` when finished.
+# Nothing to look up: the template owns the VPC, subnets, and endpoints.
+warehouse:
+	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
+		--parameter-overrides DeployWarehouse=true
+
+warehouse-down:
+	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
+		--parameter-overrides DeployWarehouse=false
+
+# seed the private warehouse over the Data API (upload the CSV, then COPY FROM S3)
+seed:
+	cd .. && WORKGROUP=$(call output,WorkgroupName) \
+		BUCKET=$(call output,BatchBucketName) \
+		COPY_ROLE_ARN=$(call output,CopyRoleArn) \
+		AWS_DEFAULT_REGION=$(REGION) uv run aws/jobs/seed_redshift.py
 
 # build the step image in the cloud and push it to the stack's ECR repo
 image:
@@ -29,14 +47,23 @@ image:
 		[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
 		echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
 
-# register the pipeline on AWS: same definition, PIPELINE_MODE=aws
+# register the pipeline on AWS: same definition, PIPELINE_MODE=aws. The DSN
+# (endpoint + generated password) and the VpcConfig (subnets + job SG) are all
+# read from the stack outputs — nothing to pass by hand.
 pipeline:
 	$(eval REPO := $(call output,StepRepoUri))
 	$(eval BUCKET := $(call output,BatchBucketName))
 	$(eval ROLE := $(call output,PipelineRoleArn))
+	$(eval ENDPOINT := $(call output,WarehouseEndpoint))
+	$(eval SUBNETS := $(call output,JobSubnetIds))
+	$(eval JOBSG := $(call output,JobSecurityGroupId))
+	$(eval PW := $(shell aws secretsmanager get-secret-value --region $(REGION) \
+		--secret-id $(call output,WarehouseSecretArn) --query SecretString --output text \
+		| python3 -c "import sys,json;print(json.load(sys.stdin)['password'])"))
 	cd .. && PIPELINE_MODE=aws AWS_DEFAULT_REGION=$(REGION) \
-		STEP_IMAGE=$(REPO):latest BATCH_BUCKET=$(BUCKET) \
-		SAGEMAKER_ROLE_ARN=$(ROLE) WAREHOUSE_DSN=$(WAREHOUSE_DSN) \
+		STEP_IMAGE=$(REPO):latest BATCH_BUCKET=$(BUCKET) SAGEMAKER_ROLE_ARN=$(ROLE) \
+		WAREHOUSE_DSN="postgresql://analyst:$(PW)@$(ENDPOINT):5439/portfolio?sslmode=require" \
+		NETWORK_SUBNETS=$(SUBNETS) NETWORK_SG=$(JOBSG) \
 		uv run src/pipeline/pipeline.py
 
 # start one execution without waiting for the schedule

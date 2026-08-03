@@ -38,7 +38,7 @@ schedule:
 pipeline:
 	docker build -q -t ch05-step:local src/pipeline/step_image/
 	PIPELINE_MODE=local STEP_IMAGE=ch05-step:local \
-		WAREHOUSE_DSN=postgresql://analyst:analyst@host.docker.internal:5439/portfolio \
+		WAREHOUSE_DSN=postgresql://analyst:analyst@host.docker.internal:5439/portfolio?sslmode=require \
 		$(REAL_AWS) uv run src/pipeline/pipeline.py
 
 query:

@@ -24,6 +24,7 @@ import json
 import os
 
 from sagemaker.core.processing import (
+    NetworkConfig,
     PipelineSession,
     ProcessingInput,
     ProcessingOutput,
@@ -36,7 +37,7 @@ from sagemaker.mlops.local.local_pipeline_session import (
 from sagemaker.mlops.workflow.pipeline import Pipeline
 from sagemaker.mlops.workflow.steps import ProcessingStep, TrainingStep
 from sagemaker.train import ModelTrainer
-from sagemaker.train.configs import Compute, InputData, OutputDataConfig
+from sagemaker.train.configs import Compute, InputData, Networking, OutputDataConfig
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(HERE, "scripts")
@@ -49,6 +50,15 @@ IO_PREFIX = os.environ.get("IO_PREFIX", "batch/pipeline-io")
 
 with open(os.path.join(HERE, "..", "..", "data", "feature_spec.json")) as f:
     FEATURES = ",".join(json.load(f)["features"])
+
+# VpcConfig on AWS: the jobs run in the warehouse's VPC so they reach the private
+# Redshift (NETWORK_SUBNETS/NETWORK_SG come from the stack outputs). Empty locally,
+# where redshift-local is on the host and there is no VPC.
+_SUBNETS = [s for s in os.environ.get("NETWORK_SUBNETS", "").split(",") if s]
+_SG = os.environ.get("NETWORK_SG", "")
+_NET = {"subnets": _SUBNETS, "security_group_ids": [_SG]} if _SUBNETS and _SG else None
+PROC_NETWORK = NetworkConfig(**_NET) if _NET else None
+TRAIN_NETWORK = Networking(**_NET) if _NET else None
 
 
 class LocalPipelineSession(_MlopsLocalPipelineSession, PipelineSession):
@@ -82,6 +92,7 @@ def processor(name):
         role=ROLE,
         sagemaker_session=sess,
         env={"WAREHOUSE_DSN": WAREHOUSE_DSN, "FEATURES": FEATURES},
+        network_config=PROC_NETWORK,
     )
 
 
@@ -136,6 +147,7 @@ trainer = ModelTrainer(
     ),
     hyperparameters={"iterations": "300", "features": FEATURES},
     sagemaker_session=sess,
+    networking=TRAIN_NETWORK,
 )
 
 train = TrainingStep(
