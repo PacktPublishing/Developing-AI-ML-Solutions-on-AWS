@@ -41,7 +41,9 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-CHAPTER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CHAPTER_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 TARGET = "is_fraud"
 
 
