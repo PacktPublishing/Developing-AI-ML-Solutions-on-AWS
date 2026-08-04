@@ -60,8 +60,14 @@
     {
       "Sid": "Lambda",
       "Effect": "Allow",
-      "Action": ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:InvokeFunction", "lambda:AddPermission", "lambda:RemovePermission", "lambda:CreateEventSourceMapping", "lambda:DeleteEventSourceMapping", "lambda:GetEventSourceMapping", "lambda:UpdateEventSourceMapping", "lambda:ListEventSourceMappings", "lambda:TagResource"],
-      "Resource": ["arn:aws:lambda:us-east-1:*:function:streaming-fraud-ch06-*", "arn:aws:lambda:us-east-1:*:event-source-mapping:*"]
+      "Action": ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:InvokeFunction", "lambda:AddPermission", "lambda:RemovePermission", "lambda:TagResource"],
+      "Resource": "arn:aws:lambda:us-east-1:*:function:streaming-fraud-ch06-*"
+    },
+    {
+      "Sid": "LambdaEventSourceMappings",
+      "Effect": "Allow",
+      "Action": ["lambda:CreateEventSourceMapping", "lambda:DeleteEventSourceMapping", "lambda:GetEventSourceMapping", "lambda:UpdateEventSourceMapping", "lambda:ListEventSourceMappings"],
+      "Resource": "*"
     },
     {
       "Sid": "SageMakerEndpoint",
