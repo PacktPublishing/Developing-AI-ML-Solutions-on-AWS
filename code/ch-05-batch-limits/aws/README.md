@@ -30,15 +30,15 @@ make deploy AWS_PROFILE=ch05
 ## Run it, in order
 
 ```
-make warehouse   # the stack + the self-contained VPC + Redshift Serverless
+make deploy      # the whole stack: self-contained VPC, Redshift, ECR, CodeBuild, schedule, alerts
 make image       # build the step image in the cloud
 make seed        # load the warehouse over the Data API (upload CSV + COPY FROM S3)
 make pipeline    # register + run; DSN and VpcConfig come from the stack outputs
 make run-now     # a second execution now (the schedule owns the rest)
-make warehouse-down   # drop the warehouse + VPC, keep the cheap stack, when done
-make teardown    # or remove the pipeline and the whole stack
+make teardown    # remove the pipeline and the whole stack when the run is done
 ```
 
-`make warehouse` is `sam deploy` with `DeployWarehouse=true` — the whole network
-is in the template, so there is nothing to look up. Add an alert email with
-`sam deploy --parameter-overrides DeployWarehouse=true AlertEmail=you@example.com`.
+`make deploy` is one `sam deploy` — the whole network is in the template, so there
+is nothing to look up. The warehouse bills per second, so tear down the same day.
+Add an alert email with `sam deploy --parameter-overrides DeployWarehouse=true
+AlertEmail=you@example.com`.

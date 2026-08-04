@@ -1,7 +1,7 @@
-.PHONY: iam lint deploy warehouse warehouse-down seed image pipeline run-now teardown
+.PHONY: iam lint deploy seed image pipeline run-now teardown
 
 REGION ?= us-east-1
-STACK := batch-limits-ch05
+STACK := ch05-batch-limits
 
 output = $(shell aws cloudformation describe-stacks --region $(REGION) \
 	--stack-name $(STACK) \
@@ -11,19 +11,12 @@ lint:
 	uvx cfn-lint template.yaml
 	rain fmt --verify template.yaml
 
+# the whole stack in one command, including the warehouse and its self-contained
+# VPC (own subnets/endpoints — nothing to look up). The warehouse bills per second,
+# so `make teardown` when the run is done.
 deploy:
-	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
-
-# add the warehouse + its self-contained VPC for the run. It bills per second, so
-# `make warehouse-down` (DeployWarehouse=false) or `make teardown` when finished.
-# Nothing to look up: the template owns the VPC, subnets, and endpoints.
-warehouse:
 	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
 		--parameter-overrides DeployWarehouse=true
-
-warehouse-down:
-	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
-		--parameter-overrides DeployWarehouse=false
 
 # seed the private warehouse over the Data API (upload the CSV, then COPY FROM S3)
 seed:

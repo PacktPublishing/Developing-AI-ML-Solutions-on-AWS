@@ -33,8 +33,9 @@
       "Action": [
         "sagemaker:CreatePipeline", "sagemaker:UpdatePipeline", "sagemaker:DeletePipeline",
         "sagemaker:DescribePipeline", "sagemaker:StartPipelineExecution",
-        "sagemaker:DescribePipelineExecution", "sagemaker:ListPipelineExecutionSteps",
-        "sagemaker:CreateProcessingJob", "sagemaker:DescribeProcessingJob", "sagemaker:AddTags"
+        "sagemaker:DescribePipelineExecution", "sagemaker:ListPipelineExecutions",
+        "sagemaker:ListPipelineExecutionSteps", "sagemaker:CreateProcessingJob",
+        "sagemaker:DescribeProcessingJob", "sagemaker:AddTags"
       ],
       "Resource": "arn:aws:sagemaker:us-east-1:*:*/batch-credit-limits*"
     },
@@ -56,9 +57,27 @@
       "Resource": "*"
     },
     {
-      "Sid": "RedshiftWarehouseRead",
+      "Sid": "RedshiftServerless",
       "Effect": "Allow",
-      "Action": ["redshift-serverless:GetWorkgroup", "redshift-serverless:ListWorkgroups", "redshift-serverless:GetCredentials", "redshift-data:ExecuteStatement", "redshift-data:DescribeStatement", "redshift-data:GetStatementResult"],
+      "Action": "redshift-serverless:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "RedshiftData",
+      "Effect": "Allow",
+      "Action": ["redshift-data:ExecuteStatement", "redshift-data:DescribeStatement", "redshift-data:GetStatementResult"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Ec2Networking",
+      "Effect": "Allow",
+      "Action": "ec2:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecretsManager",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:TagResource", "secretsmanager:GetRandomPassword"],
       "Resource": "*"
     },
     {"Sid": "ResultsBucket", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch05-*", "arn:aws:s3:::ch05-*/*", "arn:aws:s3:::aws-sam-cli-managed-*", "arn:aws:s3:::aws-sam-cli-managed-*/*"]},
