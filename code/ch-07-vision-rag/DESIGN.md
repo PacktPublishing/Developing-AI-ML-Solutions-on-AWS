@@ -40,12 +40,20 @@ make_grid` with a purple saliency overlay per face. Used by `local/compare.py` a
 the compare Lambda's opt-in `{"explain": true}` path — just "how similar, and why".
 
 ### 3. Data — real KYC faces are confidential
-`data/fetch_faces.py` pulls a small sample of **SFHQ-T2I** synthetic faces (Flux/
-SDXL/DALL-E 3, no real people) from Kaggle for the enrol gallery and the compare
-demos. The same-person "face-move" example is just a rotation of one photo (the
-fraud attempt), which the embedding still matches.
-- ⚠️ AUTHOR-VERIFY: SFHQ-T2I license before bundling any images (fetch to a
-  gitignored folder; commit none).
+`etl/build_pairs.py` builds the enrol gallery + compare demos from **UTKFace**
+(Kaggle `samuelagyemang/utkface`, **CC0 public domain**: real, diverse,
+non-celebrity, one image per person). Each real face is the enrolled **ID photo**;
+the matching **selfie** is a *simulated re-capture of the same face* — a light,
+identity-preserving augmentation (small rotation, lighting, crop, JPEG re-encode).
+An **impostor** selfie (a different subject) gives the non-match. Verified with the
+facenet embedder: match id↔selfie **+0.93**, non-match id↔impostor **−0.12**.
+- WHY not real selfie/ID: every public selfie+ID (and liveness) set is
+  NonCommercial/NoDerivatives (AxonLabs, TrainingDataPro, unidpro) — unusable in a
+  commercial book; free multi-image sets are all celebrity (LFW/CelebA). UTKFace
+  is the real, non-celebrity, commercially-licensable middle ground.
+- Optional `--hf`: swap the augmentation for a Hugging Face img2img (sd-turbo);
+  off by default — it can drift the identity and quietly break the match.
+- Images fetch to a gitignored folder (`data/generated/`); commit none.
 
 ### 4. HNSW index-first (streaming ingestion)
 Create the HNSW index **with the `faces` table, while empty**, so every async enrol
