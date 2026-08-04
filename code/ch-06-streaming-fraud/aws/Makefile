@@ -29,10 +29,13 @@ deploy:
 seed-warehouse:
 	$(eval WG := $(call output,WorkgroupName))
 	$(eval SECRET := $(call output,WarehouseSecretArn))
-	aws redshift-data execute-statement --region $(REGION) \
+	@ID=$$(aws redshift-data execute-statement --region $(REGION) \
 		--workgroup-name $(WG) --database fraud --secret-arn $(SECRET) \
 		--sql "CREATE TABLE IF NOT EXISTS fraud_decisions (transaction_id VARCHAR(32), user_id VARCHAR(16), merchant_id VARCHAR(16), amount_usd NUMERIC(12,2), score DOUBLE PRECISION, decision VARCHAR(8), event_time TIMESTAMP, latency_ms DOUBLE PRECISION)" \
-		--query Id --output text
+		--query Id --output text); \
+		while S=$$(aws redshift-data describe-statement --region $(REGION) --id $$ID --query Status --output text); \
+			[ "$$S" = "SUBMITTED" ] || [ "$$S" = "PICKED" ] || [ "$$S" = "STARTED" ]; do sleep 1; done; \
+			echo "fraud_decisions $$S"; [ "$$S" = "FINISHED" ]
 
 # build the serving image in the cloud: upload the build context, start the
 # stack's CodeBuild project, wait for the multi-arch push to ECR. The laptop
@@ -91,8 +94,8 @@ query:
 		--workgroup-name $(WG) --database fraud --secret-arn $(SECRET) \
 		--sql "SELECT decision, COUNT(*), ROUND(AVG(score)::numeric, 4) FROM fraud_decisions GROUP BY decision" \
 		--query Id --output text); \
-		while [ "$$(aws redshift-data describe-statement --region $(REGION) --id $$ID --query Status --output text)" = "STARTED" ] \
-			|| [ "$$(aws redshift-data describe-statement --region $(REGION) --id $$ID --query Status --output text)" = "SUBMITTED" ]; do sleep 1; done; \
+		while S=$$(aws redshift-data describe-statement --region $(REGION) --id $$ID --query Status --output text); \
+			[ "$$S" = "SUBMITTED" ] || [ "$$S" = "PICKED" ] || [ "$$S" = "STARTED" ]; do sleep 1; done; \
 			aws redshift-data get-statement-result --region $(REGION) --id $$ID --output json
 
 # delete in reverse: endpoint first (it is not in the stack), then empty the
