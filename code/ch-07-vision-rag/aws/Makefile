@@ -26,8 +26,16 @@ deploy:
 		--stack-name $(STACK) --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
 		--parameter-overrides ImageUri=$$IMAGE
 
+# One command: CloudFormation will not delete a non-empty S3 bucket, so empty the
+# images + source buckets first, then remove both stacks.
 delete:
+	-@B=$$(aws cloudformation describe-stacks --stack-name $(STACK) \
+		--query "Stacks[0].Outputs[?OutputKey=='ImagesBucket'].OutputValue" --output text 2>/dev/null); \
+		[ -n "$$B" ] && [ "$$B" != "None" ] && aws s3 rm "s3://$$B" --recursive || true
 	cd vision-rag && sam delete --stack-name $(STACK) --no-prompts
+	-@S=$$(aws cloudformation describe-stacks --stack-name $(BUILD_STACK) \
+		--query "Stacks[0].Outputs[?OutputKey=='SourceBucket'].OutputValue" --output text 2>/dev/null); \
+		[ -n "$$S" ] && [ "$$S" != "None" ] && aws s3 rm "s3://$$S" --recursive || true
 	aws cloudformation delete-stack --stack-name $(BUILD_STACK)
 
 # -------------------------------------------------------------------------------
