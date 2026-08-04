@@ -12,8 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from face_embedder import FaceEmbedder  # noqa: E402
-from kycdb import connect  # noqa: E402
+from face_embedder import FaceEmbedder
+from kycdb import connect
 
 MATCH = 0.70
 
