@@ -24,7 +24,7 @@ DB_SECRET_ARN = os.environ["DB_SECRET_ARN"]
 DEFAULT_BUCKET = os.environ.get("IMAGES_S3_BUCKET", "")
 MATCH = 0.70
 
-from face_embedder import FaceEmbedder  # noqa: E402
+from face_embedder import FaceEmbedder
 
 _embedder = FaceEmbedder(device="cpu")
 _conn = None

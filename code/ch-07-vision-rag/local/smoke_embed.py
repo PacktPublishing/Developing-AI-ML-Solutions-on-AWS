@@ -18,9 +18,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import numpy as np  # noqa: E402
-import torch  # noqa: E402
-from face_embedder import EMBEDDING_DIM, FaceEmbedder  # noqa: E402
+import numpy as np
+import torch
+from face_embedder import EMBEDDING_DIM, FaceEmbedder
 
 
 def main() -> None:

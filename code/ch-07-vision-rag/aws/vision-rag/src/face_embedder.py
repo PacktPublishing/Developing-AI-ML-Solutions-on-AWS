@@ -17,10 +17,10 @@ from io import BytesIO
 os.environ.setdefault("TORCH_HOME", os.environ.get("TORCH_HOME", "/tmp/torch"))
 warnings.filterwarnings("ignore")
 
-import numpy as np  # noqa: E402
-import torch  # noqa: E402
-from facenet_pytorch import MTCNN, InceptionResnetV1  # noqa: E402
-from PIL import Image  # noqa: E402
+import numpy as np
+import torch
+from facenet_pytorch import MTCNN, InceptionResnetV1
+from PIL import Image
 
 EMBEDDING_DIM = 512
 
@@ -52,7 +52,7 @@ class FaceEmbedder:
                 return None
             img = Image.open(BytesIO(image_bytes)).convert("RGB")
 
-            boxes, probs = self.detector.detect(img)
+            boxes, _ = self.detector.detect(img)
             if boxes is None or len(boxes) == 0:
                 return None
 
@@ -73,5 +73,7 @@ class FaceEmbedder:
 
             return embedding.squeeze(0).cpu().numpy()
 
-        except Exception:
+        except (OSError, ValueError, RuntimeError, TypeError, IndexError):
+            # a bad/undecodable image or a detection with no usable face -> no
+            # embedding; real bugs (bad weights, config) still surface.
             return None

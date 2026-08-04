@@ -23,16 +23,15 @@ log.setLevel(logging.INFO)
 
 DEFAULT_BUCKET = os.environ.get("IMAGES_S3_BUCKET", "")
 
-from face_embedder import FaceEmbedder  # noqa: E402
+from face_embedder import FaceEmbedder
 
 _embedder = FaceEmbedder(device="cpu")
 
 
 def _explain_png(out) -> bytes:
     """4 panels: each face beside its Integrated Gradients heatmap (shared scale)."""
-    from PIL import Image, ImageDraw, ImageFont
-
     from face_explainer import heat_overlay
+    from PIL import Image, ImageDraw, ImageFont
 
     vmax = max(float(out["sal_a"].max()), float(out["sal_b"].max()))
     cell = 256

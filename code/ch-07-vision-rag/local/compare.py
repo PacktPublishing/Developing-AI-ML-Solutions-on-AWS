@@ -14,8 +14,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from face_embedder import FaceEmbedder  # noqa: E402
-from face_explainer import explain, heat_overlay  # noqa: E402
+from face_embedder import FaceEmbedder
+from face_explainer import explain, heat_overlay
 
 CELL = 256
 
