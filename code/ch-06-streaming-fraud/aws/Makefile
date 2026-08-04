@@ -1,10 +1,12 @@
-.PHONY: iam lint deploy image endpoint-local endpoint produce blocks teardown
+.PHONY: iam lint seed-warehouse deploy image endpoint-local endpoint produce blocks query teardown
 
 # The cloud round, in order: `make deploy` (the SAM stack: streams, table,
-# ECR, Firehose, consumer), `make image` (push the serving image), `make
-# endpoint` (Serverless Inference from that image), `make produce` (replay
-# transactions at the real stream), `make blocks` (count what got blocked),
-# `make teardown` (leave nothing behind).
+# ECR, Firehose, consumer, and — with EnableWarehouse=true, the default — the
+# Redshift Serverless warehouse), `make seed-warehouse` (create the analytics
+# table), `make image` (push the serving image), `make endpoint` (Serverless
+# Inference from that image), `make produce` (replay transactions at the real
+# stream), `make blocks` (count what got blocked), `make query` (the warehouse
+# view), `make teardown` (leave nothing behind).
 REGION ?= us-east-1
 STACK := streaming-fraud-ch06
 
@@ -21,6 +23,16 @@ lint:
 deploy:
 	sam build
 	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+
+# create the destination table via the Redshift Data API — no VPC path needed,
+# authenticated with the admin secret the stack generated
+seed-warehouse:
+	$(eval WG := $(call output,WorkgroupName))
+	$(eval SECRET := $(call output,WarehouseSecretArn))
+	aws redshift-data execute-statement --region $(REGION) \
+		--workgroup-name $(WG) --database fraud --secret-arn $(SECRET) \
+		--sql "CREATE TABLE IF NOT EXISTS fraud_decisions (transaction_id VARCHAR(32), user_id VARCHAR(16), merchant_id VARCHAR(16), amount_usd NUMERIC(12,2), score DOUBLE PRECISION, decision VARCHAR(8), event_time TIMESTAMP, latency_ms DOUBLE PRECISION)" \
+		--query Id --output text
 
 # build the serving image in the cloud: upload the build context, start the
 # stack's CodeBuild project, wait for the multi-arch push to ECR. The laptop
@@ -71,8 +83,20 @@ blocks:
 	aws dynamodb scan --region $(REGION) --table-name blocked_transactions \
 		--select COUNT --query Count
 
+# what the analyst sees in the warehouse: blocks and passes, via the Data API
+query:
+	$(eval WG := $(call output,WorkgroupName))
+	$(eval SECRET := $(call output,WarehouseSecretArn))
+	@ID=$$(aws redshift-data execute-statement --region $(REGION) \
+		--workgroup-name $(WG) --database fraud --secret-arn $(SECRET) \
+		--sql "SELECT decision, COUNT(*), ROUND(AVG(score)::numeric, 4) FROM fraud_decisions GROUP BY decision" \
+		--query Id --output text); \
+		while [ "$$(aws redshift-data describe-statement --region $(REGION) --id $$ID --query Status --output text)" = "STARTED" ] \
+			|| [ "$$(aws redshift-data describe-statement --region $(REGION) --id $$ID --query Status --output text)" = "SUBMITTED" ]; do sleep 1; done; \
+			aws redshift-data get-statement-result --region $(REGION) --id $$ID --output json
+
 # delete in reverse: endpoint first (it is not in the stack), then empty the
-# staging bucket, then the stack itself
+# staging bucket, then the stack — warehouse and all
 teardown:
 	-aws sagemaker delete-endpoint --region $(REGION) --endpoint-name fraud-scoring
 	-aws sagemaker delete-endpoint-config --region $(REGION) --endpoint-config-name fraud-scoring

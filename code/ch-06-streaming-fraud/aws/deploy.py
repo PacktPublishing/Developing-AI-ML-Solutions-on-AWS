@@ -36,25 +36,62 @@ CHAPTER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def deploy_local() -> None:
-    """Run the serving image as a local-mode endpoint on :8080."""
+    """Serve the image as a SageMaker local endpoint (Mode.LOCAL_CONTAINER).
+
+    The SDK counterpart to `make serve` (a plain `docker run <image> serve`): the
+    same container through ModelBuilder local mode. Swapping the mode to
+    SAGEMAKER_ENDPOINT deploys the identical image to the serverless endpoint.
+    """
+    import json
+    import shutil
+    import tempfile
+
+    from sagemaker.serve.builder.schema_builder import SchemaBuilder
     from sagemaker.serve.mode.function_pointers import Mode
     from sagemaker.serve.model_builder import ModelBuilder
     from sagemaker.serve.utils.types import ModelServer
 
+    # MMS local mode mounts <model_path>/code at /opt/ml/model, so stage the
+    # artifacts under a code/ dir at an absolute path (a relative path is read as
+    # a Docker volume name). serve.py loads model.cbm/model_meta.json there.
+    staging = tempfile.mkdtemp()
+    code = os.path.join(staging, "code")
+    os.makedirs(code)
+    for fname in os.listdir(f"{CHAPTER_DIR}/artifacts"):
+        src = os.path.join(f"{CHAPTER_DIR}/artifacts", fname)
+        if os.path.isfile(src):
+            shutil.copy(src, code)
+
+    # The local health check does not GET /ping — it invokes the endpoint with
+    # this sample and waits for a decodable response, so the sample must be a
+    # real request with every feature present (the names ride in the metadata).
+    with open(f"{CHAPTER_DIR}/artifacts/model_meta.json") as f:
+        features = json.load(f)["features"]
+    sample = {name: 0.0 for name in features}
+    schema = SchemaBuilder(sample_input=sample, sample_output={"scores": [0.0]})
+
     builder = ModelBuilder(
-        mode=Mode.LOCAL_CONTAINER,
         image_uri=IMAGE_URI,
-        model_path=f"{CHAPTER_DIR}/artifacts",
+        model_server=ModelServer.MMS,  # the generic serve/ping/invocations runner
+        model_path=staging,
+        schema_builder=schema,
         role_arn=ROLE,
-        # explicit staging path — without it the SDK creates an account-default bucket
+        # explicit staging path — without it build() resolves the account-default
+        # SageMaker bucket and HeadBuckets it, which the least-privilege ch06-user
+        # cannot; point it at the stack's staging bucket instead
         s3_model_data_url=f"s3://{BUCKET}/ch06/{NAME}/local-mode",
-        # TORCHSERVE selects the generic `docker run <image> serve` runner —
-        # the plain container contract this chapter's image implements
-        model_server=ModelServer.TORCHSERVE,
+        mode=Mode.LOCAL_CONTAINER,
     )
     builder.build()
-    builder.deploy(endpoint_name=NAME)
-    print(f"local-mode endpoint {NAME} serving on http://localhost:8080")
+    endpoint = builder.deploy_local(wait=True, container_timeout_in_seconds=1200)
+    resp = endpoint.invoke(body=json.dumps(sample), content_type="application/json")
+    print(
+        "local-mode prediction:",
+        resp.body.read().decode() if hasattr(resp, "body") else resp,
+    )
+    # deploy_local's compose runner logs a benign "exited code 1" from its log
+    # streamer thread on shutdown, after the prediction above has returned.
+    endpoint.delete()
 
 
 def deploy_serverless() -> None:

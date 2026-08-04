@@ -17,31 +17,23 @@ Parameters:
     Type: String
     Default: "0.04"
 
-  RedshiftJdbcUrl:
+  EnableWarehouse:
     Description: |
-      JDBC URL of the analytics warehouse (jdbc:redshift://host:5439/fraud). Leave empty to deploy without the Redshift leg — Firehose then delivers the staged batches to S3 only, and the COPY can be run from the staged objects later.
+      "true" builds the analytics warehouse in this stack — a publicly accessible Redshift Serverless workgroup that Firehose COPYs decisions into. "false" skips it, and Firehose stages the batches to S3 only (run the COPY from the staged objects later). One template either way.
     Type: String
-    Default: ""
-
-  RedshiftUser:
-    Type: String
-    Default: analyst
-
-  RedshiftSecretArn:
-    Description: |
-      Secrets Manager secret holding the warehouse password under the key "password". Required only with RedshiftJdbcUrl; the template reads it as a dynamic reference so no credential ever sits in a parameter.
-    Type: String
-    Default: ""
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "true"
 
 Conditions:
-  HasRedshift: !Not
-    - !Equals
-      - !Ref RedshiftJdbcUrl
-      - ""
+  HasWarehouse: !Equals
+    - !Ref EnableWarehouse
+    - "true"
 
-  NoRedshift: !Equals
-    - !Ref RedshiftJdbcUrl
-    - ""
+  NoWarehouse: !Equals
+    - !Ref EnableWarehouse
+    - "false"
 
 Transform: AWS::Serverless-2016-10-31
 
@@ -302,12 +294,175 @@ Resources:
                   - !GetAtt StagingBucket.Arn
                   - !Sub ${StagingBucket.Arn}/*
 
+  # The analytics warehouse, in this same stack. Firehose reaches Redshift over
+  # the public endpoint, so the workgroup is publicly accessible and its
+  # security group admits only the Amazon Data Firehose service CIDR on 5439.
+  # A publicly accessible workgroup needs an internet gateway and a default
+  # route; without them the public endpoint has no path off the VPC.
+  Vpc:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+    Condition: HasWarehouse
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: HasWarehouse
+
+  GatewayAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+    Condition: HasWarehouse
+
+  # Redshift Serverless requires subnets across at least three AZs.
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+    Condition: HasWarehouse
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+    Condition: HasWarehouse
+
+  SubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs
+    Condition: HasWarehouse
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+    Condition: HasWarehouse
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttach
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    Condition: HasWarehouse
+
+  SubnetARoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  SubnetBRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  SubnetCRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetC
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  # Redshift COPY reads the intermediate S3 bucket; a gateway endpoint keeps
+  # that traffic on the AWS backbone and off the internet route.
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref RouteTable
+    Condition: HasWarehouse
+
+  WarehouseSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: fraud warehouse, 5439 from the Firehose service CIDR only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+
+        # us-east-1 Amazon Data Firehose service CIDR (one block per Region;
+        # source: Firehose dev guide, "Controlling access" VPC-access table).
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 52.70.63.192/27
+    Condition: HasWarehouse
+
+  WarehouseSecret:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: fraud warehouse admin credentials (username analyst, key password)
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "analyst"}'
+        GenerateStringKey: password
+
+        # Redshift rejects a handful of characters in the admin password;
+        # ExcludePunctuation keeps the generated value inside the rules.
+        ExcludePunctuation: true
+        PasswordLength: 24
+    Condition: HasWarehouse
+
+  FraudNamespace:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RedshiftServerless::Namespace
+    Properties:
+      NamespaceName: fraud
+      DbName: fraud
+      AdminUsername: analyst
+      AdminUserPassword: !Sub '{{resolve:secretsmanager:${WarehouseSecret}:SecretString:password}}'
+    Condition: HasWarehouse
+
+  FraudWorkgroup:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RedshiftServerless::Workgroup
+    Properties:
+      WorkgroupName: fraud-wg
+      NamespaceName: !Ref FraudNamespace
+      BaseCapacity: 8
+      PubliclyAccessible: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !GetAtt WarehouseSg.GroupId
+    Condition: HasWarehouse
+
   # The managed version of the firehose-local shim: read the decisions stream,
-  # buffer by size or time, stage one object per batch, and — with a warehouse
-  # configured — issue the COPY. Firehose never inserts rows one by one;
-  # neither did the local worker. One delivery stream deploys, chosen by the
-  # RedshiftJdbcUrl parameter: the Redshift destination when a warehouse is
-  # given, plain S3 otherwise.
+  # buffer by size or time, stage one object per batch, and — with the warehouse
+  # built — issue the COPY. Firehose never inserts rows one by one; neither did
+  # the local worker. One delivery stream deploys, chosen by EnableWarehouse:
+  # the Redshift destination when the warehouse is built, plain S3 otherwise.
   DeliveryToRedshift:
     Type: AWS::KinesisFirehose::DeliveryStream
     Properties:
@@ -316,9 +471,9 @@ Resources:
         KinesisStreamARN: !GetAtt DecisionsStream.Arn
         RoleARN: !GetAtt FirehoseRole.Arn
       RedshiftDestinationConfiguration:
-        ClusterJDBCURL: !Ref RedshiftJdbcUrl
-        Username: !Ref RedshiftUser
-        Password: !Sub '{{resolve:secretsmanager:${RedshiftSecretArn}:SecretString:password}}'
+        ClusterJDBCURL: !Sub jdbc:redshift://${FraudWorkgroup.Workgroup.Endpoint.Address}:5439/fraud
+        Username: analyst
+        Password: !Sub '{{resolve:secretsmanager:${WarehouseSecret}:SecretString:password}}'
         RoleARN: !GetAtt FirehoseRole.Arn
         CopyCommand:
           DataTableName: fraud_decisions
@@ -331,7 +486,7 @@ Resources:
             IntervalInSeconds: 60
             SizeInMBs: 1
           CompressionFormat: UNCOMPRESSED
-    Condition: HasRedshift
+    Condition: HasWarehouse
 
   DeliveryToS3:
     Type: AWS::KinesisFirehose::DeliveryStream
@@ -348,7 +503,7 @@ Resources:
           IntervalInSeconds: 60
           SizeInMBs: 1
         CompressionFormat: UNCOMPRESSED
-    Condition: NoRedshift
+    Condition: NoWarehouse
 
 Outputs:
   ScoringRepoUri:
@@ -366,3 +521,13 @@ Outputs:
   ConsumerFunction:
     Description: the stream consumer
     Value: !Ref Consumer
+
+  WorkgroupName:
+    Description: Redshift Serverless workgroup, for the Data API seed and query
+    Value: !Ref FraudWorkgroup
+    Condition: HasWarehouse
+
+  WarehouseSecretArn:
+    Description: warehouse admin secret (username analyst, key password)
+    Value: !Ref WarehouseSecret
+    Condition: HasWarehouse
