@@ -2,12 +2,12 @@ AWSTemplateFormatVersion: "2010-09-09"
 
 Description: |
   Streaming fraud detection on AWS: the cloud counterpart of the chapter's local stack. Transactions flow through a Kinesis stream into a Lambda consumer, the consumer scores each event against the SageMaker Serverless Inference endpoint and writes blocks to DynamoDB, and every decision goes onward through a second stream to Data Firehose, which stages batches to S3 and, when a warehouse is configured, issues the COPY into Redshift.
-  The scoring endpoint itself is deployed separately (deploy_serverless.py) because it needs the container image pushed first; this stack creates the ECR repository the image lands in and the execution role the endpoint runs as.
+  The scoring endpoint itself is deployed separately (deploy.py) because it needs the container image pushed first; this stack creates the ECR repository the image lands in and the execution role the endpoint runs as.
   Every stateful resource is deliberately disposable: chapter data is synthetic and reproducible, so `make teardown` should leave nothing behind and nothing to pay for.
 
 Parameters:
   EndpointName:
-    Description: the SageMaker endpoint the consumer invokes (created by deploy_serverless.py)
+    Description: the SageMaker endpoint the consumer invokes (created by deploy.py)
     Type: String
     Default: fraud-scoring
 
@@ -114,7 +114,7 @@ Resources:
             ExpirationInDays: 1
 
   # The execution role the serverless endpoint runs as: pull the serving image,
-  # read the model tarball, write logs. deploy_serverless.py picks its ARN up
+  # read the model tarball, write logs. deploy.py picks its ARN up
   # from the stack outputs.
   EndpointRole:
     Type: AWS::IAM::Role
@@ -360,7 +360,7 @@ Outputs:
     Value: !Ref StagingBucket
 
   EndpointRoleArn:
-    Description: execution role for deploy_serverless.py
+    Description: execution role for deploy.py
     Value: !GetAtt EndpointRole.Arn
 
   ConsumerFunction:

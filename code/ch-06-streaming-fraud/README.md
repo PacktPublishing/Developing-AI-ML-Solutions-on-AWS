@@ -5,8 +5,7 @@ asks for a decision while the terminal still shows "Processing Payment":
 approve or decline, before the cardholder notices a delay. Behind that
 decision sits a CatBoost classifier trained on three families of features —
 the raw transaction, the transaction against the user's own history, and the
-transaction against the merchant's history — the same families Revolut
-describes for its card fraud detection system.
+transaction against the merchant's history.
 
 The chapter builds the system in four moves:
 
@@ -63,9 +62,9 @@ boto3's sagemaker-runtime client in both worlds. The serving container
 accepts the `/endpoints/<name>/invocations` path that client sends, so
 locally the only difference is the endpoint URL environment variable.
 
-The cloud deploy is `aws/deploy_serverless.py`: the same image from ECR and
-the same model.tar.gz behind a real Serverless Inference endpoint, following
-the chapter-02 BYOC pattern.
+The cloud deploy is `SAGEMAKER_SERVERLESS=1 uv run aws/deploy.py`: the same
+image from ECR and the same model.tar.gz behind a real Serverless Inference
+endpoint, following the chapter-02 BYOC pattern.
 
 The shim mirrors Firehose deliberately: `src/streaming/downstream.py` calls
 `create_delivery_stream` with the same `RedshiftDestinationConfiguration`
@@ -78,13 +77,11 @@ has the warehouse load it.
 ## The model
 
 CatBoost with balanced class weights — the model this system deploys to
-SageMaker Serverless Inference, and the one Revolut's card-fraud team chose
-for the same reasons: gradient boosting on trees is robust on heterogeneous
-features, needs little tuning, and scores a single row inside a real-time
-budget. Fraud is rare in the training data (about half a percent), the split
-is chronological so the model is judged on the future, and the operating
-threshold is frozen at training time at a target precision of 30% — roughly
-Revolut's published operating point, three false alarms per fraud caught,
+SageMaker Serverless Inference. Gradient boosting on trees is robust on
+heterogeneous features, needs little tuning, and scores a single row inside a
+real-time budget. Fraud is rare in the training data (about half a percent),
+the split is chronological so the model is judged on the future, and the
+operating threshold is frozen at training time at a target precision of 30%,
 because a blocked card is a recoverable annoyance and a fraudulent charge is
 not. The artifact is `artifacts/model.cbm`, CatBoost's native format — the
 same file a SageMaker model tarball carries to the serverless endpoint.
