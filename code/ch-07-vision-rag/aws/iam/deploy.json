@@ -16,6 +16,7 @@
       "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
       "Resource": "*"
     },
+    {"Sid": "SamTransform", "Effect": "Allow", "Action": "cloudformation:CreateChangeSet", "Resource": "arn:aws:cloudformation:us-east-1:aws:transform/*"},
     {
       "Sid": "ManageChapterRoles",
       "Effect": "Allow",
@@ -54,7 +55,7 @@
     {
       "Sid": "ApiGateway",
       "Effect": "Allow",
-      "Action": ["apigateway:POST", "apigateway:GET", "apigateway:PATCH", "apigateway:DELETE", "apigateway:PUT"],
+      "Action": ["apigateway:POST", "apigateway:GET", "apigateway:PATCH", "apigateway:DELETE", "apigateway:PUT", "apigateway:TagResource", "apigateway:UntagResource"],
       "Resource": "arn:aws:apigateway:us-east-1::/*"
     },
     {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": "arn:aws:ecr:us-east-1:*:repository/ch07-*"},

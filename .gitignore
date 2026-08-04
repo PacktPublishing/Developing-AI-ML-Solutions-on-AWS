@@ -3,6 +3,7 @@
 .tmp/
 .vscode/
 .zed/
+.env
 .claude/settings.local.json
 .ruff_cache/
 __pycache__/
