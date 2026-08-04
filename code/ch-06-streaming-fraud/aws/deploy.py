@@ -44,6 +44,8 @@ def deploy_local() -> None:
     """
     import json
     import shutil
+    import subprocess
+    import sys
     import tempfile
 
     from sagemaker.serve.builder.schema_builder import SchemaBuilder
@@ -89,9 +91,21 @@ def deploy_local() -> None:
         "local-mode prediction:",
         resp.body.read().decode() if hasattr(resp, "body") else resp,
     )
-    # deploy_local's compose runner logs a benign "exited code 1" from its log
-    # streamer thread on shutdown, after the prediction above has returned.
-    endpoint.delete()
+    sys.stdout.flush()
+
+    # The SDK's local-mode teardown is unreliable: endpoint.delete() can leave
+    # the container running and a runner thread blocked, so the process hangs at
+    # exit. The prediction above is the result — remove the local container
+    # ourselves and exit hard, rather than wait on that thread.
+    running = subprocess.run(
+        ["docker", "ps", "-q", "--filter", f"ancestor={IMAGE_URI}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.split()
+    if running:
+        subprocess.run(["docker", "rm", "-f", *running], check=False)
+    os._exit(0)
 
 
 def deploy_serverless() -> None:
