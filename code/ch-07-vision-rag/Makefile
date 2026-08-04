@@ -1,4 +1,38 @@
-.PHONY: diagrams lint
+.PHONY: up faces enrol match match-impostor compare down diagrams lint
+
+COMPOSE := docker compose -f local/vision-stack.yml
+N ?= 40
+SUBJECT ?= subject_000
+FACES := data/generated/faces
+
+# The local KYC vector-search loop: a pgvector container, enrol the ID photos,
+# then match a probe selfie (1:N). Real faces + simulated selfies come from etl/.
+# On AWS the same code runs on RDS pgvector behind the enrol/match Lambdas.
+up:
+	$(COMPOSE) up -d --wait
+
+# fetch real faces (UTKFace, CC0) and build id/selfie/impostor pairs (gitignored)
+faces:
+	set -a; . ../../.env; set +a; uv run etl/build_pairs.py --n $(N)
+
+enrol:
+	cd local && uv run --project . python enrol.py ../$(FACES)
+
+# 1:N match — a genuine selfie should hit its own subject above the threshold
+match:
+	cd local && uv run --project . python match.py ../$(FACES)/probe/$(SUBJECT)/selfie.jpg
+
+# 1:N with an impostor selfie — the top score should fall below the threshold
+match-impostor:
+	cd local && uv run --project . python match.py ../$(FACES)/impostors/$(SUBJECT)/selfie.jpg
+
+# 1:1 compare + Captum explanation on a genuine pair
+compare:
+	cd local && uv run --project . python compare.py \
+		../$(FACES)/enrolled/$(SUBJECT)/id.jpg ../$(FACES)/probe/$(SUBJECT)/selfie.jpg
+
+down:
+	$(COMPOSE) down -v
 
 lint:
 	uvx ruff check .

@@ -1,0 +1,19 @@
+name: ch07-vision
+
+services:
+  db:
+    # Postgres + pgvector: the local vector store. On AWS this is Amazon RDS for
+    # PostgreSQL with the vector extension; the code and SQL do not change, only
+    # the connection string (KYC_DSN).
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=kyc
+      - POSTGRES_PASSWORD=kyc
+      - POSTGRES_DB=kyc
+    ports:
+      - "5507:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kyc -d kyc"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
