@@ -1,8 +1,4 @@
-"""The local KYC vector store: connect and create the schema, index-first.
-
-The same `faces` table and HNSW index the enrolment Lambda builds on AWS — here
-against the local pgvector container. Only `KYC_DSN` changes between worlds.
-"""
+"""The local KYC vector store: connect and create the schema, index-first."""
 
 import os
 

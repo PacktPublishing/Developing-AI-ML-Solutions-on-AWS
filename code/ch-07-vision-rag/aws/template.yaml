@@ -40,9 +40,8 @@ Globals:
 
 Resources:
 
-  # A small VPC so the Lambdas can reach a private database. S3 is reached through
-  # a gateway endpoint and Secrets Manager through an interface endpoint, so no NAT
-  # gateway is needed (the facenet weights are baked into the image at build time).
+  # A small VPC so the Lambdas can reach a private database: S3 via a gateway endpoint,
+  # Secrets Manager via an interface endpoint, so no NAT gateway (weights baked into the image).
   Vpc:
     Type: AWS::EC2::VPC
     Properties:
@@ -136,7 +135,7 @@ Resources:
       SecurityGroupIds:
         - !Ref EndpointSg
 
-  # Identity images. Disposable chapter bucket — a production store would Retain.
+  # Identity images. Disposable chapter bucket. A production store would Retain.
   ImagesBucket:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete

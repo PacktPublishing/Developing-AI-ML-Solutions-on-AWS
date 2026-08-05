@@ -1,10 +1,6 @@
-"""Match a probe face against the enrolled store (1:N) — the local search Lambda.
+"""Match a probe face against the enrolled store (1:N), the local search Lambda.
 
-Embeds the probe, KNN-searches the `faces` table by cosine distance (the HNSW
-index returns candidates; the score is exact cosine), and calls it a match if the
-top score clears the threshold. Same SQL as the AWS search handler.
-
-    uv run match.py <probe.jpg> [k]
+uv run match.py <probe.jpg> [k]
 """
 
 import sys

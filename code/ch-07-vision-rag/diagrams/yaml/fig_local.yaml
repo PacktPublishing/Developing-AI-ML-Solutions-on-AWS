@@ -1,7 +1,4 @@
-# The same Vision RAG loop on your laptop: the facenet Lambda containers run under
-# the Lambda RIE (curled directly — no API Gateway locally), a Postgres+pgvector
-# container stands in for RDS, and S3Proxy stands in for S3. Same code; only the
-# DB and image endpoints change.
+# The same Vision RAG loop on your laptop: facenet Lambda containers under the Lambda RIE, pgvector for RDS, S3Proxy for S3.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

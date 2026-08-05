@@ -14,6 +14,8 @@ import os
 
 import boto3
 
+from face_embedder import FaceEmbedder
+
 os.chdir("/tmp")
 log = logging.getLogger()
 log.setLevel(logging.INFO)
@@ -23,8 +25,6 @@ DB_NAME = os.environ.get("PGDATABASE", "kyc")
 DB_SECRET_ARN = os.environ["DB_SECRET_ARN"]
 DEFAULT_BUCKET = os.environ.get("IMAGES_S3_BUCKET", "")
 MATCH = 0.70
-
-from face_embedder import FaceEmbedder
 
 _embedder = FaceEmbedder(device="cpu")
 _conn = None

@@ -5,9 +5,7 @@ N ?= 40
 SUBJECT ?= subject_000
 FACES := data/generated/faces
 
-# The local KYC vector-search loop: a pgvector container, enrol the ID photos,
-# then match a probe selfie (1:N). Real faces + simulated selfies come from etl/.
-# On AWS the same code runs on RDS pgvector behind the enrol/match Lambdas.
+# The local KYC vector-search loop: pgvector container, enrol the ID photos, then match a probe selfie (1:N).
 up:
 	$(COMPOSE) up -d --wait
 
@@ -18,11 +16,11 @@ faces:
 enrol:
 	cd local && uv run --project . python enrol.py ../$(FACES)
 
-# 1:N match — a genuine selfie should hit its own subject above the threshold
+# 1:N match: a genuine selfie should hit its own subject above the threshold
 match:
 	cd local && uv run --project . python match.py ../$(FACES)/probe/$(SUBJECT)/selfie.jpg
 
-# 1:N with an impostor selfie — the top score should fall below the threshold
+# 1:N with an impostor selfie: the top score should fall below the threshold
 match-impostor:
 	cd local && uv run --project . python match.py ../$(FACES)/impostors/$(SUBJECT)/selfie.jpg
 
@@ -38,10 +36,7 @@ lint:
 	uvx ruff check .
 
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
-# AWS icons are fetched at render time; custom icons live in the shared
-# assets/diagrams/ (Strands, Lambda coin, local-stack tools). Icon PNGs are
-# re-rendered from their SVG sources at ICON_HEIGHT (needs librsvg's rsvg-convert).
-# WIDTH sets output pixel width (0 = awsdac native; raise it for print).
+# WIDTH sets output pixel width (0 = awsdac native); ICON_HEIGHT re-renders custom SVG icons (needs rsvg-convert).
 AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0

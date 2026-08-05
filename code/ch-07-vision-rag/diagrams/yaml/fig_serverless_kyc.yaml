@@ -1,7 +1,5 @@
-# The serverless Vision RAG service. An applicant's identity photo is embedded by
-# a containerized facenet Lambda and matched against known-identity vectors in RDS
-# Postgres (pgvector, HNSW). The search Lambda embeds the probe, runs the KNN, and
-# fire-and-forget indexes new faces via the embeddings Lambda.
+# The serverless Vision RAG service: a containerized facenet Lambda embeds an identity photo
+# and matches it against known-identity vectors in RDS Postgres (pgvector, HNSW).
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

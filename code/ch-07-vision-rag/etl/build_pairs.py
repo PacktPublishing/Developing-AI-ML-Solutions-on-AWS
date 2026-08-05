@@ -2,21 +2,7 @@
 # requires-python = ">=3.12"
 # dependencies = ["kaggle", "pillow"]
 # ///
-"""Build the KYC face pairs from a real, permissively-licensed face set.
-
-Real KYC selfie/ID pairs are confidential, and every public "selfie + ID" set on
-Kaggle is NonCommercial/NoDerivatives — unusable in a commercial book. So the
-enrolled "ID photo" is a real face from **UTKFace** (CC0 public domain: real,
-diverse, non-celebrity, one image per person), and the matching "selfie" is a
-*simulated re-capture of the same face* — a light, identity-preserving
-augmentation (small rotation, lighting, crop, JPEG re-encode). Same person, a
-second capture: exactly the 1:1 check the chapter demonstrates. No real
-identities, no license or privacy exposure. Images are fetched to a gitignored
-folder and never committed.
-
-The optional `--hf` path swaps the classic augmentation for a Hugging Face
-img2img model (heavier, nondeterministic, and it can *drift the identity*, which
-silently turns a match into a non-match — off by default for that reason).
+"""Build the KYC face pairs from a real, permissively-licensed face set (UTKFace, CC0).
 
 Output (under a gitignored dir):
     <out>/enrolled/<subject>/id.jpg      the real face (enrolled)
@@ -72,12 +58,7 @@ def id_crop(path: Path, size: int = 256) -> Image.Image:
 
 
 def make_selfie(im: Image.Image, rng: random.Random) -> Image.Image:
-    """Simulate a second capture of the SAME face with identity-preserving jitter.
-
-    Small rotation + lighting/colour + a slight zoom/crop, then a JPEG round-trip
-    so it is a genuinely different file (a re-photograph), not a copy — while the
-    face stays the same person, which the embedder should still match.
-    """
+    """Simulate a second capture of the SAME face with identity-preserving jitter."""
     out = im.rotate(
         rng.uniform(-12, 12), resample=Image.BICUBIC, fillcolor=(127, 127, 127)
     )
@@ -133,7 +114,9 @@ def main() -> None:
     for i, src in enumerate(subjects):
         subject = f"subject_{i:03d}"
         ident = id_crop(src)
-        selfie = make_selfie_hf(ident, args.strength) if args.hf else make_selfie(ident, rng)
+        selfie = (
+            make_selfie_hf(ident, args.strength) if args.hf else make_selfie(ident, rng)
+        )
         # a non-match "selfie" from a different subject (wraps around the list)
         impostor_src = subjects[(i + 1) % len(subjects)]
         impostor = make_selfie(id_crop(impostor_src), rng)

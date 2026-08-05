@@ -17,13 +17,13 @@ from io import BytesIO
 import boto3
 import numpy as np
 
+from face_embedder import FaceEmbedder
+
 os.chdir("/tmp")
 log = logging.getLogger()
 log.setLevel(logging.INFO)
 
 DEFAULT_BUCKET = os.environ.get("IMAGES_S3_BUCKET", "")
-
-from face_embedder import FaceEmbedder
 
 _embedder = FaceEmbedder(device="cpu")
 

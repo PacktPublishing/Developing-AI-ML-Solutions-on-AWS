@@ -1,11 +1,6 @@
 """Enrol the ETL's ID photos into the local pgvector store.
 
-The local mirror of the enrolment Lambda: same `faces` table + index-first HNSW,
-but it reads `enrolled/{subject}/id.jpg` from the filesystem (what
-`etl/build_pairs.py` wrote) instead of firing on an S3 upload. Same embedder,
-same SQL — only the source and the DSN change.
-
-    uv run enrol.py [faces_dir]     # default ../data/generated/faces
+uv run enrol.py [faces_dir]     # default ../data/generated/faces
 """
 
 import sys

@@ -1,26 +1,18 @@
-"""Face embedder: MTCNN detection + InceptionResnetV1 (VGGFace2) embedding.
-
-Produces 512-dim face embeddings from raw image bytes. Picks the largest
-detected face by bounding-box area to avoid background-face picks.
-
-Weights auto-download from the facenet-pytorch release assets on first use —
-no private bucket, no manual weight files, no code forced onto sys.path. The
-same class runs unchanged locally and inside the Lambda container; only the
-image source (local file, S3, S3Proxy) differs at the call site.
-
-"""
+"""Face embedder: MTCNN detection + InceptionResnetV1 (VGGFace2) 512-dim embedding from image bytes."""
 
 import os
 import warnings
 from io import BytesIO
 
-os.environ.setdefault("TORCH_HOME", os.environ.get("TORCH_HOME", "/tmp/torch"))
-warnings.filterwarnings("ignore")
-
 import numpy as np
 import torch
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from PIL import Image
+
+# TORCH_HOME points weight downloads at a writable dir; torch reads it lazily at
+# model load, so it can follow the imports.
+os.environ.setdefault("TORCH_HOME", os.environ.get("TORCH_HOME", "/tmp/torch"))
+warnings.filterwarnings("ignore")
 
 EMBEDDING_DIM = 512
 
@@ -44,8 +36,8 @@ class FaceEmbedder:
         """Return a 512-dim embedding from raw image bytes, or None if no face.
 
         strategy:
-            "largest" — pick the largest detected face by bbox area (default).
-            "first"   — pick the highest-confidence detection.
+            "largest": pick the largest detected face by bbox area (default).
+            "first": pick the highest-confidence detection.
         """
         try:
             if not image_bytes:

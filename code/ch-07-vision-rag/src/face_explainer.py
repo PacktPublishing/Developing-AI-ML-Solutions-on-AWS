@@ -1,11 +1,7 @@
 """Explain a face comparison with Captum Integrated Gradients, both directions.
 
-Embed two faces with facenet, take the cosine similarity, and attribute it back
-to each image's pixels (once with the other face held fixed). The two saliency
-maps show which regions of each face drive the match.
-
-    out = explain(embedder, a_bytes, b_bytes)
-    # out = {"similarity", "a", "sal_a", "b", "sal_b"}  (RGB uint8 + HxW [0,1])
+out = explain(embedder, a_bytes, b_bytes)
+# out = {"similarity", "a", "sal_a", "b", "sal_b"}  (RGB uint8 + HxW [0,1])
 """
 
 from io import BytesIO

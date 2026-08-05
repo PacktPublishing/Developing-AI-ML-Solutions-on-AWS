@@ -2,9 +2,7 @@
 
     uv run python compare.py a.jpg b.jpg
 
-Prints the cosine similarity and saves /tmp/ch07_compare.png — four panels on a
-dark canvas: Image A | Attribution A | Image B | Attribution B, each face beside
-its Integrated Gradients heatmap (inferno, both scaled to a shared max).
+Saves /tmp/ch07_compare.png: Image A | Attribution A | Image B | Attribution B.
 """
 
 import sys
