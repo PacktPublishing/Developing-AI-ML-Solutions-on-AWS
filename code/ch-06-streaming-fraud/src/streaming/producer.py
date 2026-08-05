@@ -4,16 +4,12 @@
 # ///
 """Replay the transaction file into the stream, one PutRecord per event.
 
-This stands in for the card processor: every transaction becomes one record on
-the transactions stream the moment it happens. The partition key is the user
-id, and that choice is doing real work — Kinesis hashes the key to pick a
-shard, so all of one user's events land on the same shard in order. The
-consumer can then reason about "the previous transaction of this user"
-without cross-shard coordination.
-
-The loop also measures what a producer cares about: per-call latency and
-throttles. Run it against the local container and against a real stream and
-compare — the API calls are identical, only the endpoint differs.
+Stands in for the card processor: every transaction becomes one record on the
+transactions stream. The partition key is the user id, so Kinesis lands all of
+one user's events on the same shard in order and the consumer can reason about
+a user's previous transaction without cross-shard coordination. The loop also
+measures per-call latency and throttles; the API calls are identical against
+the local container and a real stream, only the endpoint differs.
 
 Usage:
   uv run streaming/producer.py --limit 2000

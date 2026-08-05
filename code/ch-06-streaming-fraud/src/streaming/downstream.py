@@ -4,19 +4,12 @@
 # ///
 """Create the analytics table and the delivery stream that feeds it.
 
-Two setup steps, in the order Firehose requires them. First the destination
-table: Firehose loads into an existing table and never creates one, on AWS
-and against the local service alike, so the table is made here, the way the
-analytics owner would. Then the delivery stream: the one boto3 call the
-local world needs that CloudFormation makes on AWS — CreateDeliveryStream
-with a Kinesis source and a Redshift destination. The configuration dict
-below is the same shape, field for field, as the
-RedshiftDestinationConfiguration in aws/template.yaml, which is the point:
-one destination config, declared in YAML for the cloud and passed to the
-API locally, delivered by the firehose-local service against kinesalite,
-S3Proxy, and the local warehouse.
-
-Idempotent: table and delivery stream are both left alone if they exist.
+Two setup steps, in the order Firehose requires. First the destination table:
+Firehose loads into an existing table and never creates one, so it is made here
+the way the analytics owner would. Then the delivery stream: the boto3
+CreateDeliveryStream call the local world needs, with the same
+RedshiftDestinationConfiguration shape that aws/template.yaml declares for the
+cloud. Idempotent: table and delivery stream are both left alone if they exist.
 
 Usage (with `uv run firehose-local/app.py` serving in another terminal):
   uv run streaming/downstream.py
@@ -75,7 +68,7 @@ def main() -> None:
         print(f"{DELIVERY_STREAM} already exists")
         return
 
-    # The same destination configuration aws/template.yaml declares — the
+    # The same destination configuration aws/template.yaml declares: the
     # local call and the CloudFormation resource read identically.
     firehose.create_delivery_stream(
         DeliveryStreamName=DELIVERY_STREAM,

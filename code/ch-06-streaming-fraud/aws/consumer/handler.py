@@ -1,14 +1,11 @@
 """Score the transaction stream on AWS: the cloud twin of src/streaming/consumer.py.
 
-The Kinesis event source mapping does what the local polling loop did — track
-a per-shard iterator and hand over batches — so this handler is only the loop
-body: invoke the endpoint, write the block, forward the decision. The three
-moves and their order are identical to the local consumer; the threshold
-still ships from training (as the SCORE_THRESHOLD parameter, copied from
-model_meta.json) and is never re-derived here.
-
-Partial batch failures are reported per record, so one poison message does
-not stall the shard.
+The Kinesis event source mapping replaces the local polling loop, so this
+handler is only the loop body: invoke the endpoint, write the block, forward
+the decision. The threshold still ships from training (the SCORE_THRESHOLD
+parameter, copied from model_meta.json) and is never re-derived here. Partial
+batch failures are reported per record, so one poison message does not stall
+the shard.
 """
 
 import base64

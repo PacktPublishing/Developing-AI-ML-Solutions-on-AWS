@@ -4,26 +4,21 @@
 # ///
 """Train the CatBoost fraud classifier the streaming consumer scores with.
 
-CatBoost is the model this system deploys to SageMaker Serverless Inference,
-and it is chosen for the same reasons Revolut's card-fraud team chose it:
-gradient boosting on decision trees is robust on heterogeneous features —
-amounts, counts, rates, and flags in one vector — needs little hyperparameter
-tuning, and scores a single row fast enough for a real-time budget. The
-trainer reads the chronological split, fits on the past with balanced class
-weights (fraud is a fraction of a percent of rows), and evaluates on the
-future at the production fraud ratio.
+CatBoost handles the heterogeneous features here (amounts, counts, rates, and
+flags in one vector) with little tuning and scores a single row fast enough for
+a real-time budget. The trainer reads the chronological split, fits on the past
+with balanced class weights (fraud is a fraction of a percent of rows), and
+evaluates on the future at the production fraud ratio.
 
 The operating threshold is chosen on the training data, never the test data:
 the highest-recall point that still keeps training precision at or above the
-target. Revolut reports operating at roughly 30% precision — three false
-alarms for every fraud caught — because a blocked card is a recoverable
-annoyance and a fraudulent charge is not. The same trade-off is made here,
-explicitly.
+target. The default holds precision near 30%, roughly three false alarms for
+every fraud caught, because a blocked card is a recoverable annoyance and a
+fraudulent charge is not.
 
 Artifacts, under artifacts/: model.cbm (CatBoost's native format, the file a
-SageMaker model tarball would carry) and model_meta.json (the feature list
-and threshold the consumer must load — the contract between training and
-serving).
+SageMaker model tarball would carry) and model_meta.json (the feature list and
+threshold the consumer must load, the contract between training and serving).
 
 Usage:
   uv run scoring/train.py --min-precision 0.30
@@ -58,9 +53,8 @@ def main() -> None:
     train = pd.read_csv(f"{CHAPTER_DIR}/data/split/train.csv")
     test = pd.read_csv(f"{CHAPTER_DIR}/data/split/test.csv")
 
-    # auto_class_weights is the imbalance strategy: with fraud at a fraction
-    # of a percent, an unweighted fit would learn to say "legit" and be right
-    # 99.5% of the time.
+    # auto_class_weights handles the imbalance: at a fraction of a percent fraud,
+    # an unweighted fit would just say "legit" and be right 99.5% of the time.
     model = CatBoostClassifier(
         iterations=300,
         auto_class_weights="Balanced",
@@ -69,9 +63,8 @@ def main() -> None:
     )
     model.fit(train[features], train[TARGET])
 
-    # Threshold from the training data: the smallest score at which training
-    # precision clears the target. Chosen here, frozen, and shipped with the
-    # model — the consumer must not re-derive it.
+    # Threshold from the training data: smallest score clearing the target
+    # precision. Frozen and shipped with the model; the consumer never re-derives it.
     train_scores = model.predict_proba(train[features])[:, 1]
     precision, _, thresholds = precision_recall_curve(train[TARGET], train_scores)
     ok = precision[:-1] >= args.min_precision

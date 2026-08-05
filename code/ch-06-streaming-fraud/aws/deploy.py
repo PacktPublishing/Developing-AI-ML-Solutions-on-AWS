@@ -4,12 +4,11 @@
 # ///
 """Deploy the fraud model behind the SageMaker serving contract.
 
-Two modes, one image, one model. The default rehearses the deploy in
-SageMaker local mode (ModelBuilder, Mode.LOCAL_CONTAINER): real role, real
-ECR image, but the container runs on this machine and serves on :8080.
-SAGEMAKER_SERVERLESS=1 runs the real deploy instead — the chapter-02 BYOC
-choreography: model.tar.gz to S3, then model + endpoint config + endpoint
-with a ServerlessConfig. The streaming consumer's invoke_endpoint call works
+The default rehearses the deploy in SageMaker local mode (ModelBuilder,
+Mode.LOCAL_CONTAINER): real role, real ECR image, container on this machine
+serving :8080. SAGEMAKER_SERVERLESS=1 runs the real deploy instead, the
+chapter-02 BYOC choreography (model.tar.gz to S3, then model + endpoint config
++ endpoint with a ServerlessConfig). The consumer's invoke_endpoint call works
 against either, unchanged.
 
 Env: IMAGE_URI, SAGEMAKER_ROLE_ARN, ARTIFACT_BUCKET (required; the Makefile
@@ -36,12 +35,7 @@ CHAPTER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def deploy_local() -> None:
-    """Serve the image as a SageMaker local endpoint (Mode.LOCAL_CONTAINER).
-
-    The SDK counterpart to `make serve` (a plain `docker run <image> serve`): the
-    same container through ModelBuilder local mode. Swapping the mode to
-    SAGEMAKER_ENDPOINT deploys the identical image to the serverless endpoint.
-    """
+    """Serve the image as a SageMaker local endpoint (Mode.LOCAL_CONTAINER)."""
     import json
     import shutil
     import subprocess
@@ -53,9 +47,7 @@ def deploy_local() -> None:
     from sagemaker.serve.model_builder import ModelBuilder
     from sagemaker.serve.utils.types import ModelServer
 
-    # MMS local mode mounts <model_path>/code at /opt/ml/model, so stage the
-    # artifacts under a code/ dir at an absolute path (a relative path is read as
-    # a Docker volume name). serve.py loads model.cbm/model_meta.json there.
+    # MMS mounts <model_path>/code at /opt/ml/model; stage artifacts there (absolute path).
     staging = tempfile.mkdtemp()
     code = os.path.join(staging, "code")
     os.makedirs(code)
@@ -64,9 +56,7 @@ def deploy_local() -> None:
         if os.path.isfile(src):
             shutil.copy(src, code)
 
-    # The local health check does not GET /ping — it invokes the endpoint with
-    # this sample and waits for a decodable response, so the sample must be a
-    # real request with every feature present (the names ride in the metadata).
+    # The local health check invokes with this sample, so it needs every feature.
     with open(f"{CHAPTER_DIR}/artifacts/model_meta.json") as f:
         features = json.load(f)["features"]
     sample = {name: 0.0 for name in features}
@@ -78,9 +68,7 @@ def deploy_local() -> None:
         model_path=staging,
         schema_builder=schema,
         role_arn=ROLE,
-        # explicit staging path — without it build() resolves the account-default
-        # SageMaker bucket and HeadBuckets it, which the least-privilege ch06-user
-        # cannot; point it at the stack's staging bucket instead
+        # explicit staging bucket, else build() HeadBuckets the account-default one
         s3_model_data_url=f"s3://{BUCKET}/ch06/{NAME}/local-mode",
         mode=Mode.LOCAL_CONTAINER,
     )
@@ -93,10 +81,8 @@ def deploy_local() -> None:
     )
     sys.stdout.flush()
 
-    # The SDK's local-mode teardown is unreliable: endpoint.delete() can leave
-    # the container running and a runner thread blocked, so the process hangs at
-    # exit. The prediction above is the result — remove the local container
-    # ourselves and exit hard, rather than wait on that thread.
+    # The SDK teardown hangs (leaves the container + a blocked thread), so remove
+    # the container ourselves and exit hard.
     running = subprocess.run(
         ["docker", "ps", "-q", "--filter", f"ancestor={IMAGE_URI}"],
         capture_output=True,

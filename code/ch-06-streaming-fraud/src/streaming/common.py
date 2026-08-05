@@ -81,12 +81,10 @@ def iter_records(
 ) -> Iterator[dict]:
     """Yield JSON records from every shard until the stream goes quiet.
 
-    A production consumer never stops; a book example must. The loop polls all
-    shards round-robin and exits once no shard has produced a record for
-    idle_seconds — long enough to survive a producer pause, short enough that
-    `make` targets finish. This is the poller half of what Lambda's Kinesis
-    event source mapping does for you on AWS: track a per-shard iterator,
-    fetch batches, hand records downstream.
+    Polls all shards round-robin and exits once no shard has produced a record
+    for idle_seconds. This is the poller half of what Lambda's Kinesis event
+    source mapping does for you on AWS: track a per-shard iterator, fetch
+    batches, hand records downstream.
     """
     shards = kinesis.list_shards(StreamName=stream)["Shards"]
     iterator_type = "TRIM_HORIZON" if from_start else "LATEST"

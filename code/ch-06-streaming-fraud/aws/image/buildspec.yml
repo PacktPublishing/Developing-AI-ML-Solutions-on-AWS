@@ -1,9 +1,7 @@
 version: 0.2
 
-# Builds the scoring container in the cloud and pushes one multi-arch
-# manifest to ECR: amd64 for the SageMaker endpoint, arm64 so local mode on
-# an Apple-silicon laptop pulls a native image. The laptop never builds or
-# loads an image — this is the Developer -> S3 -> CodeBuild -> ECR leg.
+# Builds the scoring container and pushes one multi-arch manifest to ECR:
+# amd64 for the endpoint, arm64 for local mode. Developer -> S3 -> CodeBuild -> ECR.
 phases:
   pre_build:
     commands:
@@ -13,7 +11,7 @@ phases:
       - docker buildx create --use
   build:
     commands:
-      # the endpoint tag: amd64 only, Docker media types — SageMaker rejects
+      # the endpoint tag: amd64 only, Docker media types; SageMaker rejects
       # OCI image indexes and manifest lists
       - echo "Building $IMAGE_URI (amd64, docker manifest)"
       - docker buildx build --platform linux/amd64 --provenance=false --output "type=image,oci-mediatypes=false,name=$IMAGE_URI,push=true" .

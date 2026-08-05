@@ -1,19 +1,10 @@
 """SageMaker inference server for the fraud model (custom container).
 
-The SageMaker serving contract is two HTTP routes on port 8080: GET /ping for
-health and POST /invocations for scoring. Because the contract is the same
-locally and on AWS, this one image backs both — a local container and the
-SageMaker Serverless Inference endpoint — and the streaming consumer calls
-either through the same boto3 client.
-
-One extra route makes that literal: boto3's sagemaker-runtime client sends
-invoke_endpoint to /endpoints/<name>/invocations, and on AWS the SageMaker
-front end strips that prefix before the container sees the request. Locally
-there is no front end, so the app accepts the prefixed path too and the
-consumer's invoke_endpoint call works against localhost unchanged.
-
-Accepts JSON (a record, a list of records, or {"instances": [...]}) and
-answers with the fraud probability per row.
+Serves the SageMaker contract on :8080 (GET /ping, POST /invocations), plus the
+prefixed /endpoints/<name>/invocations path the boto3 sagemaker-runtime client
+posts to, so the same image and the same call work locally and behind
+Serverless Inference. Accepts JSON (a record, a list, or {"instances": [...]})
+and answers a fraud probability per row.
 """
 
 import json

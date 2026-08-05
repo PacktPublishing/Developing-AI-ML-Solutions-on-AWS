@@ -4,28 +4,17 @@
 # ///
 """A local Amazon Data Firehose: delivery streams as a generic service.
 
-The firehose API is AWS json protocol, dispatched on the X-Amz-Target
-header. This app serves the control plane — CreateDeliveryStream,
-DescribeDeliveryStream, ListDeliveryStreams, DeleteDeliveryStream, and
-PutRecord/PutRecordBatch for DirectPut streams — and runs one delivery loop
-per stream behind it. Nothing here knows about any particular table or
-schema: every choice comes from the delivery stream's own configuration,
-exactly as it would on AWS.
+Serves the Firehose control plane (CreateDeliveryStream, DescribeDeliveryStream,
+ListDeliveryStreams, DeleteDeliveryStream, and PutRecord/PutRecordBatch for
+DirectPut) and runs one delivery loop per stream. Every choice comes from the
+stream's own configuration: a Kinesis or DirectPut source, an S3 or Redshift
+destination, records buffered until the configured size or interval trips and
+staged as one object, then loaded into a Redshift destination with a single
+COPY. Firehose never creates the destination table; that is the owner's job.
 
-A stream's source is either a Kinesis stream (KinesisStreamAsSource) or the
-PutRecord API (DirectPut). Its destination is S3, or Redshift with S3
-staging: records buffer until the configured size or interval trips, the
-batch lands as one object under Firehose's hour-partitioned key layout, and
-for a Redshift destination the warehouse then loads the staged batch with a
-single COPY into CopyCommand.DataTableName. Firehose never inserts rows one
-by one, and it never creates the destination table — that is the owner's
-job, on AWS and here alike.
-
-One documented divergence: real Redshift COPYs staged JSON directly (FORMAT
-AS JSON 'auto'); the local warehouse is Postgres, whose COPY has no JSON
-mode, so the loader reads the table's column order from the catalog and
-reshapes each staged batch to CSV before the COPY. Same batch, same staged
-object, same table.
+One documented divergence: real Redshift COPYs staged JSON directly (FORMAT AS
+JSON 'auto'); the local warehouse is Postgres, whose COPY has no JSON mode, so
+the loader reshapes each staged batch to CSV before the COPY.
 
 Usage:
   uv run firehose-local/app.py          # serves on :8008
@@ -81,9 +70,9 @@ def object_key(prefix: str, stream_name: str, now: datetime) -> str:
 def iter_json_records(staged: bytes):
     """Yield the JSON objects in a staged batch.
 
-    Firehose concatenates records as the producer sent them — with or
-    without newlines — so the parser walks the byte stream object by object
-    rather than assuming one record per line.
+    Firehose concatenates records as the producer sent them, with or without
+    newlines, so the parser walks the byte stream object by object rather than
+    assuming one record per line.
     """
     decoder = json.JSONDecoder()
     text = staged.decode()
@@ -102,9 +91,9 @@ def load_batch(conn, table: str, staged: bytes) -> None:
 
     Real Redshift runs `COPY ... FORMAT AS JSON 'auto'` straight off the
     staged object, matching JSON keys to table columns. Postgres COPY has no
-    JSON mode, so this loader asks the catalog for the table's column order
-    and reshapes the same staged bytes to CSV — the mapping semantics of
-    JSON 'auto', the transport Postgres understands.
+    JSON mode, so this loader asks the catalog for the table's column order and
+    reshapes the same staged bytes to CSV, the mapping semantics of JSON 'auto'
+    over the transport Postgres understands.
     """
     with conn.cursor() as cur:
         cur.execute(

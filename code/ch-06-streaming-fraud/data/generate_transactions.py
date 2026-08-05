@@ -4,24 +4,16 @@
 # ///
 """Synthesize the chapter's card-transaction stream and its training data.
 
-The running example is a fintech whose card processor asks for a decision while
-the terminal still shows "Processing Payment": approve or decline, within a
-latency budget the cardholder never notices. The classifier behind that decision
-is trained here on three families of features, the same families Revolut
-describes for its card-fraud system: raw transaction attributes (amount, channel,
-hour), user-versus-history comparisons (how far this amount sits from the
-user's average, how fast it follows the previous one), and merchant-focused
-aggregates (how much fraud this merchant has seen, how long it has existed).
-
-Fraud is generated from a real logit over those features, so the signal the
-model finds is genuine rather than accidental, and the label is rare the way
-fraud is rare: a fraction of a percent of rows. The split is chronological —
-train on the past, test on the future — because that is how a fraud model
-meets production, and a random split would leak tomorrow's patterns into
-yesterday's training set.
+The example is a fintech whose card processor asks for approve-or-decline while
+the terminal still shows "Processing Payment", within a latency the cardholder
+never notices. Fraud is generated from a real logit over three feature families
+(raw transaction attributes, user-versus-history comparisons, and merchant
+aggregates), so the signal is genuine and the label is rare the way fraud is: a
+fraction of a percent of rows. The split is chronological, train on the past
+and test on the future, the way a fraud model meets production.
 
 Outputs, under data/:
-  stream/transactions.csv  the replay file for the producer (no label — live
+  stream/transactions.csv  the replay file for the producer (no label; live
                            events do not arrive labeled)
   labels.csv               ground truth per transaction_id, kept aside
   split/train.csv          labeled past, for the trainer
@@ -46,9 +38,8 @@ N_MERCHANTS = 300
 CHANNELS = ["pos", "online", "atm"]
 CATEGORIES = ["grocery", "electronics", "travel", "fashion", "gaming", "services"]
 
-# The model's inputs, in the order every stage of the chapter uses them: the
-# trainer fits on these columns, the consumer assembles them from the stream
-# record, and the two must agree or the endpoint scores garbage.
+# The model's inputs, in the fixed order every stage uses: trainer, consumer,
+# and endpoint must agree on these columns or scoring breaks.
 FEATURES = [
     "amount_usd",
     "amount_over_user_avg",
@@ -66,9 +57,8 @@ def generate(rows: int, seed: int) -> pd.DataFrame:
     """Draw users, merchants, and a chronological stream of transactions."""
     rng = np.random.default_rng(seed)
 
-    # Users differ in how much they typically spend; merchants differ in how
-    # much fraud they attract. A handful of risky merchants carry most of it,
-    # which is what merchant-focused features exist to pick up.
+    # Users differ in typical spend; merchants differ in how much fraud they
+    # attract, which is what merchant-focused features pick up.
     user_avg = rng.lognormal(mean=3.2, sigma=0.6, size=N_USERS)
     merchant_risk = rng.beta(0.08, 8.0, size=N_MERCHANTS)
     merchant_age = rng.integers(5, 3000, size=N_MERCHANTS)
@@ -103,10 +93,8 @@ def generate(rows: int, seed: int) -> pd.DataFrame:
     df["is_online"] = (df["channel"] == "online").astype(int)
     df["is_night"] = df["hour"].isin(range(6)).astype(int)
 
-    # The label: a logit over the same feature families the model will see.
-    # Every term is a fraud pattern the chapter narrates — an amount far off
-    # the user's own average, a merchant never used before, a rapid-fire
-    # sequence, a risky merchant, an online purchase at night.
+    # The label: a logit over the same feature families the model sees, one term
+    # per fraud pattern (off-average amount, new merchant, rapid-fire, night).
     z = (
         -8.5
         + 2.8 * np.log(df["amount_over_user_avg"].clip(lower=0.05))

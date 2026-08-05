@@ -1,9 +1,7 @@
 .PHONY: up seed train serve produce score firehose deliver lookup query diagrams down clean lint
 
-# AWS icons are fetched at render time; custom icons live in the shared
-# assets/diagrams/ (Lambda coin, local-stack tools). Icon PNGs are re-rendered
-# from their SVG sources at ICON_HEIGHT (needs librsvg's rsvg-convert).
-# WIDTH sets output pixel width (0 = awsdac native; raise it for print).
+# Custom icons live in assets/diagrams/. Icon PNGs re-render from SVG at
+# ICON_HEIGHT (needs rsvg-convert); WIDTH sets pixel width (0 = awsdac native).
 AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0
@@ -28,10 +26,8 @@ seed:
 train:
 	uv run src/scoring/train.py --min-precision 0.30
 
-# serve the model locally (same image, same /ping,/invocations as the
-# endpoint): SageMaker starts the serving image as `... serve` and mounts the
-# model tarball at /opt/ml/model; this run does exactly that. The aws/ deploy
-# puts the identical image behind SageMaker Serverless Inference.
+# serve the model locally (same image, same /ping,/invocations as the endpoint):
+# SageMaker runs the image as `... serve` with the tarball at /opt/ml/model.
 serve:
 	docker build -q -t ch06-scoring:latest src/scoring/
 	docker rm -f ch06-serve 2>/dev/null || true
@@ -52,7 +48,7 @@ score:
 firehose:
 	uv run local/firehose-local/app.py
 
-# create the delivery stream — the same destination configuration
+# create the delivery stream: the same destination configuration
 # aws/template.yaml declares, passed to the API instead
 deliver:
 	uv run src/streaming/downstream.py

@@ -13,13 +13,13 @@ Parameters:
 
   ScoreThreshold:
     Description: |
-      The operating threshold frozen at training time — copy it from artifacts/model_meta.json. The endpoint returns a probability; the consumer owns the block-or-pass decision, same as the local run.
+      The operating threshold frozen at training time; copy it from artifacts/model_meta.json. The endpoint returns a probability; the consumer owns the block-or-pass decision, same as the local run.
     Type: String
     Default: "0.04"
 
   EnableWarehouse:
     Description: |
-      "true" builds the analytics warehouse in this stack — a publicly accessible Redshift Serverless workgroup that Firehose COPYs decisions into. "false" skips it, and Firehose stages the batches to S3 only (run the COPY from the staged objects later). One template either way.
+      "true" builds the analytics warehouse in this stack: a publicly accessible Redshift Serverless workgroup that Firehose COPYs decisions into. "false" skips it, and Firehose stages the batches to S3 only (run the COPY from the staged objects later). One template either way.
     Type: String
     AllowedValues:
       - "true"
@@ -39,10 +39,8 @@ Transform: AWS::Serverless-2016-10-31
 
 Resources:
 
-  # The two streams, same names as the local kinesalite pair. Provisioned mode
-  # with one shard each: the chapter's replay traffic fits well inside one
-  # shard's 1 MB/s, and provisioned shards have a fixed, small hourly price
-  # where on-demand mode bills per stream-hour at four times the rate.
+  # The two streams, same names as the local kinesalite pair. One provisioned
+  # shard each: replay fits inside a shard's 1 MB/s and bills less than on-demand.
   TransactionsStream:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
@@ -65,9 +63,8 @@ Resources:
       StreamModeDetails:
         StreamMode: PROVISIONED
 
-  # The fast path's block store: blocks only, keyed by transaction id. A miss
-  # means the payment goes through, so reads must stay single-digit-millisecond
-  # — which is the whole reason this is DynamoDB.
+  # The fast-path block store: blocks only, keyed by transaction id. A miss lets
+  # the payment through, so reads must stay single-digit-ms, hence DynamoDB.
   BlockedTransactions:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
@@ -105,9 +102,8 @@ Resources:
             Status: Enabled
             ExpirationInDays: 1
 
-  # The execution role the serverless endpoint runs as: pull the serving image,
-  # read the model tarball, write logs. deploy.py picks its ARN up
-  # from the stack outputs.
+  # The serverless endpoint's execution role: pull the image, read the tarball,
+  # write logs. deploy.py reads its ARN from the stack outputs.
   EndpointRole:
     Type: AWS::IAM::Role
     Properties:
@@ -144,11 +140,8 @@ Resources:
                   - logs:PutLogEvents
                 Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
 
-  # The image pipeline: CodeBuild builds the scoring container in the cloud
-  # and pushes a multi-arch manifest to ECR — amd64 for the endpoint, arm64
-  # so local mode on an Apple-silicon laptop pulls a native image. The
-  # laptop never builds or loads an image; `make image` uploads the build
-  # context to S3 and starts this project.
+  # The image pipeline: CodeBuild builds the scoring container and pushes a
+  # multi-arch manifest to ECR (amd64 for the endpoint, arm64 for local mode).
   ImageBuildRole:
     Type: AWS::IAM::Role
     Properties:
@@ -213,9 +206,7 @@ Resources:
         Location: !Sub ${StagingBucket}/ch06/source/scoring.zip
 
   # The consumer: the cloud twin of src/streaming/consumer.py. The Kinesis event
-  # source mapping replaces the polling loop — it tracks shard iterators and
-  # hands the function batches — and the function body is the same three
-  # moves: invoke the endpoint, write the block, forward the decision.
+  # source mapping replaces the polling loop; same body: score, block, forward.
   Consumer:
     Type: AWS::Serverless::Function
     Metadata:
@@ -294,11 +285,8 @@ Resources:
                   - !GetAtt StagingBucket.Arn
                   - !Sub ${StagingBucket.Arn}/*
 
-  # The analytics warehouse, in this same stack. Firehose reaches Redshift over
-  # the public endpoint, so the workgroup is publicly accessible and its
-  # security group admits only the Amazon Data Firehose service CIDR on 5439.
-  # A publicly accessible workgroup needs an internet gateway and a default
-  # route; without them the public endpoint has no path off the VPC.
+  # The analytics warehouse, in this same stack. The workgroup is publicly
+  # accessible (SG open to the Firehose CIDR on 5439 only), needing an IGW + route.
   Vpc:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
@@ -458,11 +446,8 @@ Resources:
         - !GetAtt WarehouseSg.GroupId
     Condition: HasWarehouse
 
-  # The managed version of the firehose-local shim: read the decisions stream,
-  # buffer by size or time, stage one object per batch, and — with the warehouse
-  # built — issue the COPY. Firehose never inserts rows one by one; neither did
-  # the local worker. One delivery stream deploys, chosen by EnableWarehouse:
-  # the Redshift destination when the warehouse is built, plain S3 otherwise.
+  # The managed firehose-local shim: buffer, stage to S3, then COPY. One delivery
+  # stream deploys, chosen by EnableWarehouse: Redshift when built, else plain S3.
   DeliveryToRedshift:
     Type: AWS::KinesisFirehose::DeliveryStream
     Properties:

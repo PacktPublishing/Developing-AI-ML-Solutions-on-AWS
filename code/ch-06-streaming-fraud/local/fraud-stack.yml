@@ -2,9 +2,8 @@ name: ch06-fraud
 
 services:
   kinesis:
-    # Kinesis Data Streams API served by kinesalite (MIT), the same engine
-    # LocalStack wraps. boto3 talks to it unchanged through endpoint_url.
-    # On AWS this is Amazon Kinesis Data Streams; nothing in the code changes.
+    # Kinesis Data Streams API served by kinesalite (MIT); boto3 talks to it
+    # through endpoint_url, unchanged from real Kinesis on AWS.
     image: saidsef/aws-kinesis-local:latest
     ports:
       - "4567:4567"
@@ -18,9 +17,8 @@ services:
       - "8000:8000"
 
   s3:
-    # real S3-compatible object store, composed from source: S3Proxy (Apache-2.0)
-    # serving the S3 API over a plain filesystem. Firehose's staging area: batch
-    # objects land here before they are COPYed into the warehouse.
+    # S3-compatible store from source: S3Proxy (Apache-2.0) over a filesystem.
+    # Firehose's staging area: batches land here before the COPY into the warehouse.
     image: andrewgaul/s3proxy:latest
     environment:
       - S3PROXY_ENDPOINT=http://0.0.0.0:9000
@@ -52,9 +50,8 @@ services:
         echo "bucket ready"
 
   warehouse:
-    # Redshift-flavored Postgres 16: accepts redshift-connector's startup
-    # parameters and reports a Redshift server version. The analytics table
-    # the delivery worker COPYes decisions into.
+    # Redshift-flavored Postgres 16 (reports a Redshift server version); the
+    # analytics table the delivery worker COPYes decisions into.
     image: public.ecr.aws/oblako/redshift-local:16
     environment:
       - POSTGRES_USER=analyst

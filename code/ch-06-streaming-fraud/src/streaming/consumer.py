@@ -4,24 +4,19 @@
 # ///
 """Score the transaction stream and block the transactions that look like fraud.
 
-The consumer half of the system: read transactions off the stream, run the
-fraud model, and act on the decision in two places with two different jobs.
-DynamoDB holds blocks only, keyed by transaction id — the card processor's
-fast path checks for a block, and a miss means the payment goes through, so
-the store stays small and the lookup stays fast. The block has to land
-before anything else; that write is the product. The decisions stream then
-gets every scored record, blocked or passed, for the analytics pipeline,
-where the delivery worker batches it onward to S3 and the warehouse. Fast
-path first, analytics second; the order in the loop body is the
+Read transactions off the stream, score each against the model, and act on the
+decision in two places. DynamoDB holds blocks only, keyed by transaction id:
+the block lands first because that write is the product. The decisions stream
+then gets every scored record, blocked or passed, for the analytics pipeline.
+Fast path first, analytics second; the order in the loop body is the
 architecture.
 
-The CatBoost model sits behind the SageMaker serving contract, never
-in-process: the consumer calls invoke_endpoint through boto3's
-sagemaker-runtime client. Locally the endpoint is the chapter's serving
-container (`make serve`); on AWS it is the same image behind SageMaker
-Serverless Inference, and the only thing that changes is the endpoint URL.
-The threshold comparison stays here, on the consumer side — the endpoint
-returns a probability, the consumer owns the decision.
+The model sits behind the SageMaker serving contract, never in-process: the
+consumer calls invoke_endpoint through boto3's sagemaker-runtime client, the
+local serving container (`make serve`) or the same image behind Serverless
+Inference, and only the endpoint URL changes. The threshold comparison stays
+on the consumer side; the endpoint returns a probability, the consumer owns
+the decision.
 
 Usage:
   uv run streaming/consumer.py
@@ -87,9 +82,8 @@ def main() -> None:
         decision = "block" if score >= threshold else "pass"
         latency_ms = (time.perf_counter() - t) * 1000
 
-        # The fast path: only fraud gets written. The processor looks the
-        # transaction up by id; finding a block stops the payment, a miss
-        # lets it through.
+        # The fast path: only fraud gets written. The processor looks up the id;
+        # a block stops the payment, a miss lets it through.
         if decision == "block":
             table.put_item(
                 Item={
@@ -122,7 +116,7 @@ def main() -> None:
         latencies.append(latency_ms)
 
     if not scored:
-        print("no records on the stream — run the producer first")
+        print("no records on the stream: run the producer first")
         return
     p95 = (
         statistics.quantiles(latencies, n=20)[18]

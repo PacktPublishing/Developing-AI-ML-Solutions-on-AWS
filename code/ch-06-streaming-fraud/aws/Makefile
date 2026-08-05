@@ -1,12 +1,7 @@
 .PHONY: iam lint seed-warehouse deploy image endpoint-local endpoint produce blocks query teardown
 
-# The cloud round, in order: `make deploy` (the SAM stack: streams, table,
-# ECR, Firehose, consumer, and — with EnableWarehouse=true, the default — the
-# Redshift Serverless warehouse), `make seed-warehouse` (create the analytics
-# table), `make image` (push the serving image), `make endpoint` (Serverless
-# Inference from that image), `make produce` (replay transactions at the real
-# stream), `make blocks` (count what got blocked), `make query` (the warehouse
-# view), `make teardown` (leave nothing behind).
+# The cloud round in order: deploy, seed-warehouse, image, endpoint, produce,
+# blocks, query, teardown. EnableWarehouse=true (the default) builds the warehouse.
 REGION ?= us-east-1
 STACK := streaming-fraud-ch06
 
@@ -24,7 +19,7 @@ deploy:
 	sam build
 	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
 
-# create the destination table via the Redshift Data API — no VPC path needed,
+# create the destination table via the Redshift Data API, no VPC path needed,
 # authenticated with the admin secret the stack generated
 seed-warehouse:
 	$(eval WG := $(call output,WorkgroupName))
@@ -37,9 +32,7 @@ seed-warehouse:
 			[ "$$S" = "SUBMITTED" ] || [ "$$S" = "PICKED" ] || [ "$$S" = "STARTED" ]; do sleep 1; done; \
 			echo "fraud_decisions $$S"; [ "$$S" = "FINISHED" ]
 
-# build the serving image in the cloud: upload the build context, start the
-# stack's CodeBuild project, wait for the multi-arch push to ECR. The laptop
-# never builds or loads an image.
+# build the serving image via the stack's CodeBuild project (multi-arch push to ECR).
 image:
 	$(eval BUCKET := $(call output,StagingBucketName))
 	cd .. && rm -f /tmp/ch06-scoring-src.zip && \
@@ -54,9 +47,7 @@ image:
 		[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
 		echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
 
-# rehearse the deploy in SageMaker local mode: the SDK keeps the real
-# control plane (role, ECR image, S3) but runs the serving container on
-# this machine — the chapter-02 pattern, applied to serving
+# rehearse the deploy in SageMaker local mode: same image, container runs here.
 endpoint-local:
 	$(eval REPO := $(call output,ScoringRepoUri))
 	$(eval BUCKET := $(call output,StagingBucketName))
@@ -65,9 +56,7 @@ endpoint-local:
 		ARTIFACT_BUCKET=$(BUCKET) AWS_DEFAULT_REGION=$(REGION) \
 		uv run aws/deploy.py
 
-# the real deploy — the same BYOC choreography the book used in chapter 2:
-# model.tar.gz to S3, then model + endpoint config + endpoint with a
-# ServerlessConfig
+# the real deploy: model.tar.gz to S3, then model + endpoint config + endpoint.
 endpoint:
 	$(eval REPO := $(call output,ScoringRepoUri))
 	$(eval BUCKET := $(call output,StagingBucketName))
@@ -99,7 +88,7 @@ query:
 			aws redshift-data get-statement-result --region $(REGION) --id $$ID --output json
 
 # delete in reverse: endpoint first (it is not in the stack), then empty the
-# staging bucket, then the stack — warehouse and all
+# staging bucket, then the stack, warehouse and all
 teardown:
 	-aws sagemaker delete-endpoint --region $(REGION) --endpoint-name fraud-scoring
 	-aws sagemaker delete-endpoint-config --region $(REGION) --endpoint-config-name fraud-scoring
@@ -108,11 +97,7 @@ teardown:
 	sam delete --no-prompts --region $(REGION)
 
 # -------------------------------------------------------------------------------
-# iam: provision THIS chapter's deploy identity, when you start the chapter
-# Creates ch06-user from iam/deploy.json (least-privilege for ch-06 only) and trusts you to
-# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
-# editing the policy. Then add a [profile ch06] (role_arn + source_profile) and
-# run cloud targets with AWS_PROFILE=ch06.
+# iam: provision this chapter's deploy identity (ch06-user from iam/deploy.json)
 # -------------------------------------------------------------------------------
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
