@@ -1,8 +1,6 @@
 """The challenger model: a second logistic PD with different weights.
 
-The hypothesis the ensemble gateway averages against the champion scorecard. Same
-feature contract, different coefficients: it leans harder on revolving
-utilization and recent delinquency, lighter on debt-to-income.
+The hypothesis the gateway averages against the champion: same features, heavier on utilization and delinquency, lighter on debt-to-income.
 """
 
 import math

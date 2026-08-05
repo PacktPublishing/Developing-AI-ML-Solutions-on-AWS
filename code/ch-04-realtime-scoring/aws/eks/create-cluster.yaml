@@ -1,7 +1,4 @@
-# The chapter's EKS cluster, Fargate only — no nodes to manage, no EC2.
-# eksctl drives CloudFormation under the hood; the stacks it creates are
-# named eksctl-ch04-decision-*. The control plane bills hourly, so this is
-# a create-run-delete resource like the warehouse in chapter 5.
+# The chapter's EKS cluster, Fargate only, no nodes and no EC2; a create-run-delete resource like the ch-5 warehouse.
 #
 # Create:  eksctl create cluster -f aws/eks/create-cluster.yaml   (~15 minutes)
 # Delete:  eksctl delete cluster -f aws/eks/create-cluster.yaml
@@ -12,9 +9,7 @@ metadata:
   name: ch04-decision
   region: us-east-1
 
-# the gateway pod's identity: an IAM role bound to the `gateway` service account
-# (IRSA), letting it invoke the model endpoints and write the decision log — the
-# EKS counterpart of the ECS task role.
+# the gateway pod's identity: an IRSA role on the `gateway` service account, the EKS counterpart of the ECS task role.
 iam:
   withOIDC: true
   serviceAccounts:

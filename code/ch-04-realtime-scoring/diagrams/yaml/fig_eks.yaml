@@ -1,6 +1,4 @@
-# The EKS deploy: eksctl creates the Fargate-only cluster, the same
-# manifests apply, the image comes from ECR, and the smoke test goes
-# through a port-forward.
+# The EKS deploy: eksctl creates the Fargate-only cluster, manifests apply, the image comes from ECR, and a test request goes through a port-forward.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

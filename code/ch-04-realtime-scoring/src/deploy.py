@@ -4,19 +4,14 @@
 # ///
 """Deploy one model's bring-your-own serving container, local or cloud.
 
-The same image either way. MODE=local runs it on your machine as a SageMaker local
-endpoint via SDK v3 ModelBuilder (Mode.LOCAL_CONTAINER) — the exact container the cloud runs,
-exercised offline of a real endpoint. MODE=cloud puts that same image behind a
-serverless SageMaker endpoint (a self-contained container needs no model artifact,
-so this is a direct CreateModel + serverless config).
+MODE=local runs the image as a SageMaker local endpoint (Mode.LOCAL_CONTAINER); MODE=cloud puts it behind a serverless endpoint. Same image either way.
 
 Usage:
   MODE=local MODEL_IMAGE=<ecr-uri> SAGEMAKER_ROLE_ARN=<role> uv run src/deploy.py
   MODE=cloud MODEL_IMAGE=<ecr-uri> SAGEMAKER_ROLE_ARN=<role> \
     ENDPOINT_NAME=ch04-scorecard uv run src/deploy.py
 
-Needs real AWS credentials and a SageMaker execution role. MODEL_IMAGE must be an
-ECR uri (linux/amd64, Docker v2 manifest): the SDK/endpoint pulls it.
+Needs AWS credentials, a SageMaker execution role, and MODEL_IMAGE as an ECR uri (linux/amd64, Docker v2 manifest).
 """
 
 import json

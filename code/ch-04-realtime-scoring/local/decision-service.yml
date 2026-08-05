@@ -1,10 +1,6 @@
 name: ch04-decision
 
-# The decision service, local: two model endpoints and the gateway that
-# orchestrates them. Each model is a SageMaker bring-your-own container run the
-# same way SageMaker would run it — `serve` on 8080, GET /ping and POST
-# /invocations — so the laptop and the cloud exercise the identical images. The
-# gateway fans a request out to both, averages their PDs, and decides.
+# The decision service, local: two model endpoints (SageMaker BYOC images, serve on 8080) and the gateway that ensembles them.
 services:
   scorecard:
     # the champion model as a local endpoint
@@ -37,9 +33,7 @@ services:
       retries: 5
 
   decisions:
-    # official DynamoDB Local: the decision log. Every response the gateway
-    # returns is also written here, keyed by application id — with each model's
-    # PD alongside the ensemble, the audit trail an adverse-action process reads.
+    # official DynamoDB Local: the decision log, one row per application with each model's PD alongside the ensemble.
     image: amazon/dynamodb-local:latest
     command: ["-jar", "DynamoDBLocal.jar", "-inMemory"]
     ports:
@@ -69,9 +63,7 @@ services:
         echo "table ready"
 
   gateway:
-    # the decision gateway: the same image that runs on Fargate/EKS. It reaches
-    # each model on the compose network; ENDPOINTS names them (local URLs here,
-    # SageMaker endpoint names in the cloud).
+    # the decision gateway: the same image that runs on Fargate/EKS; ENDPOINTS names each model (local URLs here, SageMaker endpoint names in the cloud).
     image: ch04-gateway
     build: ../src/gateway
     ports:

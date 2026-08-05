@@ -1,7 +1,6 @@
 """The scorecard model: a transparent logistic PD over the risk drivers.
 
-One coefficient per driver, written out so the chapter can point at every term.
-This is the "champion" the ensemble gateway invokes as one endpoint.
+One coefficient per driver; the "champion" the ensemble gateway invokes as one endpoint.
 """
 
 import math

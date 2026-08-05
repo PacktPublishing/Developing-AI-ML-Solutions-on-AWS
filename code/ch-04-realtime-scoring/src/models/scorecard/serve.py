@@ -1,7 +1,6 @@
 """SageMaker inference container for the scorecard model.
 
-Serves the contract SageMaker requires of a bring-your-own container — GET
-/ping for health and POST /invocations for scoring — with FastAPI/uvicorn.
+Serves the BYOC contract (GET /ping for health, POST /invocations for scoring) with FastAPI/uvicorn.
 https://docs.aws.amazon.com/sagemaker/latest/dg/your-algorithms-inference-code.html
 """
 

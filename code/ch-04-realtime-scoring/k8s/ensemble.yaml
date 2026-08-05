@@ -1,8 +1,4 @@
-# The whole decision service on Kubernetes, locally: the gateway and both model
-# endpoints as pods, the gateway reaching each model through a cluster Service —
-# the same shape as EKS, run on a k3d cluster with no AWS. On AWS the models are
-# SageMaker endpoints instead (k8s/gateway.yaml); here they are pods so the
-# cluster is self-contained. Images are imported into k3d, never pulled.
+# The whole decision service on Kubernetes, locally: the gateway and both models as pods on a k3d cluster, no AWS (on AWS the models are SageMaker endpoints instead, see k8s/gateway.yaml).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

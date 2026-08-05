@@ -1,8 +1,4 @@
-# Option 2 — SageMaker local mode: the SDK's ModelBuilder deploys the same model
-# images as local endpoints (Mode.LOCAL_CONTAINER), run through the SageMaker SDK
-# rather than plain Docker. The only change to reach the cloud is the mode
-# (Mode.SAGEMAKER_ENDPOINT). Needs AWS credentials and a SageMaker execution role;
-# it creates no cloud resources.
+# Option 2, SageMaker local mode: ModelBuilder deploys the same images as local endpoints (Mode.LOCAL_CONTAINER); the only change to reach the cloud is the mode. Needs AWS credentials, creates no cloud resources.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

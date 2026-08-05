@@ -1,14 +1,6 @@
-"""The decision gateway: one FastAPI service that orchestrates several model endpoints.
+"""The decision gateway: a FastAPI service that ensembles several model endpoints into one loan decision.
 
-It fans a loan application out to every configured endpoint, averages
-their probabilities of default into one ensemble PD, turns that (with the hard
-KYC/policy rules) into approve / refer / decline, and logs the decision — plus
-each model's PD — to DynamoDB.
-
-The gateway knows nothing about where the models run. Each endpoint in ENDPOINTS
-is `name=target`; a target that starts with http is a model container's URL
-(SageMaker local mode on the laptop), anything else is a SageMaker endpoint name
-invoked with sagemaker-runtime (the cloud). Same ensemble either way.
+It fans each application out to every endpoint in ENDPOINTS, averages their PDs, applies the KYC/policy rules, and logs the decision to DynamoDB. A http target is a model container (local); anything else is a SageMaker endpoint name (cloud).
 """
 
 import json
@@ -58,11 +50,7 @@ class DecisionResponse(BaseModel):
 
 
 def _invoke(target: str, features: dict) -> float:
-    """Score the features at one endpoint and return its PD.
-
-    A http target is a model container's /invocations (SageMaker local mode); any
-    other target is a SageMaker endpoint name invoked with sagemaker-runtime.
-    """
+    """Score the features at one endpoint and return its PD (http target = local container, else a SageMaker endpoint)."""
     body = json.dumps(features)
     if target.startswith("http"):
         resp = httpx.post(

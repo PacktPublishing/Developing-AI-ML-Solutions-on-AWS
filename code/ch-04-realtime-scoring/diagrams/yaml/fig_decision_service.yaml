@@ -1,9 +1,4 @@
-# The realtime decision service on AWS: a scoring request hits an Application Load
-# Balancer, which routes (after a /health check) to the gateway on ECS Fargate. The
-# gateway fans the application out to two SageMaker endpoints — the scorecard and
-# the challenger — averages their probabilities into one decision, and writes it,
-# with each model's score, to DynamoDB. The gateway image is built in the cloud by
-# CodeBuild and pushed to ECR; the laptop never builds it.
+# The realtime decision service on AWS: a request hits the ALB, routes to the gateway on ECS Fargate, which ensembles two SageMaker endpoints (scorecard and challenger) and logs to DynamoDB. The gateway image is built by CodeBuild into ECR.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

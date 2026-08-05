@@ -1,6 +1,4 @@
-# Option 1 — the decision service fully offline: Docker Compose runs the gateway
-# and both model containers, and the gateway writes to DynamoDB Local. No AWS
-# account, no credentials; the gateway reaches each model on the compose network.
+# Option 1, the decision service fully offline: Docker Compose runs the gateway and both model containers, writing to DynamoDB Local. No AWS account.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

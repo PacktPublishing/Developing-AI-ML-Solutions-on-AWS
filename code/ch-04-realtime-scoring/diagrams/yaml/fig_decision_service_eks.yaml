@@ -1,8 +1,4 @@
-# The decision gateway on EKS (Compute=eks): the same gateway image, built by
-# CodeBuild and pushed to ECR, runs as a pod on an EKS Fargate profile instead of
-# ECS. The pod invokes the two SageMaker endpoints through its IRSA service account
-# and writes the decision log to DynamoDB. Access here is a kubectl port-forward
-# (a production ingress on EKS/Fargate needs the AWS Load Balancer Controller).
+# The decision gateway on EKS (Compute=eks): the same image runs as a pod on an EKS Fargate profile, invoking the two SageMaker endpoints via IRSA and logging to DynamoDB. Access is a kubectl port-forward.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

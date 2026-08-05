@@ -1,9 +1,6 @@
 .PHONY: iam lint push-models endpoints endpoints-teardown deploy deploy-ecs deploy-eks image scale-up scale-down decide decide-ecs decide-eks teardown teardown-ecs teardown-eks
 
-# single-region chapter: the EKS config (eks/create-cluster.yaml) and the gateway
-# manifest hardcode us-east-1 (region, IRSA policy ARNs, AWS_DEFAULT_REGION), so do
-# not override this for COMPUTE=eks — the stack and the cluster would land in
-# different regions. Templating the region everywhere is left out for clarity.
+# single-region chapter: the EKS config and gateway manifest hardcode us-east-1, so don't override this for COMPUTE=eks.
 REGION := us-east-1
 STACK := realtime-scoring-ch04
 
@@ -16,19 +13,13 @@ lint:
 	rain fmt --verify template.yaml
 
 # -------------------------------------------------------------------------------
-# compute target: ecs (ALB + Fargate service, the default) or eks (an eksctl
-# Fargate cluster). Both run the same container image and write to the same
-# DynamoDB — the SAM stack supplies both — they differ only in where the pods
-# run. Pick the other with COMPUTE=eks.
+# compute target: ecs (ALB + Fargate, the default) or eks (an eksctl Fargate cluster)
 # -------------------------------------------------------------------------------
 COMPUTE ?= ecs
 REPO = $(call output,ServiceRepoUri)
 
 # -------------------------------------------------------------------------------
-# models: the two SageMaker endpoints the gateway ensembles, built and
-# deployed apart from the gateway stack. push-models builds each BYOC image
-# (linux/amd64, docker v2 manifest — what SageMaker requires) and pushes it;
-# endpoints deploys them serverless and needs a SageMaker execution role.
+# models: the two SageMaker endpoints the gateway ensembles, deployed apart from the stack
 # -------------------------------------------------------------------------------
 ACCOUNT = $(shell aws sts get-caller-identity --query Account --output text)
 ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
@@ -68,12 +59,10 @@ deploy-ecs:
 	$(MAKE) image
 	$(MAKE) scale-up
 
-# EKS: with Compute=eks the SAM stack builds only the ECR repo, the DynamoDB table,
-# and the image build — no VPC/ALB/ECS. The gateway pod runs on an eksctl Fargate
-# cluster (its own VPC) and invokes the same endpoints.
+# EKS: with Compute=eks the stack builds only the ECR repo, DynamoDB table, and image build; the gateway pod runs on an eksctl Fargate cluster.
 deploy-eks:
-	@command -v eksctl >/dev/null 2>&1 || { echo "eksctl is not installed — https://eksctl.io/installation/"; exit 1; }
-	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed — https://kubernetes.io/docs/tasks/tools/"; exit 1; }
+	@command -v eksctl >/dev/null 2>&1 || { echo "eksctl is not installed: https://eksctl.io/installation/"; exit 1; }
+	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed: https://kubernetes.io/docs/tasks/tools/"; exit 1; }
 	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides Compute=eks
 	$(MAKE) image
 	eksctl create cluster -f eks/create-cluster.yaml
@@ -131,17 +120,13 @@ teardown-ecs:
 	sam delete --no-prompts --region $(REGION)
 
 teardown-eks:
-	@command -v eksctl >/dev/null 2>&1 || { echo "eksctl is not installed — https://eksctl.io/installation/"; exit 1; }
+	@command -v eksctl >/dev/null 2>&1 || { echo "eksctl is not installed: https://eksctl.io/installation/"; exit 1; }
 	-eksctl delete cluster -f eks/create-cluster.yaml
 	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
 	sam delete --no-prompts --region $(REGION)
 
 # -------------------------------------------------------------------------------
 # iam: provision THIS chapter's deploy identity, when you start the chapter
-# Creates ch04-user from iam/deploy.json (least-privilege for ch-04 only) and trusts you to
-# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
-# editing the policy. Then add a [profile ch04] (role_arn + source_profile) and
-# run cloud targets with AWS_PROFILE=ch04.
 # -------------------------------------------------------------------------------
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
@@ -155,5 +140,5 @@ iam:
 		--assume-role-policy-document file://iam/sagemaker-trust.json 2>/dev/null \
 		|| aws iam update-assume-role-policy --role-name ch04-sagemaker --policy-document file://iam/sagemaker-trust.json
 	aws iam put-role-policy --role-name ch04-sagemaker --policy-name serve --policy-document file://iam/sagemaker-policy.json
-	@echo "ch04-sagemaker ready — pass its ARN as SM_ROLE to make endpoints / sm-local:"
+	@echo "ch04-sagemaker ready; pass its ARN as SM_ROLE to make endpoints / sm-local:"
 	@aws iam get-role --role-name ch04-sagemaker --query Role.Arn --output text

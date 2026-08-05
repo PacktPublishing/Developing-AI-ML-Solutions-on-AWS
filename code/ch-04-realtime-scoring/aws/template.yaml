@@ -1,12 +1,12 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
 Description: |
-  The decision gateway on AWS. Always created: the ECR repo the gateway image is built into (by this stack's CodeBuild project — the laptop never builds an image), and the DynamoDB decision log. With Compute=ecs (the default) the stack also builds the ECS Fargate runtime — a VPC, an Application Load Balancer whose /health check gates traffic, and the service at desired count 0. With Compute=eks the runtime is an eksctl cluster instead, so the stack builds none of that; the gateway pod invokes the same endpoints and writes the same table.
+  The decision gateway on AWS. Always created: the ECR repo the gateway image is built into (by this stack's CodeBuild project; the laptop never builds an image), and the DynamoDB decision log. With Compute=ecs (the default) the stack also builds the ECS Fargate runtime: a VPC, an Application Load Balancer whose /health check gates traffic, and the service at desired count 0. With Compute=eks the runtime is an eksctl cluster instead, so the stack builds none of that; the gateway pod invokes the same endpoints and writes the same table.
   Every stateful resource is deliberately disposable: `make teardown` leaves nothing behind.
 
 Parameters:
   Compute:
-    Description: where the gateway runs — ecs builds the Fargate runtime, eks builds only the shared repo, log, and image build.
+    Description: where the gateway runs; ecs builds the Fargate runtime, eks builds only the shared repo, log, and image build.
     Type: String
     AllowedValues:
       - ecs
