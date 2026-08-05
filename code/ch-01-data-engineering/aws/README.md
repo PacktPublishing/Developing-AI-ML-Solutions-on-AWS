@@ -14,7 +14,7 @@ make glue-run        # the bureau job as a real Glue Python shell job
 make feature-group   # Feature Store online: create, put, get
 make clean-feature-group
 make clean-lake      # remove the verification lake bucket
-make airflow-deploy  # Airflow on EC2 (SAM, airflow-ec2/); free-tier redshift-local warehouse
+make airflow-deploy  # Airflow on EC2 (SAM); free-tier redshift-local warehouse
                      #   WAREHOUSE=serverless SUBNETS=subnet-a,subnet-b,subnet-c -> Redshift Serverless
 make airflow-password  # fetch the generated UI password (user: admin) over SSM
 make airflow-delete
@@ -57,7 +57,7 @@ excludes the record immediately, but real GetRecord kept returning it for
 ## The warehouse: free tier or serverless
 
 Airflow is the chapter's orchestrator; its DAG loads a warehouse. The one SAM
-stack in `airflow-ec2/` provisions both options — pick the mode at deploy:
+stack (`template.yaml`) provisions both options, pick the mode at deploy:
 
 - **`WAREHOUSE=local` (default, free tier):** redshift-local runs on the
   instance under docker compose, mirroring the local stack. Nothing else to set.

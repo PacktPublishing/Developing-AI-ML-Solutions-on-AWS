@@ -13,7 +13,7 @@ RUN_STAMP := $(shell date +%Y-%m-%d)
 WAREHOUSE ?= local
 SUBNETS ?=
 airflow-deploy:
-	cd airflow-ec2 && sam deploy --no-fail-on-empty-changeset \
+	sam deploy --no-fail-on-empty-changeset \
 		--parameter-overrides AllowedCidr=$$(curl -4 -s ifconfig.me)/32 \
 		WarehouseMode=$(WAREHOUSE) $(if $(SUBNETS),WorkgroupSubnetIds=$(SUBNETS),)
 
@@ -38,7 +38,7 @@ airflow-delete:
 	if [ -n "$$BUCKET" ] && [ "$$BUCKET" != "None" ]; then \
 		echo "emptying s3://$$BUCKET"; aws s3 rm "s3://$$BUCKET" --recursive; \
 	fi
-	cd airflow-ec2 && sam delete --no-prompts
+	sam delete --no-prompts
 
 check-account:
 	@echo "account: $(ACCOUNT)  lake bucket: $(LAKE_BUCKET)"
