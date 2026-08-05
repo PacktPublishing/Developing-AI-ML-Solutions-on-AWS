@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  ch-02 serving stack: the registered challenger model on its BYOC image, behind
+  a SageMaker Serverless Inference endpoint (3072 MB, the chapter's quota). Build
+  the image and package the model to S3 first (make image, make package); this
+  stack takes ImageUri + ModelDataUrl and creates the model, endpoint config, and
+  endpoint. The MLflow App that registers the model stays in mlflow_app.sh because
+  AWS::SageMaker::MlflowApp is not yet a CloudFormation resource type.
+
+Parameters:
+  ImageUri:
+    Description: the BYOC serving image in ECR (make image pushes it)
+    Type: String
+
+  ModelDataUrl:
+    Description: s3:// URL of the packaged model.tar.gz (make package uploads it)
+    Type: String
+
+  EndpointName:
+    Description: the endpoint the chapter's client invokes
+    Type: String
+    Default: ch02-challenger-byoc
+
+Resources:
+
+  # The endpoint's execution role: pull the serving image, read the model
+  # tarball, write logs. Nothing else.
+  EndpointRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: serve-challenger
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: arn:aws:s3:::*/ch02/*
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/*
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
+
+  # The BYOC image plus the packaged artifact, unpacked at /opt/ml/model. No
+  # explicit name so an update replaces it cleanly instead of colliding.
+  Model:
+    Type: AWS::SageMaker::Model
+    Properties:
+      ExecutionRoleArn: !GetAtt EndpointRole.Arn
+      PrimaryContainer:
+        Image: !Ref ImageUri
+        ModelDataUrl: !Ref ModelDataUrl
+        Mode: SingleModel
+
+  EndpointConfig:
+    Type: AWS::SageMaker::EndpointConfig
+    Properties:
+      ProductionVariants:
+        - VariantName: main
+          ModelName: !GetAtt Model.ModelName
+          ServerlessConfig:
+            MemorySizeInMB: 3072
+            MaxConcurrency: 2
+
+  Endpoint:
+    Type: AWS::SageMaker::Endpoint
+    Properties:
+      EndpointName: !Ref EndpointName
+      EndpointConfigName: !GetAtt EndpointConfig.EndpointConfigName
+
+Outputs:
+  EndpointName:
+    Description: the serverless endpoint the client invokes
+    Value: !Ref EndpointName
