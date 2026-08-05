@@ -8,9 +8,7 @@ Metadata:
   cfn-lint:
     config:
 
-      # W1033: WarehouseSubnetIds' empty default never reaches the workgroup —
-      # the warehouse resources exist only when HasWarehouse, which requires
-      # the parameters to be set
+      # W1033: WarehouseSubnetIds' empty default never reaches the workgroup (created only when HasWarehouse)
       ignore_checks:
         - W1033
 
@@ -29,9 +27,7 @@ Parameters:
     Type: String
     Default: ""
 
-  # true creates the warehouse and its own VPC/subnets/endpoints (self-contained,
-  # no VPC lookups); it bills per second while active, so deploy it for the run and
-  # update the stack back to false the same day. An empty stack (false) is free.
+  # true creates the warehouse and its own VPC (self-contained); it bills per second while active, so set back to false the same day. An empty stack (false) is free.
   DeployWarehouse:
     Type: String
     AllowedValues:
@@ -288,11 +284,7 @@ Resources:
           Arn: !Ref Alerts
 
   # -----------------------------------------------------------------------------
-  # the warehouse, in its own VPC (the ch-07 self-contained pattern): a small VPC
-  # with three subnets (Redshift Serverless spans three AZs), a route table, and
-  # VPC endpoints so the in-VPC SageMaker jobs reach ECR/S3/CloudWatch and the
-  # private warehouse with no NAT. All of it exists only when DeployWarehouse=true,
-  # so nothing here needs a VPC id, subnet id, or route table looked up by hand.
+  # the warehouse, in its own VPC (the ch-07 self-contained pattern), only when DeployWarehouse=true
   # -----------------------------------------------------------------------------
   Vpc:
     Type: AWS::EC2::VPC
@@ -307,7 +299,9 @@ Resources:
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: 10.0.1.0/24
-      AvailabilityZone: !Select [0, !GetAZs ""]
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
     Condition: HasWarehouse
 
   SubnetB:
@@ -315,7 +309,9 @@ Resources:
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: 10.0.2.0/24
-      AvailabilityZone: !Select [1, !GetAZs ""]
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
     Condition: HasWarehouse
 
   SubnetC:
@@ -323,7 +319,9 @@ Resources:
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: 10.0.3.0/24
-      AvailabilityZone: !Select [2, !GetAZs ""]
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs
     Condition: HasWarehouse
 
   RouteTable:
@@ -536,7 +534,11 @@ Outputs:
 
   JobSubnetIds:
     Description: NETWORK_SUBNETS for src/pipeline/pipeline.py (VpcConfig)
-    Value: !Join [",", [!Ref SubnetA, !Ref SubnetB, !Ref SubnetC]]
+    Value: !Join
+      - ','
+      - - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
     Condition: HasWarehouse
 
   JobSecurityGroupId:

@@ -32,9 +32,7 @@ events:
 schedule:
 	uv run src/steps/schedule.py
 
-# the same run as a SageMaker Pipeline: local executor (Docker), real
-# control plane — real credentials, a real S3 bucket for step I/O, the
-# local warehouse. Needs make up + seed and BATCH_BUCKET + SAGEMAKER_ROLE_ARN.
+# the same run as a SageMaker Pipeline: local Docker executor, real control plane. Needs make up + seed and BATCH_BUCKET + SAGEMAKER_ROLE_ARN.
 pipeline:
 	docker build -q -t ch05-step:local src/pipeline/step_image/
 	PIPELINE_MODE=local STEP_IMAGE=ch05-step:local \

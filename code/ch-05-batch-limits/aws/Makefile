@@ -11,9 +11,7 @@ lint:
 	uvx cfn-lint template.yaml
 	rain fmt --verify template.yaml
 
-# the whole stack in one command, including the warehouse and its self-contained
-# VPC (own subnets/endpoints — nothing to look up). The warehouse bills per second,
-# so `make teardown` when the run is done.
+# the whole stack in one command, incl. the warehouse and its self-contained VPC. The warehouse bills per second, so `make teardown` when done.
 deploy:
 	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
 		--parameter-overrides DeployWarehouse=true
@@ -40,9 +38,7 @@ image:
 		[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
 		echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
 
-# register the pipeline on AWS: same definition, PIPELINE_MODE=aws. The DSN
-# (endpoint + generated password) and the VpcConfig (subnets + job SG) are all
-# read from the stack outputs — nothing to pass by hand.
+# register the pipeline on AWS (PIPELINE_MODE=aws); DSN and VpcConfig come from the stack outputs.
 pipeline:
 	$(eval REPO := $(call output,StepRepoUri))
 	$(eval BUCKET := $(call output,BatchBucketName))
@@ -71,10 +67,6 @@ teardown:
 
 # -------------------------------------------------------------------------------
 # iam: provision THIS chapter's deploy identity, when you start the chapter
-# Creates ch05-user from iam/deploy.json (least-privilege for ch-05 only) and trusts you to
-# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
-# editing the policy. Then add a [profile ch05] (role_arn + source_profile) and
-# run cloud targets with AWS_PROFILE=ch05.
 # -------------------------------------------------------------------------------
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}

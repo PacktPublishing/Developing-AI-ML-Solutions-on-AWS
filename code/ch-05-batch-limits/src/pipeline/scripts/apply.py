@@ -20,9 +20,7 @@ def main() -> None:
             if row["decision"] != "KEEP"
         ]
 
-    # Stage the changes and apply them in one set-based UPDATE ... FROM. Redshift
-    # rewrites blocks on every single-row UPDATE, so 3,800 of them crawl; one
-    # UPDATE joined to a staged table is a single pass. Runs the same on Postgres.
+    # Stage the changes and apply them in one set-based UPDATE ... FROM: Redshift rewrites blocks on every single-row UPDATE, so one join is far faster. Runs the same on Postgres.
     with psycopg2.connect(os.environ["WAREHOUSE_DSN"]) as conn, conn.cursor() as cur:
         cur.execute(
             "CREATE TEMP TABLE changes (customer_id VARCHAR(16), new_limit NUMERIC(12, 2))"

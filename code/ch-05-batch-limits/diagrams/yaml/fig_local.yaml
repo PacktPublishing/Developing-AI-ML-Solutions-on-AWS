@@ -1,6 +1,4 @@
-# The batch run on your laptop: PIPELINE_MODE=local runs the steps in the
-# ch05-step container against a redshift-local warehouse and S3Proxy. Same code;
-# only the endpoints change.
+# The batch run on your laptop: PIPELINE_MODE=local runs the steps in the ch05-step container against a redshift-local warehouse and S3Proxy. Same code; only the endpoints change.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

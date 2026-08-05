@@ -4,11 +4,6 @@
 # ///
 """Seed the Redshift Serverless warehouse through the Data API.
 
-The warehouse is private (no public endpoint), so this loads it the serverless
-way: upload the portfolio CSV to S3, then CREATE TABLE + COPY FROM S3 over the
-redshift-data API (IAM auth, no VPC path). Redshift's COPY reads from S3 — the
-reason the local COPY-FROM-STDIN loader (steps/seed_warehouse.py) does not port.
-
 Env: WORKGROUP, BUCKET, COPY_ROLE_ARN (required), DB_NAME (default portfolio).
 """
 

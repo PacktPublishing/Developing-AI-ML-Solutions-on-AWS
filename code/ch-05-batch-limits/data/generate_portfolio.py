@@ -4,18 +4,6 @@
 # ///
 """Synthesize the loan portfolio the batch run manages.
 
-The running example is a lender's card book: thousands of customers with a
-credit limit, a utilization, and a repayment history. Once a month a batch
-run re-scores everyone, shortlists who is eligible for a limit change, and
-applies the decisions — no customer asked for anything; the portfolio is
-managed, not just observed.
-
-The label is twelve-month default, generated from a real logit over the
-behavior drivers (utilization, delinquency, tenure, affordability), so the
-model the pipeline trains finds genuine signal. Older customers carry the
-label (the past the model trains on); the newest vintage is unlabeled (the
-book the run scores).
-
 Outputs, under data/:
   portfolio.csv        every customer, labeled where history allows
   feature_spec.json    the model's input columns, read by the scoring step

@@ -2,9 +2,7 @@ name: ch05-batch
 
 services:
   s3:
-    # real S3-compatible object store, composed from source: S3Proxy (Apache-2.0).
-    # The batch artifacts' home: eligible shortlists, scores, decisions, and the
-    # trained model, step to step. On AWS this is Amazon S3; nothing changes.
+    # real S3-compatible object store, composed from source: S3Proxy (Apache-2.0). The batch artifacts' home; on AWS this is Amazon S3.
     image: andrewgaul/s3proxy:latest
     environment:
       - S3PROXY_ENDPOINT=http://0.0.0.0:9000

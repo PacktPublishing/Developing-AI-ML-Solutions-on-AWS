@@ -1,7 +1,4 @@
-# The monthly batch limit run: an EventBridge schedule starts the SageMaker
-# pipeline, which reads the warehouse (its own Redshift Serverless), scores
-# limits in the step container (image built by CodeBuild -> ECR), and stages
-# results in S3. A failure event fans out to an SNS topic for alerts.
+# The monthly batch limit run: an EventBridge schedule starts the SageMaker pipeline, which reads the warehouse, scores limits in the step container, and stages results in S3; failures fan out to SNS.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

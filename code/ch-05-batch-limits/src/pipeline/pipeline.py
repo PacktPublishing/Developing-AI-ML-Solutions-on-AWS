@@ -2,12 +2,7 @@
 # requires-python = ">=3.12,<3.13"
 # dependencies = ["sagemaker>=3,<4", "sagemaker-mlops", "botocore[crt]", "boto3"]
 # ///
-"""The batch limit run as a SageMaker Pipeline — one script, local AND AWS.
-
-Five steps (shortlist -> train -> score -> decide -> apply): a TrainingStep
-producing model.tar.gz between four ProcessingSteps, data flowing by S3
-property reference. Only the session changes between worlds:
-LocalPipelineSession (Docker, no quota) vs PipelineSession (SageMaker jobs).
+"""The batch limit run as a SageMaker Pipeline: one script, local AND AWS.
 
 Env: STEP_IMAGE (local tag or ECR URI), SAGEMAKER_ROLE_ARN, BATCH_BUCKET,
      WAREHOUSE_DSN (as reachable from inside the step containers),
@@ -51,9 +46,7 @@ IO_PREFIX = os.environ.get("IO_PREFIX", "batch/pipeline-io")
 with open(os.path.join(HERE, "..", "..", "data", "feature_spec.json")) as f:
     FEATURES = ",".join(json.load(f)["features"])
 
-# VpcConfig on AWS: the jobs run in the warehouse's VPC so they reach the private
-# Redshift (NETWORK_SUBNETS/NETWORK_SG come from the stack outputs). Empty locally,
-# where redshift-local is on the host and there is no VPC.
+# VpcConfig on AWS: the jobs run in the warehouse's VPC to reach the private Redshift (NETWORK_SUBNETS/NETWORK_SG come from the stack outputs). Empty locally.
 _SUBNETS = [s for s in os.environ.get("NETWORK_SUBNETS", "").split(",") if s]
 _SG = os.environ.get("NETWORK_SG", "")
 _NET = {"subnets": _SUBNETS, "security_group_ids": [_SG]} if _SUBNETS and _SG else None
@@ -62,13 +55,7 @@ TRAIN_NETWORK = Networking(**_NET) if _NET else None
 
 
 class LocalPipelineSession(_MlopsLocalPipelineSession, PipelineSession):
-    """The local pipeline session v3 is missing: both halves in one class.
-
-    v3 ships two LocalPipelineSessions and each has half of what a local
-    pipeline needs; inheriting from both keeps the mlops implementations and
-    makes isinstance(sess, PipelineSession) true, so steps compose into a
-    DAG instead of executing on definition (same workaround as chapter 2).
-    """
+    """The local pipeline session v3 is missing: both halves in one class."""
 
 
 if MODE == "local":

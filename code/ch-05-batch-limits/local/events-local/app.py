@@ -4,18 +4,6 @@
 # ///
 """A local EventBridge and SNS: rules, schedules, topics, one service.
 
-EventBridge (aws-json on X-Amz-Target) serves PutRule, PutTargets,
-ListRules, ListTargetsByRule, DeleteRule, RemoveTargets. SNS (query
-protocol, XML) serves CreateTopic, Subscribe, Publish, ListTopics,
-DeleteTopic. A scheduler thread fires rules on their rate() or cron()
-expression; SNS-topic targets deliver through the SNS plane, every other
-target is printed with its event — locally the reader sees when the
-pipeline WOULD start, and starts it (on AWS, EventBridge holds the
-StartPipelineExecution role).
-
-Subscriptions with protocol http/https are POSTed the message; any other
-protocol is printed. Everything is in-memory.
-
 Usage:
   uv run events-local/app.py          # serves on :8009
 """

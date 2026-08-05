@@ -10,10 +10,11 @@ import boto3
 
 REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "http://localhost:9000")
-# sslmode=require: SSL on, no CA verification — one DSN reaches redshift-local's
+# sslmode=require: SSL on, no CA verification, so one DSN reaches redshift-local's
 # self-signed cert and Amazon Redshift Serverless alike (the ch-01 pattern).
 WAREHOUSE_DSN = os.environ.get(
-    "WAREHOUSE_DSN", "postgresql://analyst:analyst@localhost:5439/portfolio?sslmode=require"
+    "WAREHOUSE_DSN",
+    "postgresql://analyst:analyst@localhost:5439/portfolio?sslmode=require",
 )
 BUCKET = os.environ.get("BATCH_BUCKET", "portfolio")
 PREFIX = "batch"
