@@ -2,19 +2,11 @@
 # requires-python = ">=3.12,<3.13"
 # dependencies = ["syne-tune", "xgboost", "scikit-learn", "pandas", "mlflow"]
 # ///
-"""Local hyperparameter tuning for the challenger — Syne Tune, no instance, no quota.
+"""Local hyperparameter tuning for the challenger: Syne Tune, no instance, no quota.
 
-The cloud script aws/jobs/amt.py runs the search as managed SageMaker Automatic
-Model Tuning. This runs the SAME search on your laptop with Syne Tune — the AMT
-team's own open-source tuner (Apache-2.0). Its LocalBackend evaluates each trial as
-a local subprocess and a model-based Bayesian scheduler (TPE) proposes the next
-configuration: genuine Bayesian search, no random fallback, no Docker, no AWS.
+The same search as the managed run in aws/jobs/amt.py, on your laptop with Syne Tune (the AMT team's open-source tuner, Apache-2.0): its LocalBackend evaluates each trial as a local subprocess and a TPE scheduler proposes the next configuration. Same ranges, seed, and budget; each trial trains the monotone XGBoost challenger (tuning/trial.py) and reports validation_auc, logging to the same MLflow experiment when MLFLOW_TRACKING_URI is set.
 
-Same ranges, seed, and budget as the managed run. Each trial trains the monotone
-XGBoost challenger (tuning/trial.py) and reports validation_auc back through Syne
-Tune; trials log to the same MLflow experiment when MLFLOW_TRACKING_URI is set.
-
-Env: MLFLOW_TRACKING_URI (optional — the MLflow App ARN, or a sqlite:// path),
+Env: MLFLOW_TRACKING_URI (optional: the MLflow App ARN, or a sqlite:// path),
      SEED (default 42), MAX_JOBS (default 6, matches aws/jobs/amt.py).
 Run: make amt   (or: MLFLOW_TRACKING_URI=<app-arn> uv run tuning/amt.py)
 """

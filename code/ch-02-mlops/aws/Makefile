@@ -22,10 +22,8 @@ MODEL_PATH ?=
 # -------------------------------------------------------------------------------
 # iam: provision THIS chapter's deploy identity, when you start the chapter
 # -------------------------------------------------------------------------------
-# Creates ch02-user from iam/deploy.json (least-privilege for ch-02 only) and
-# trusts you to assume it — no account-wide up-front setup, you provision what the
-# chapter needs when you reach it. Re-run after editing deploy.json. Then add a
-# [profile ch02] (role_arn + source_profile) and run cloud targets AWS_PROFILE=ch02.
+# Creates ch02-user from iam/deploy.json (least-privilege for ch-02 only) and trusts you to assume it; re-run after editing deploy.json.
+# Then add a [profile ch02] (role_arn + source_profile) and run cloud targets AWS_PROFILE=ch02.
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
 iam:
@@ -38,10 +36,8 @@ iam:
 # -------------------------------------------------------------------------------
 # image: build the container in the cloud (CodeBuild -> ECR)
 # -------------------------------------------------------------------------------
-# image-bootstrap creates the ECR repo + CodeBuild project + source bucket
-# (image/build.yaml, once per image). image then zips the build context, uploads
-# it, starts the build, and waits. REPO=ch02-challenger (train_job.py's image) or
-# ch02-scorecard; image/github-actions.yml is the CI that triggers the same build.
+# image-bootstrap creates the ECR repo + CodeBuild project + source bucket (image/build.yaml, once per image); image then zips the context, uploads it, and runs the build.
+# REPO=ch02-challenger (train_job.py's image) or ch02-scorecard; image/github-actions.yml is the CI that triggers the same build.
 REPO ?= ch02-challenger
 SRCDIR = $(if $(filter ch02-scorecard,$(REPO)),scorecard,challenger)
 

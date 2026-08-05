@@ -1,15 +1,6 @@
 """The scorecard model, shared by training and serving.
 
-A Weight-of-Evidence logistic-regression scorecard: FastWoe encodes every
-feature to its WOE (numerics are monotone tree-binned, categoricals target-
-encoded), then a scikit-learn LogisticRegression scores the WOE vector. The
-monotone binning is where the bank's business rule lives — a higher bureau
-score can only lower predicted risk — so the incumbent model satisfies it by
-construction, without a constraint being bolted on afterward.
-
-This module is pure numpy/sklearn/fastwoe (no mlflow, no web framework) so both
-the training job and the inference server can import it, and so it packages
-cleanly into an MLflow pyfunc via code_paths.
+A Weight-of-Evidence logistic-regression scorecard: FastWoe encodes each feature to its WOE (numerics monotone tree-binned, categoricals target-encoded), then LogisticRegression scores the vector; the monotone binning carries the bank's business rule, so the incumbent satisfies it by construction. Pure numpy/sklearn/fastwoe (no mlflow, no web framework) so training and serving both import it and it packages cleanly into an MLflow pyfunc.
 """
 
 from __future__ import annotations

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """SageMaker training entry point for the WOE scorecard (custom container).
 
-Implements the SageMaker training contract, so the same image runs unchanged as
-a local training job (docker run ... train) and as a managed SageMaker training
-job on real AWS:
+Implements the SageMaker training contract, so the same image runs unchanged locally and as a managed SageMaker job:
 
   /opt/ml/input/data/train/        train.csv + feature_spec.json
   /opt/ml/input/data/validation/   test.csv  (held-out, for honest metrics)
@@ -11,10 +9,7 @@ job on real AWS:
   /opt/ml/model/                   the fitted model is written here
   /opt/ml/output/failure           a readable reason if training fails
 
-Experiment tracking is best-effort: if MLFLOW_TRACKING_URI is set (the local
-MLflow server, or a SageMaker managed MLflow ARN on AWS) the run's params,
-metrics, and artifacts are logged and the model is registered; if not, training
-still writes /opt/ml/model so the container works standalone.
+Experiment tracking is best-effort: if MLFLOW_TRACKING_URI is set the run is logged and the model registered; if not, training still writes /opt/ml/model.
 """
 
 import json
@@ -47,7 +42,7 @@ def _hyperparameters() -> dict:
 
 
 def _metrics(y_true, p_default) -> dict:
-    """AUC, Gini, and KS — the numbers a credit team reads first."""
+    """AUC, Gini, and KS: the numbers a credit team reads first."""
     from sklearn.metrics import roc_auc_score, roc_curve
 
     auc = float(roc_auc_score(y_true, p_default))
@@ -97,7 +92,7 @@ def train() -> None:
 
     model.save(MODEL)
 
-    # Weight-of-Evidence information value per feature — a scorecard deliverable.
+    # Weight-of-Evidence information value per feature, a scorecard deliverable.
     try:
         iv = woe.get_iv_analysis()
         iv.to_csv(os.path.join(MODEL, "iv_analysis.csv"), index=False)
@@ -115,18 +110,13 @@ def _log_to_mlflow(hp: dict, params: dict, metrics: dict) -> None:
     """Best-effort experiment tracking; skipped when no tracking server is set."""
     uri = os.environ.get("MLFLOW_TRACKING_URI")
     if not uri:
-        print("MLFLOW_TRACKING_URI unset — skipping experiment tracking")
+        print("MLFLOW_TRACKING_URI unset, skipping experiment tracking")
         return
     import mlflow
 
-    # Serverless MLflow has no server, so the client writes artifacts straight to
-    # S3: the experiment must be created with an S3 artifact_location the first
-    # time (locally the S3Proxy bucket, on AWS a real bucket). If it already
-    # exists, set_experiment just selects it.
+    # Serverless MLflow writes artifacts straight to S3, so the experiment must be created with an S3 artifact_location the first time; set_experiment selects it if it already exists.
     experiment = hp.get("mlflow_experiment", "credit-scorecard")
-    # Local (sqlite) mode has no server to assign an artifact location, so we set
-    # one on S3 explicitly. The serverless MLflow App manages its own artifact
-    # store, so there MLFLOW_ARTIFACT_ROOT is left unset and the App decides.
+    # Local (sqlite) mode has no server to assign an artifact location, so set one on S3 explicitly; the serverless MLflow App manages its own, so MLFLOW_ARTIFACT_ROOT stays unset there.
     artifact_root = os.environ.get("MLFLOW_ARTIFACT_ROOT")
     if artifact_root and mlflow.get_experiment_by_name(experiment) is None:
         mlflow.create_experiment(

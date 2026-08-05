@@ -1,11 +1,6 @@
 """Lambda handler that scores applications with the challenger model.
 
-The model is loaded once at cold start (module import) and reused across warm
-invocations — the same ChallengerModel the BYOC container serves, so a request
-gets the same score whether it hits the SageMaker endpoint or this function.
-
-Accepts an API Gateway proxy event (JSON body) or a direct invoke (the records
-themselves): a record, a list of records, or {"instances": [...]}.
+The model is loaded once at cold start and reused across warm invocations, the same ChallengerModel the BYOC container serves, so a request scores the same whether it hits the SageMaker endpoint or this function. Accepts an API Gateway proxy event (JSON body) or a direct invoke: a record, a list of records, or {"instances": [...]}.
 """
 
 import json

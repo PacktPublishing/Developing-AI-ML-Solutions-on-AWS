@@ -1,13 +1,8 @@
-# Local ECS task emulation, following the AWS "ECS Local Endpoints" guide. The
-# amazon-ecs-local-container-endpoints sidecar answers the ECS task metadata
-# endpoint and vends IAM-task-role credentials at 169.254.170.2, the same address
-# the AWS SDKs use on a real task. The app reaches them through
-# AWS_CONTAINER_CREDENTIALS_RELATIVE_URI, exactly as it would on Fargate.
+# Local ECS task emulation, following the AWS "ECS Local Endpoints" guide: the amazon-ecs-local-container-endpoints sidecar vends IAM-task-role credentials at 169.254.170.2, the address AWS SDKs use on a real task.
+# The app reaches them through AWS_CONTAINER_CREDENTIALS_RELATIVE_URI, exactly as on Fargate.
 #
-# This scoring container bakes its model in, so it does not call AWS and does not
-# need the credentials — the sidecar is included so the harness stays faithful to
-# a real task and supports the variant that loads the model from S3 with the task
-# role. `docker compose up` then runs the container as ECS would.
+# This scoring container bakes its model in, so it does not call AWS or need the credentials; the sidecar keeps the harness faithful to a real task and supports the variant that loads the model from S3 with the task role.
+# `docker compose up` then runs the container as ECS would.
 networks:
   credentials_network:
     driver: bridge

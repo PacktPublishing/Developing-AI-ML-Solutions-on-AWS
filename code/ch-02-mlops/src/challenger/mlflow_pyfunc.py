@@ -1,9 +1,6 @@
 """MLflow pyfunc wrapper for the challenger, used only by the training job.
 
-Kept apart from challenger_model.py so the inference server never imports mlflow.
-Logging the challenger as a pyfunc model registers it alongside the incumbent, so
-a promotion decision — keep the scorecard or switch to the challenger — is a
-registry action rather than a code change.
+Kept apart from challenger_model.py so the inference server never imports mlflow; logging it as a pyfunc registers it alongside the incumbent, so promotion is a registry action rather than a code change.
 """
 
 import mlflow.pyfunc

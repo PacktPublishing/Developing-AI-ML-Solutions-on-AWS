@@ -4,13 +4,7 @@
 # ///
 """Auto-deploy a registered model from the MLflow App with SDK v3 ModelBuilder.
 
-This is the bridge from "Logged" to "Deployable": an MLflow-registered pyfunc is
-not a SageMaker-deployable model on its own. ModelBuilder pulls it from the App
-registry, chooses a serving image, installs the model's own requirements, and
-builds a deployable SageMaker model — then deploys it to an endpoint. This is the
-"pin the environment in the model" path (the environment is rebuilt from the
-model's requirements), the counterpart to the BYOC "same image trains and serves"
-path used elsewhere in the chapter.
+The "pin the environment in the model" path: ModelBuilder pulls the registered pyfunc from the App registry, rebuilds a serving image from the model's own requirements, and deploys it (the counterpart to the BYOC "same image trains and serves" path).
 
 Deploys serverless so no instance quota is needed. Env:
   MLFLOW_TRACKING_ARN, SAGEMAKER_ROLE_ARN (required)
@@ -70,9 +64,7 @@ builder = ModelBuilder(
     ),
     role_arn=ROLE,
     model_metadata={"MLFLOW_MODEL_PATH": MODEL_PATH, "MLFLOW_TRACKING_ARN": ARN},
-    # A custom pyfunc (fastwoe / xgboost) isn't a native MLflow flavor, so skip
-    # ModelBuilder's auto dependency detection and hand it the requirements —
-    # otherwise it tries to introspect the pickle and cannot import our classes.
+    # A custom pyfunc (fastwoe / xgboost) isn't a native MLflow flavor, so skip ModelBuilder's auto dependency detection and hand it the requirements.
     dependencies={
         "auto": False,
         "requirements": os.path.join(HERE, "mb-requirements.txt"),
@@ -92,5 +84,5 @@ predictor = builder.deploy(
 print("deployed serverless endpoint:", getattr(predictor, "endpoint_name", predictor))
 
 # The SchemaBuilder gave the predictor a serializer that matches the container,
-# so scoring is a plain call — the same two applicants used everywhere else.
+# so scoring is a plain call, the same two applicants used everywhere else.
 print("prediction:", predictor.predict(sample_input))

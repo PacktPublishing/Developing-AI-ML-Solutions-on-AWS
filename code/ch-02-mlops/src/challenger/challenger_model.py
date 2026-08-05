@@ -1,14 +1,6 @@
 """The XGBoost challenger, shared by training and serving.
 
-The data scientist's challenge to the incumbent WOE scorecard: gradient-boosted
-trees, which usually score higher but do not honor the bank's monotonic business
-rule on their own. So the same rule is imposed here through XGBoost's
-monotone_constraints — a higher bureau score can only lower predicted risk, a
-higher debt-to-income can only raise it. Categoricals carry no direction and are
-handled by XGBoost's native categorical support (constraint 0).
-
-Pure xgboost/pandas (no mlflow, no web framework) so both the training job and
-the inference server import it, and so it packages cleanly into an MLflow pyfunc.
+Monotone gradient-boosted trees: the bank's business rule is imposed through XGBoost's monotone_constraints, categoricals unconstrained. Pure xgboost/pandas (no mlflow, no web framework) so training and serving both import it and it packages cleanly into an MLflow pyfunc.
 """
 
 from __future__ import annotations

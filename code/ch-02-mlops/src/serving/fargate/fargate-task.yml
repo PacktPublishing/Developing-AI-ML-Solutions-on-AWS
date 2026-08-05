@@ -1,6 +1,5 @@
-# Run the Fargate task locally. The image is the same one ECS runs; docker
-# compose is the local task runner. Pair with ecs-endpoints.yml to also
-# emulate the ECS task metadata and IAM-task-role credential endpoints.
+# Run the Fargate task locally (same image ECS runs, docker compose as the task runner).
+# Pair with ecs-endpoints.yml to also emulate the ECS task metadata and IAM-task-role credential endpoints.
 services:
   app:
     image: ch02-fargate:latest

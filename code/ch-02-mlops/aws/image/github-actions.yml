@@ -1,11 +1,6 @@
-# Example CI: on a push that touches a model container, start the CodeBuild
-# project that builds the image and pushes it to ECR. This is the trigger in
-# front of Developer -> Git -> CodeBuild -> ECR; CodeBuild does the actual build
-# (buildspec.yml), so the workflow stays tiny and no Docker runs on the GitHub
-# runner. Replace the account id and role ARN with your own.
+# Example CI: on a push that touches a model container, start the CodeBuild project that builds the image and pushes it to ECR (buildspec.yml does the build, so no Docker runs on the runner). Replace the account id and role ARN with your own.
 #
-# Auth uses GitHub OIDC (no long-lived keys): create an IAM role that trusts
-# token.actions.githubusercontent.com and allows codebuild:StartBuild.
+# Auth uses GitHub OIDC (no long-lived keys): an IAM role that trusts token.actions.githubusercontent.com and allows codebuild:StartBuild.
 name: build-scorecard-image
 
 on:

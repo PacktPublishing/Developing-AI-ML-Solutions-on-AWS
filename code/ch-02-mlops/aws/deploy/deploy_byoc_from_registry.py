@@ -4,12 +4,7 @@
 # ///
 """Deploy a registered model from the MLflow App on the BYOC image.
 
-The "pin the environment in the image" counterpart to deploy_modelbuilder.py.
-Instead of letting ModelBuilder repackage the model onto a heavy serving DLC
-(which overran the 3072 MB serverless quota), this pulls the model artifact from
-the App registry and serves it on the same small custom container that trained
-it — the image already proven to give byte-exact parity. It fits the serverless
-memory quota and needs no dependency resolution at deploy time.
+The "pin the environment in the image" counterpart to deploy_modelbuilder.py: serve the registered artifact on the same small container that trained it, so it fits the 3072 MB serverless quota with no deploy-time dependency resolution.
 
 Env: MLFLOW_TRACKING_ARN, SAGEMAKER_ROLE_ARN, ARTIFACT_BUCKET, IMAGE_URI (required)
      MLFLOW_MODEL_PATH (default: the latest registered credit-challenger version)
@@ -43,9 +38,7 @@ NAME = os.environ.get("ENDPOINT_NAME", "ch02-challenger-byoc")
 # -------------------------------------------------------------------------------
 mlflow.set_tracking_uri(ARN)
 
-# Resolve the version to deploy. Pinning a fixed number is brittle: the registry
-# accrues versions as you retrain, so `.../1` drifts from the newest model. Default
-# to the highest registered version (override MLFLOW_MODEL_PATH to pin one).
+# Resolve the version to deploy: default to the highest registered version rather than a brittle fixed number (override MLFLOW_MODEL_PATH to pin one).
 if not MODEL_PATH:
     versions = MlflowClient().search_model_versions(f"name='{REGISTERED_MODEL}'")
     if not versions:
@@ -69,7 +62,7 @@ with tarfile.open(tar_path, "w:gz") as tar:
         matches = glob.glob(os.path.join(local_dir, "**", fname), recursive=True)
         if not matches:
             raise SystemExit(
-                f"{fname} not found in {MODEL_PATH} — this version has no raw serving "
+                f"{fname} not found in {MODEL_PATH}; this version has no raw serving "
                 f"files (e.g. an opaque-pyfunc log). Pin a version that does via "
                 f"MLFLOW_MODEL_PATH."
             )

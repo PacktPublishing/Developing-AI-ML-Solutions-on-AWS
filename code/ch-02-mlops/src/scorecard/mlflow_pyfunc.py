@@ -1,10 +1,6 @@
 """MLflow pyfunc wrapper for the scorecard, used only by the training job.
 
-Kept apart from scorecard_model.py so the inference server never imports mlflow.
-Logging the scorecard as a pyfunc model is what lets it be registered in the
-MLflow Model Registry and later deployed by SageMaker ModelBuilder straight from
-a models:/credit-scorecard/<version> URI — the same path the incumbent and the
-challenger both travel, so promotion is a registry decision, not a code change.
+Kept apart from scorecard_model.py so the inference server never imports mlflow; logging it as a pyfunc registers it in the Model Registry for later ModelBuilder deploy from a models:/credit-scorecard/<version> URI, so promotion is a registry decision, not a code change.
 """
 
 import mlflow.pyfunc

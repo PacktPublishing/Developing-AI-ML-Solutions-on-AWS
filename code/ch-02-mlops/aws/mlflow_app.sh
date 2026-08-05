@@ -1,14 +1,7 @@
 #!/bin/sh
-# Create / describe / delete the serverless MLflow App (SageMaker AI "MLflow
-# Apps", GA Dec 2025). This is the free, scale-to-zero successor to the always-on
-# MLflow tracking server: no server to size, tracking is there when a job logs to
-# it. The App's ARN is the MLFLOW_TRACKING_URI clients use (with the
-# sagemaker-mlflow plugin) — the one thing that differs from local mode, where
-# the same variable is a sqlite path.
+# Create / describe / delete the serverless MLflow App (SageMaker AI "MLflow Apps", GA Dec 2025), the scale-to-zero successor to the tracking server; its ARN is the MLFLOW_TRACKING_URI clients use.
 #
-# Defined here as a CLI command rather than CloudFormation because the
-# AWS::SageMaker::MlflowApp resource type is new; move this to the aws/ SAM
-# template once the resource is available in your region's CloudFormation.
+# Defined as a CLI command because AWS::SageMaker::MlflowApp is new; move to the aws/ SAM template once it's in CloudFormation.
 #
 # Usage: sh aws/mlflow_app.sh create | status | uri | delete
 set -e

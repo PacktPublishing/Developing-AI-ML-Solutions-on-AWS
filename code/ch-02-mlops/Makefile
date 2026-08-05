@@ -1,9 +1,7 @@
 .PHONY: up seed train train-challenger mlflow-train mlflow-ui serve score batch sm-push sm-local sm-batch \
 	amt lambda-build lambda-local fargate-build fargate-local pipeline-parity down lint diagrams
 
-# The local cloud is S3Proxy (S3 API) only; MLflow is serverless — no tracking
-# server. Locally it writes runs to a sqlite file and artifacts to S3Proxy; on
-# AWS the one change is MLFLOW_TRACKING_URI -> a SageMaker MLflow App ARN.
+# Local cloud is S3Proxy (S3 API) only; MLflow is serverless (sqlite + S3Proxy locally). On AWS the one change is MLFLOW_TRACKING_URI -> a SageMaker MLflow App ARN.
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
 export AWS_DEFAULT_REGION ?= us-east-1
@@ -62,10 +60,8 @@ serve:
 score:
 	curl -s -X POST http://localhost:8091/invocations -H 'Content-Type: application/json' --data-binary @fixtures/sample.json; echo
 
-# --- SageMaker local mode: the same BYOC image run through the SDK v3 (not a plain
-# docker run), the counterpart of `make serve`/`make batch`. Needs real AWS creds, a
-# SageMaker role (SM_ROLE), and the image in ECR (make sm-push); env -u strips the
-# offline S3Proxy placeholders. First `make seed train`. ----------------------------
+# SageMaker local mode: the same BYOC image run through SDK v3 (make serve/batch's counterpart).
+# Needs real AWS creds, SM_ROLE, the image in ECR (make sm-push); env -u strips the S3Proxy placeholders. First `make seed train`.
 ACCOUNT ?= $(shell env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY aws sts get-caller-identity --query Account --output text)
 ECR := $(ACCOUNT).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com
 SM_ROLE ?=
@@ -98,10 +94,8 @@ batch:
 	uv run src/serving/batch.py --url http://localhost:8094 --input data/split/test.csv --output /tmp/ch02-scored.csv
 	docker rm -f ch02-batch 2>/dev/null || true
 
-# Local AMT: Syne Tune runs the same search as managed AMT on your laptop — each
-# trial a local subprocess, a Bayesian (TPE) scheduler, no instance and no Docker.
-# Trials log to the serverless MLflow App, so this needs REAL AWS credentials: env -u
-# strips the Makefile's S3Proxy placeholders (override with make amt APP_ARN=...).
+# Local AMT: Syne Tune runs the same search as managed AMT on your laptop (each trial a local subprocess, TPE scheduler, no instance, no Docker).
+# Trials log to the serverless MLflow App, so this needs REAL AWS credentials: env -u strips the S3Proxy placeholders (override with make amt APP_ARN=...).
 APP_ARN ?= $(shell env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY aws sagemaker list-mlflow-apps --query "Summaries[?Name=='ch02-mlflow'].Arn | [0]" --output text)
 
 amt:
@@ -111,7 +105,7 @@ amt:
 		MLFLOW_TRACKING_URI="$(APP_ARN)" uv run src/tuning/amt.py
 
 # the local-tuning suite: trial contract, local/cloud search-space parity, and a
-# two-trial TPE mini search — all offline, no Docker, no AWS
+# two-trial TPE mini search, all offline, no Docker, no AWS
 test:
 	uv run --python 3.12 --with pytest --with syne-tune --with xgboost \
 		--with scikit-learn --with pandas --with numpy pytest tests/ -q
@@ -139,9 +133,7 @@ fargate-local: fargate-build
 		curl -s -XPOST http://localhost:8093/invocations -H 'Content-Type: application/json' --data-binary @../../../fixtures/sample.json; echo; \
 		docker compose -f fargate-task.yml -f ecs-endpoints.yml down
 
-# the pipeline parity check: download the local-mode and cloud-mode score
-# exports (src/pipeline/README.md runs the pipeline twice, once per prefix) and
-# compare them byte for byte. Real AWS credentials, hence env -u.
+# the pipeline parity check: download the local-mode and cloud-mode score exports and compare them byte for byte. Real AWS credentials, hence env -u.
 LOCAL_SCORES ?= ch02/pipeline-scores-local
 AWS_SCORES ?= ch02/pipeline-scores-aws
 pipeline-parity:
@@ -159,11 +151,8 @@ down:
 lint:
 	uvx ruff check .
 
-# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
-# AWS icons are fetched at render time; custom icons live in the shared
-# assets/diagrams/ (Strands, Lambda coin, local-stack tools). Icon PNGs are
-# re-rendered from their SVG sources at ICON_HEIGHT (needs librsvg's rsvg-convert).
-# WIDTH sets output pixel width (0 = awsdac native; raise it for print).
+# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS icons fetched at render time, custom icons from shared assets/diagrams/).
+# Icon PNGs are re-rendered from SVG at ICON_HEIGHT (needs rsvg-convert); WIDTH sets output pixel width (0 = awsdac native).
 AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0

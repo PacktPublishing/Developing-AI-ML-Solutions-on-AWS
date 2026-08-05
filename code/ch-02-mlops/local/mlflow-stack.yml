@@ -2,10 +2,8 @@ name: ch02-mlflow
 
 services:
   s3:
-    # real S3-compatible object store, composed from source: S3Proxy (Apache-2.0)
-    # serving the S3 API over a plain filesystem. Holds MLflow artifacts, training
-    # input/output, the registry's model tarballs, and batch-transform data. On
-    # AWS this is Amazon S3; nothing in the code changes.
+    # real S3-compatible object store, composed from source: S3Proxy (Apache-2.0) serving the S3 API over a plain filesystem.
+    # Holds MLflow artifacts, training I/O, model tarballs, batch data; on AWS this is Amazon S3, nothing in the code changes.
     image: andrewgaul/s3proxy:latest
     environment:
       - S3PROXY_ENDPOINT=http://0.0.0.0:9000
@@ -38,10 +36,5 @@ services:
         done;
         echo "buckets ready"
 
-# There is no MLflow server here on purpose. SageMaker AI's serverless MLflow
-# (its "MLflow Apps", GA Dec 2025) has no tracking server to run or scale —
-# tracking is simply there when a job logs to it. The local mirror keeps that
-# shape: MLflow's client writes runs and the model registry straight to a SQLite
-# backend (the mlflow-store/ file — no process) and artifacts straight to S3.
-# The only thing that moves between worlds is MLFLOW_TRACKING_URI: a sqlite path
-# locally, an MLflow App ARN on AWS. Browse runs on demand with `make mlflow-ui`.
+# There is no MLflow server here on purpose: SageMaker AI's serverless MLflow ("MLflow Apps", GA Dec 2025) has no tracking server, and the local mirror keeps that shape (the client writes runs and registry to a SQLite file, artifacts to S3).
+# The only thing that moves between worlds is MLFLOW_TRACKING_URI: a sqlite path locally, an MLflow App ARN on AWS. Browse runs on demand with `make mlflow-ui`.

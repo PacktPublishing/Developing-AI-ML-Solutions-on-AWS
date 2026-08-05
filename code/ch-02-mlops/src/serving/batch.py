@@ -4,15 +4,7 @@
 # ///
 """Batch-score a file through the BYOC serverless endpoint.
 
-Batch transform on SageMaker is an instance-based job; on a free-tier account
-with zero instance quota it will not run. The serverless equivalent, and the one
-this chapter uses, is to stream the file through the same serverless endpoint
-that serves real time — one container image, one model, whether a request is a
-single application or a nightly file of them. The endpoint scales to zero between
-runs, so an occasional batch costs only the seconds it runs.
-
-The same script scores against a local container (pass --url) so batch scoring is
-identical in both worlds.
+SageMaker Batch Transform is instance-based and won't run on a zero-quota free-tier account; the serverless equivalent this chapter uses streams the file through the same endpoint that serves real time (one image, one model, scaling to zero between runs). Pass --url to score against a local container instead, identical in both worlds.
 
 Usage:
   uv run serving/batch.py --endpoint ch02-challenger-byoc --input data/split/test.csv --output /tmp/scored.csv

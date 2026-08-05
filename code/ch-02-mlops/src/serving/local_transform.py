@@ -4,17 +4,7 @@
 # ///
 """Batch-score a file with a SageMaker Batch Transform job in LOCAL mode.
 
-The managed counterpart of `make batch` (which is a hand loop over /invocations):
-this runs a real SageMaker Transform job on the same BYOC container, in local mode
-(instance_type="local"). The SDK brings the container up via docker-compose, streams
-the input through /invocations, and writes a .out file, exactly as a cloud Transform
-job would — swap instance_type to a real one and point at S3 for the cloud. The
-chapter runs it locally because a cloud Transform job is instance-based and the
-free-tier account has no training/processing instance quota.
-
-The container reads CSV with a header, so the whole file goes as one payload
-(split_type=None) rather than line by line. Local mode still resolves the AWS
-account and validates the role, so real credentials and a SageMaker role are needed.
+The managed counterpart of `make batch`: a real SageMaker Transform job on the same BYOC container in local mode (instance_type="local"), the SDK bringing the container up via docker-compose and writing a .out file exactly as a cloud job would (swap instance_type and point at S3 for the cloud). The whole CSV goes as one payload (split_type=None); local mode still resolves the account and validates the role, so real credentials and a SageMaker role are needed.
 
 Env: MODEL_IMAGE (ecr uri), SAGEMAKER_ROLE_ARN, MODEL_PATH (artifact dir),
      INPUT (default data/split/test.csv).

@@ -1,5 +1,4 @@
-# Local MLOps loop: the same custom containers train on the laptop, log runs to a
-# local MLflow (sqlite), and push artifacts to S3Proxy standing in for Amazon S3.
+# Local MLOps loop: the custom containers train on the laptop, log runs to a local MLflow (sqlite), and push artifacts to S3Proxy standing in for Amazon S3.
 # The one env that moves between worlds is MLFLOW_TRACKING_URI.
 Diagram:
   DefinitionFiles:

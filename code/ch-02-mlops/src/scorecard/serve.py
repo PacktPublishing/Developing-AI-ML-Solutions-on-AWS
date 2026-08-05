@@ -1,13 +1,6 @@
 """SageMaker inference server for the scorecard (custom container).
 
-The SageMaker serving contract is two HTTP routes on port 8080: GET /ping for
-health and POST /invocations for scoring. Because the contract is the same
-locally and on AWS, this one image backs three things unchanged — a local
-container, a real-time SageMaker endpoint, and a batch-transform job.
-
-Accepts JSON (a record, a list of records, or {"instances": [...]}) and CSV
-(the format batch transform sends), and answers in kind. The response is the
-probability of default per row, which the caller bands into a decision.
+Two HTTP routes on port 8080 (GET /ping, POST /invocations), the same locally and on AWS, so this one image backs a local container, a real-time endpoint, and a batch-transform job. Accepts JSON or CSV and answers in kind with the probability of default per row.
 """
 
 import io

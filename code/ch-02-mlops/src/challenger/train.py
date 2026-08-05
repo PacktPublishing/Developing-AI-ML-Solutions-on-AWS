@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 """SageMaker training entry point for the XGBoost challenger (custom container).
 
-Same SageMaker training contract and the same channels as the scorecard, so the
-identical image runs as a local training job and as a managed SageMaker job:
+Same training contract and channels as the scorecard, so the identical image runs locally and as a managed SageMaker job:
 
   /opt/ml/input/data/train/        train.csv + feature_spec.json
   /opt/ml/input/data/validation/   test.csv
   /opt/ml/input/config/hyperparameters.json
   /opt/ml/model/                   the fitted model is written here
 
-The point of the run is the comparison: it logs to the same MLflow experiment as
-the incumbent, tagged role=challenger, so the two sit side by side — the
-challenger usually wins on AUC, and the question the chapter asks is whether that
-lift is worth giving up the scorecard's transparency, now that both obey the same
-monotone rule.
+Logs to the same MLflow experiment as the incumbent, tagged role=challenger, for a side-by-side AUC comparison.
 """
 
 import json
@@ -55,7 +50,7 @@ def _hyperparameters() -> dict:
 
 
 def _metrics(y_true, p_default) -> dict:
-    """AUC, Gini, and KS — the same yardstick the incumbent is measured by."""
+    """AUC, Gini, and KS: the same yardstick the incumbent is measured by."""
     from sklearn.metrics import roc_auc_score, roc_curve
 
     auc = float(roc_auc_score(y_true, p_default))
@@ -113,10 +108,7 @@ def train() -> None:
         test_df = pd.read_csv(valid_path)
         metrics = _metrics(test_df[target], challenger.predict_proba(test_df))
         print("validation:", {k: round(v, 4) for k, v in metrics.items()})
-        # The metric contract: SageMaker captures training metrics by scraping this
-        # printed line from CloudWatch with a regex, not from a return value. This
-        # exact format must match the metric_definitions Regex in aws/jobs/amt.py
-        # ("validation_auc: ([0-9.]+)"); it is what Automatic Model Tuning optimizes.
+        # SageMaker scrapes this printed line from CloudWatch with a regex; the format must match the metric_definitions Regex in aws/jobs/amt.py ("validation_auc: ([0-9.]+)").
         print(f"validation_auc: {metrics['auc']:.6f}")
 
     challenger.save(MODEL)
@@ -131,14 +123,12 @@ def _log_to_mlflow(hp: dict, params: dict, metrics: dict) -> None:
     """Best-effort experiment tracking; skipped when no tracking server is set."""
     uri = os.environ.get("MLFLOW_TRACKING_URI")
     if not uri:
-        print("MLFLOW_TRACKING_URI unset — skipping experiment tracking")
+        print("MLFLOW_TRACKING_URI unset, skipping experiment tracking")
         return
     import mlflow
 
     experiment = hp.get("mlflow_experiment", "credit-scorecard")
-    # Local (sqlite) mode has no server to assign an artifact location, so we set
-    # one on S3 explicitly. The serverless MLflow App manages its own artifact
-    # store, so there MLFLOW_ARTIFACT_ROOT is left unset and the App decides.
+    # Local (sqlite) mode has no server to assign an artifact location, so set one on S3 explicitly; the serverless MLflow App manages its own, so MLFLOW_ARTIFACT_ROOT stays unset there.
     artifact_root = os.environ.get("MLFLOW_ARTIFACT_ROOT")
     if artifact_root and mlflow.get_experiment_by_name(experiment) is None:
         mlflow.create_experiment(

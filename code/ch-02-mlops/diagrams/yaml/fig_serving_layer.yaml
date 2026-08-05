@@ -11,7 +11,7 @@ Diagram:
       Direction: vertical
       Children: [Row1, Row2, Row3]
 
-    # Row 1 — real-time (and batch) on a serverless endpoint, called directly
+    # Row 1: real-time (and batch) on a serverless endpoint, called directly
     Row1:
       Type: AWS::Diagram::HorizontalStack
       Children: [Caller1, Endpoint]
@@ -24,7 +24,7 @@ Diagram:
       Preset: "Amazon SageMaker AI"
       Title: "Serverless endpoint (+ batch)"
 
-    # Row 2 — Lambda container behind API Gateway
+    # Row 2: Lambda container behind API Gateway
     Row2:
       Type: AWS::Diagram::HorizontalStack
       Children: [Caller2, APIGW2, Lambda]
@@ -41,7 +41,7 @@ Diagram:
       Preset: "LambdaCoin"
       Title: "Lambda container"
 
-    # Row 3 — ECS Fargate task behind API Gateway
+    # Row 3: ECS Fargate task behind API Gateway
     Row3:
       Type: AWS::Diagram::HorizontalStack
       Children: [Caller3, APIGW3, Fargate]

@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 """One Syne Tune trial: train the monotone XGBoost challenger, report validation_auc.
 
-Syne Tune's LocalBackend runs this as a subprocess per trial, passing the sampled
-hyperparameters as CLI flags and reading the objective back through Reporter (not a
-stdout regex, the way managed AMT scrapes CloudWatch). The training matches
-challenger/train.py exactly — same feature_spec, same monotone_constraints, same
-predict_proba[:, 1] — so the local search optimizes what the container would.
+LocalBackend runs this as a subprocess per trial, passing the sampled hyperparameters as CLI flags and reading the objective back through Reporter (not a stdout regex, the way managed AMT scrapes CloudWatch). The training matches challenger/train.py exactly (same feature_spec, same monotone_constraints), so the local search optimizes what the container would.
 """
 
 import argparse

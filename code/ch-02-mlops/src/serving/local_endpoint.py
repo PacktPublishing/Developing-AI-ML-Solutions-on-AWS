@@ -4,18 +4,7 @@
 # ///
 """Serve the BYOC container as a SageMaker LOCAL endpoint (Mode.LOCAL_CONTAINER).
 
-The SDK counterpart to `make serve` (which is a plain `docker run <image> serve`):
-the same custom container, run through SDK v3 ModelBuilder's local mode, with the
-trained artifact mounted at /opt/ml/model. Swapping the mode to
-Mode.SAGEMAKER_ENDPOINT deploys the identical image to a serverless endpoint (the
-`aws/deploy/deploy_byoc_from_registry.py` path), so this exercises the exact
-container the cloud runs, offline of a real endpoint.
-
-Needs real AWS credentials and a SageMaker execution role even locally (the SDK
-resolves the account and validates the role at build time). MODEL_IMAGE must be an
-ECR uri; MODEL_PATH is the trained artifact dir (scorecard.joblib/challenger.ubj
-plus feature_spec.json). On an ARM Mac the linux/amd64 image runs under emulation,
-so first /ping (which loads the model) is slow — the container timeout is generous.
+The SDK counterpart to `make serve`: the same custom container run through SDK v3 ModelBuilder's local mode, with the trained artifact at /opt/ml/model; swapping to Mode.SAGEMAKER_ENDPOINT deploys the identical image serverless. Needs real AWS credentials and a SageMaker role even locally (MODEL_IMAGE an ECR uri, MODEL_PATH the artifact dir); on an ARM Mac the amd64 image runs under emulation, so first /ping is slow.
 
 Usage:
   MODEL_IMAGE=<ecr-uri> SAGEMAKER_ROLE_ARN=<role> MODEL_PATH=runs-local/model \
@@ -36,9 +25,7 @@ IMAGE = os.environ["MODEL_IMAGE"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]
 MODEL_PATH = os.environ.get("MODEL_PATH", "runs-local/model")
 
-# Local mode mounts <model_path>/code at /opt/ml/model, so stage the trained
-# artifacts under a code/ dir at an absolute path (a relative path is read as a
-# Docker volume name). The container loads scorecard.joblib/feature_spec.json there.
+# Local mode mounts <model_path>/code at /opt/ml/model, so stage the trained artifacts under a code/ dir at an absolute path (a relative path is read as a Docker volume name).
 staging = tempfile.mkdtemp()
 code = os.path.join(staging, "code")
 os.makedirs(code)

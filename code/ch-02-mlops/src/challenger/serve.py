@@ -1,8 +1,6 @@
 """SageMaker inference server for the XGBoost challenger (custom container).
 
-Same two-route contract as the scorecard — GET /ping, POST /invocations on port
-8080 — so the same image serves a local container, a real-time endpoint, and a
-batch-transform job, and the challenger is invoked exactly like the incumbent.
+Same two-route contract as the scorecard (GET /ping, POST /invocations on port 8080), so one image serves a local container, a real-time endpoint, and a batch-transform job.
 """
 
 import io
