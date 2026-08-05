@@ -1,19 +1,7 @@
 # /// script
 # dependencies = ["boto3", "ollama"]
 # ///
-"""The model seam: one Bedrock-shaped interface, two backends.
-
-Every model call in this chapter goes through a bedrock-runtime client. On AWS
-that is the real boto3 client. Locally, set BEDROCK_LOCAL=1 and the same calls
-run against Ollama through LocalBedrockRuntime, a small class that speaks the
-Bedrock Converse and InvokeModel shapes and translates them to Ollama. The rest
-of the chapter (embedding, retrieval, the agent) never branches on which backend
-is running, so you can develop offline and switch to Bedrock by unsetting one
-variable.
-
-The shim is a few dozen lines the book owns. There is no external local-AWS
-runtime to install, so the only local prerequisites are Ollama and its models.
-"""
+"""The model seam: one Bedrock-shaped interface, two backends."""
 
 import io
 import json
@@ -25,18 +13,13 @@ import boto3
 # -------------------------------------------------------------------------------
 # Model configuration
 # -------------------------------------------------------------------------------
-# Qwen3 runs on both Bedrock and Ollama, so the text model is the same family in
-# either world. Embeddings have no shared model, so Titan pairs with 1024-dim
-# mxbai-embed-large to keep the vector schema identical.
+# Qwen3 runs on both Bedrock and Ollama; Titan pairs with 1024-dim mxbai-embed-large so the vector schema matches.
 TEXT_MODEL = os.environ.get("TEXT_MODEL", "qwen.qwen3-next-80b-a3b")
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "amazon.titan-embed-text-v2:0")
 BEDROCK_REGION = os.environ.get("BEDROCK_REGION", "us-east-1")
 EMBED_DIM = int(os.environ.get("EMBED_DIM", "1024"))
 
-# qwen3:0.6b is the smallest Qwen3, a few hundred megabytes, so the offline path
-# stays cheap to set up. Answers are correspondingly shorter and blunter than the
-# 80B model on Bedrock; point OLLAMA_TEXT_MODEL at a larger qwen3 tag for better
-# local output.
+# qwen3:0.6b is the smallest Qwen3; point OLLAMA_TEXT_MODEL at a larger tag for better local output.
 OLLAMA_TEXT_MODEL = os.environ.get("OLLAMA_TEXT_MODEL", "qwen3:0.6b")
 OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "mxbai-embed-large")
 
@@ -45,12 +28,7 @@ OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "mxbai-embed-large")
 # Local Bedrock shim
 # -------------------------------------------------------------------------------
 class LocalBedrockRuntime:
-    """A bedrock-runtime stand-in backed by Ollama.
-
-    Implements the two operations this chapter uses, converse and invoke_model,
-    with the request and response shapes boto3 returns, so calling code cannot
-    tell the difference.
-    """
+    """A bedrock-runtime stand-in backed by Ollama."""
 
     def __init__(self) -> None:
         """Create the Ollama client, honoring OLLAMA_HOST."""

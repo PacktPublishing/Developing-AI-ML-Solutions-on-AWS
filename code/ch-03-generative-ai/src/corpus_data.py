@@ -1,21 +1,9 @@
-"""The knowledge base's content: sector profiles, credit policy, and rendering.
-
-One source of truth for the documents themselves, with no dependency on the
-model or the vector store, so the same content serves three callers: the
-chapter's seeding script, the tests, and the Lambda in aws/assistant-api, which
-carries a copy of this file so it can seed itself on first call.
-
-All content is synthetic. It reflects the shape of solar-sector corporate
-lending without reproducing any lender's actual policy or any borrower's data.
-"""
+"""The knowledge base's content: sector profiles, credit policy, and rendering."""
 
 # -------------------------------------------------------------------------------
 # Sector profiles
 # -------------------------------------------------------------------------------
-# Synthetic sector profiles for solar-sector corporate borrowers. Each becomes
-# one knowledge-base document. The fields are what an underwriter weighs when
-# there is no score to fall back on: how the business earns, what secures the
-# loan, and where these companies tend to fail.
+# Synthetic sector profiles; each becomes one knowledge-base document.
 SECTORS = [
     {
         "slug": "residential-solar-installer",
@@ -118,9 +106,7 @@ SECTORS = [
 # -------------------------------------------------------------------------------
 # Credit policy
 # -------------------------------------------------------------------------------
-# Synthetic credit policy. The first section is the one that changes for this
-# book: with no external score, the risk profile is an underwriter's judgment,
-# and the policy tells them how to form it and where it sends the decision.
+# Synthetic credit policy; with no external score, the risk profile is the underwriter's judgment.
 POLICY = [
     {
         "id": "policy-risk-profile",
@@ -218,9 +204,7 @@ POLICY = [
 # -------------------------------------------------------------------------------
 # Delegated authority tiers
 # -------------------------------------------------------------------------------
-# The delegated-authority matrix behind the routing tool. A startup escalates to
-# people, not committees: underwriter, then managing director, then chief
-# executive. Synthetic thresholds, in USD.
+# Delegated-authority matrix behind the routing tool. Synthetic thresholds, in USD.
 AUTHORITY_TIERS = [
     {
         "tier": 1,

@@ -1,14 +1,4 @@
-"""The delegated-authority router: which role may approve a deal.
-
-Every credit decision is taken at the lowest role whose exposure and
-risk-profile ceilings both cover the deal. A deal that exceeds a role on either
-dimension escalates to the next one. This is deterministic policy, not a
-judgment call, so it lives in plain Python and becomes a tool the agent calls
-rather than something the model is asked to reason out.
-
-The thresholds are synthetic, loaded from the authority-limits matrix that
-knowledge-base/corpus.py writes.
-"""
+"""The delegated-authority router: which role may approve a deal."""
 
 import json
 import pathlib
@@ -22,12 +12,7 @@ def load_matrix(path: pathlib.Path = MATRIX_PATH) -> list[dict]:
 
 
 def decide(exposure_usd: float, risk_profile: int, tiers: list[dict]) -> dict:
-    """Return the role that may approve the deal.
-
-    tiers is the authority matrix in ascending order. We return the first tier
-    whose exposure ceiling and risk-profile ceiling both cover the deal, so a
-    small but high-risk deal still escalates on the risk dimension alone.
-    """
+    """Return the role that may approve the deal: the first tier whose ceilings both cover it."""
     for tier in tiers:
         max_exposure = tier["max_exposure_usd"]
         within_exposure = max_exposure is None or exposure_usd <= max_exposure

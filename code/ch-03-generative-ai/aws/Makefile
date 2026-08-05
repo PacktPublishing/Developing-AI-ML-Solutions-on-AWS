@@ -1,35 +1,31 @@
-.PHONY: iam check-account smoke
+.PHONY: iam check-account sync build deploy teardown
 
-# Bedrock model checks against real AWS. The full deploy of the assistant lives
-# in assistant-api/ (run make deploy there).
+STACK ?= underwriting-assistant-ch03
+REGION ?= us-east-1
+
+# `make deploy` builds and deploys the assistant SAM stack from this directory.
 ACCOUNT := $(shell aws sts get-caller-identity --query Account --output text)
-RUN_STAMP := $(shell date +%Y-%m-%d)
-EMBED_MODEL ?= amazon.titan-embed-text-v2:0
-TEXT_MODEL ?= qwen.qwen3-next-80b-a3b
 
 check-account:
 	@echo "account: $(ACCOUNT)"
 
-smoke:
-	@{ \
-	  echo "account: $(ACCOUNT)  date: $(RUN_STAMP)"; \
-	  echo "embed model: $(EMBED_MODEL)"; \
-	  aws bedrock-runtime invoke-model --region us-east-1 --model-id $(EMBED_MODEL) \
-	  --body "$$(printf '{"inputText":"solar project company term loan","dimensions":1024,"normalize":true}' | base64)" \
-	  --cli-binary-format base64 /tmp/ch03-embed.json >/dev/null && \
-	  python3 -c "import json;d=json.load(open('/tmp/ch03-embed.json'));print('  embedding dims:',len(d['embedding']),'tokens:',d['inputTextTokenCount'])"; \
-	  echo "text model: $(TEXT_MODEL)"; \
-	  aws bedrock-runtime converse --region us-east-1 --model-id $(TEXT_MODEL) \
-	  --messages '[{"role":"user","content":[{"text":"Reply with exactly: bedrock ok"}]}]' \
-	  --inference-config '{"maxTokens":10}' --query 'output.message.content[0].text' --output text | sed 's/^/  converse: /'; \
-	  } | tee /tmp/ch03-bedrock-$(RUN_STAMP).txt
+# corpus_data.py has one source of truth under ../src; the build copies it into
+# src/ (src/corpus_data.py is gitignored) so there is no drift.
+sync:
+	cp ../src/corpus_data.py src/corpus_data.py
+
+build: sync
+	sam build --beta-features
+
+deploy: build
+	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
+		--capabilities CAPABILITY_IAM --region $(REGION)
+
+teardown:
+	sam delete --stack-name $(STACK) --region $(REGION) --no-prompts
 
 # -------------------------------------------------------------------------------
 # iam: provision THIS chapter's deploy identity, when you start the chapter
-# Creates ch03-user from iam/deploy.json (least-privilege for ch-03 only) and trusts you to
-# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
-# editing the policy. Then add a [profile ch03] (role_arn + source_profile) and
-# run cloud targets with AWS_PROFILE=ch03.
 # -------------------------------------------------------------------------------
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}

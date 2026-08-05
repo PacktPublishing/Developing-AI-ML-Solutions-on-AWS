@@ -118,11 +118,7 @@ Resources:
       SecurityGroupIds:
         - !Ref EndpointSg
 
-  # Both stateful resources are deliberately disposable: this is a chapter stack
-  # that holds a synthetic knowledge base the Lambda reseeds on its first call,
-  # so `make teardown` should leave nothing behind and nothing to pay for. Say so
-  # explicitly rather than relying on the default. A production store would set
-  # Retain on both, along with backups and deletion protection.
+  # Both stateful resources are deliberately disposable; a production store would set Retain, backups, and deletion protection.
   DbSecret:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete

@@ -1,9 +1,4 @@
-"""The vector store seam: pgvector locally, RDS for PostgreSQL on AWS.
-
-The embeddings live in Postgres with pgvector, a container locally and Amazon
-RDS for PostgreSQL on AWS. The retrieval code is the same in either world; only
-the host moves, through the standard PG environment variables.
-"""
+"""The vector store seam: pgvector locally, RDS for PostgreSQL on AWS."""
 
 import os
 

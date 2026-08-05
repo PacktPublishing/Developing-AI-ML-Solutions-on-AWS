@@ -3,14 +3,6 @@
 # ///
 """The guardrail seam: a real Bedrock Guardrail on AWS, a small shim locally.
 
-A grounded assistant still needs limits: it must not leak personal data, it must
-stay on topic, and its answer should be supported by the retrieved passages. On
-AWS those checks are an Amazon Bedrock Guardrail applied during the model call.
-Bedrock Guardrails has no local emulator, so for the offline path this module
-also carries a light shim that redacts obvious personal data and refuses the
-same off-topic requests. The shim is not a substitute for the managed service,
-it just keeps the local loop honest about the same rules.
-
 Usage (from the chapter root):
   make guardrail    # create the guardrail on your account
   PYTHONPATH=. uv run underwriting-agent/guardrails.py show
@@ -161,13 +153,7 @@ def local_redact(text: str) -> str:
 def guarded_generate(
     runtime, system: str, question: str, context: str, guardrail
 ) -> str:
-    """Generate a grounded answer with the guardrail applied.
-
-    On AWS the guardrail runs inside the Converse call, with the retrieved
-    passages passed as the grounding source and the question as the query, so
-    the contextual grounding filter can score the answer. Locally the shim runs
-    the same checks in Python around a plain generation.
-    """
+    """Generate a grounded answer with the guardrail applied."""
     if os.environ.get("BEDROCK_LOCAL") == "1" or guardrail is None:
         if local_input_blocked(question):
             return BLOCKED_INPUT
@@ -201,11 +187,7 @@ def guarded_generate(
 # Entry point
 # -------------------------------------------------------------------------------
 def demo_local() -> None:
-    """Exercise the local guardrail shim (no AWS).
-
-    The same input-blocking and output redaction that guarded_generate applies
-    when BEDROCK_LOCAL=1 stands in for the managed guardrail.
-    """
+    """Exercise the local guardrail shim (no AWS)."""
     off_topic = "Should I invest my own savings in this company?"
     on_topic = "What DSCR floor applies to a solar project company?"
     print(f"input blocked?  {off_topic!r} -> {local_input_blocked(off_topic)}")

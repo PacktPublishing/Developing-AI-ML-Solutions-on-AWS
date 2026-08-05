@@ -1,11 +1,4 @@
-"""pgvector round-trip: seed the knowledge base and search it, no cloud.
-
-Starts pgvector with docker-py (skips if there is no Docker daemon), the same
-way the chapter's data-engineering tests provision DynamoDB Local. Embeddings
-are stubbed with a deterministic function, so the test needs no Bedrock or
-Ollama; it exercises the real plumbing, the extension, the schema, the vector
-round-trip, and the cosine ordering.
-"""
+"""pgvector round-trip: seed the knowledge base and search it, no cloud."""
 
 import atexit
 import os
@@ -103,6 +96,7 @@ def _fake_embed(runtime, texts):
 # Vector round-trip test
 # -------------------------------------------------------------------------------
 def test_seed_then_exact_chunk_ranks_first(monkeypatch):
+    """An exact chunk ranks first against its own seeded document."""
     monkeypatch.setattr(corpus, "embed", _fake_embed)
     monkeypatch.setattr(corpus, "get_runtime", lambda: None)
     monkeypatch.setattr(stores, "embed", _fake_embed)

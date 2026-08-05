@@ -3,18 +3,6 @@
 # ///
 """Build the knowledge base: generate it and embed it into the vector store.
 
-The lender has moved into corporate lending to the residential and commercial
-solar sector: installers, developers, and the project companies that own the
-assets. These are young businesses in a new market, so there is no external
-credit score to lean on. An underwriter reads the documents, compares the deal
-against the sector, and assigns an internal risk profile by hand. The knowledge
-base is what supports that judgment: short sector profiles and the lender's own
-credit policy. This script generates those documents and embeds them straight
-into pgvector.
-
-All content is synthetic. It reflects the shape of solar-sector corporate
-lending without reproducing any lender's actual policy or any borrower's data.
-
 Usage:
   make seed    # or: PYTHONPATH=. uv run knowledge-base/corpus.py
 """

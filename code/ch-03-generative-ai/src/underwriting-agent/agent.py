@@ -3,14 +3,6 @@
 # ///
 """The underwriting assistant: a grounded query mode and an agent mode.
 
-Two ways to use the knowledge base. The ask mode answers one question with
-retrieval-augmented generation and a guardrail, the direct path a person takes.
-The decide mode runs a Strands agent that works a whole deal: it looks up the
-sector and policy, assigns an internal risk profile because there is no external
-score, and routes the decision to the role that may approve it. Both run on
-Bedrock, or on Ollama with BEDROCK_LOCAL=1. The serve mode hosts the agent on
-the Amazon Bedrock AgentCore runtime contract.
-
 Usage (from the chapter root):
   PYTHONPATH=. uv run underwriting-agent/agent.py ask --query "What DSCR floor applies to a solar SPV?"
   PYTHONPATH=. uv run underwriting-agent/agent.py decide \
@@ -89,13 +81,7 @@ def route_decision(exposure_usd: float, risk_profile: int) -> dict:
 # Model and agent construction
 # -------------------------------------------------------------------------------
 def build_model():
-    """Return the Strands model: Bedrock, or Ollama when BEDROCK_LOCAL is set.
-
-    The guardrail is applied on the ask path, not here. A guardrail wrapped
-    around an agent inspects every tool exchange, and the prompt-attack filter in
-    particular tends to flag the agent's own instructions and tool results, so we
-    keep the guardrail on the single-shot grounded answer where it belongs.
-    """
+    """Return the Strands model: Bedrock, or Ollama when BEDROCK_LOCAL is set."""
     if os.environ.get("BEDROCK_LOCAL") == "1":
         from strands.models.ollama import OllamaModel
 
@@ -149,9 +135,7 @@ def run_ask(query: str, k: int, use_guardrail: bool, capture: bool) -> None:
         slug = re.sub(r"[^a-z0-9]+", "-", query.lower()).strip("-")[:60]
         local = os.environ.get("BEDROCK_LOCAL") == "1"
         provider = "local" if local else "bedrock"
-        # record the model too: a capture that says only "local" cannot be
-        # compared against anything later, since the answer depends on which
-        # Ollama model produced it
+        # record the model too, so a capture can be compared against later
         record = {
             "query": query,
             "k": k,

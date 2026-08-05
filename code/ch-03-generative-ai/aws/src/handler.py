@@ -1,11 +1,4 @@
-"""The underwriting assistant as a Lambda, self-contained and re-runnable.
-
-On the first call it creates the pgvector extension, the table, and the index,
-then seeds the synthetic knowledge base. The seed only runs when the table is
-empty, so redeploys and repeat calls are idempotent. After that it answers the
-same way as the chapter: embed the question, retrieve from RDS pgvector, and
-generate a cited answer with Bedrock Converse.
-"""
+"""The underwriting assistant as a Lambda, self-contained and re-runnable."""
 
 import json
 import os
@@ -24,10 +17,7 @@ BEDROCK = boto3.client("bedrock-runtime")
 TEXT_MODEL = os.environ["TEXT_MODEL"]
 EMBED_MODEL = os.environ["EMBED_MODEL"]
 
-# The guardrail is optional so the stack deploys before one exists. Create it
-# with `uv run underwriting-agent/guardrails.py create` in the chapter, then pass
-# the id and version as stack parameters. With both set, the guardrail runs
-# inside the Converse call, the same way the chapter's ask path applies it.
+# The guardrail is optional so the stack deploys before one exists; set the id and version to apply it.
 GUARDRAIL_ID = os.environ.get("GUARDRAIL_ID", "")
 GUARDRAIL_VERSION = os.environ.get("GUARDRAIL_VERSION", "")
 
