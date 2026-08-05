@@ -1,10 +1,6 @@
 """Result masking: the LLM/transcript-side enforcement layer.
 
-Columns to mask come from config/pii_columns.yaml, the same file that
-generates the warehouse-side masking policies, so the two layers cannot
-drift. Masking here is by column NAME across all results: a projected or
-aliased PII column keeps its protection as long as the name survives; the
-warehouse-side policies are the backstop when it does not.
+Columns come from config/pii_columns.yaml (the same file behind the warehouse-side policies, so the two layers cannot drift) and are masked by column NAME across all results; the warehouse-side policies are the backstop when a name does not survive.
 Verified with the local stack 2026-07-30.
 """
 

@@ -18,9 +18,7 @@ name: ch08-analytics-local
 #                v
 #             dataapi (from-source shim) --redshift_connector--> redshift-local
 #
-# In both modes the helper is UNMODIFIED: it reaches the local Data API
-# through AWS_ENDPOINT_URL_REDSHIFT_DATA, and no access key appears in this
-# file — the sidecar vends the host profile's credentials either way.
+# In every mode the helper is UNMODIFIED (it reaches the local Data API through AWS_ENDPOINT_URL_REDSHIFT_DATA) and no access key appears here: the sidecar vends the host profile's credentials.
 
 networks:
   credentials_network:

@@ -1,10 +1,6 @@
 version: 0.2
 
-# Builds the assistant image natively on amd64 (the architecture Fargate
-# runs) and pushes it to the stack's repository: the chapter 2 pipeline leg,
-# Developer -> CodeBuild -> ECR, so a laptop never cross-builds under
-# emulation. The CodeBuild project itself is a stack resource; start a build
-# with `make image`.
+# Builds the assistant image natively on amd64 (Fargate's architecture) and pushes it to the stack's ECR repository, so a laptop never cross-builds under emulation. Start a build with `make image`.
 phases:
   pre_build:
     commands:

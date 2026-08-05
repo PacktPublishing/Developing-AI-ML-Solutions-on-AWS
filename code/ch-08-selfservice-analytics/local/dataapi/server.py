@@ -1,12 +1,5 @@
-"""A from-source Redshift Data API shim over Postgres.
+"""A from-source Redshift Data API shim over Postgres: the four operations the helper uses (ExecuteStatement, DescribeStatement, GetStatementResult, CancelStatement) against redshift-local, so the UNMODIFIED helper runs locally through AWS_ENDPOINT_URL_REDSHIFT_DATA.
 
-boto3's redshift-data client speaks JSON over HTTP with an X-Amz-Target
-header naming the operation. This server implements the four operations the
-helper uses (ExecuteStatement, DescribeStatement, GetStatementResult,
-CancelStatement) against redshift-local, so the UNMODIFIED helper runs
-locally through AWS_ENDPOINT_URL_REDSHIFT_DATA. The connection uses
-redshift_connector, AWS's own driver, the same wire protocol Redshift
-speaks. No LocalStack, ~150 lines.
 Verified against the local stack 2026-07-30 (helper through the shim, masking, and a full Claude Code run); the cloud path is still unrun.
 """
 
@@ -29,9 +22,7 @@ def _connect():
         user=os.environ.get("PGUSER", "bi_analyst"),
         password=os.environ.get("PGPASSWORD", "local"),
         database=os.environ.get("DEFAULT_DB", "analytics"),
-        # redshift-local's wire proxy presents a self-signed certificate; the
-        # driver's default verify-ca would reject it. Plain TCP is fine for a
-        # loopback shim; the real Data API path never opens a driver socket.
+        # redshift-local's wire proxy presents a self-signed cert that verify-ca would reject; plain TCP is fine for a loopback shim, and the real Data API path never opens a driver socket.
         ssl=False,
     )
 

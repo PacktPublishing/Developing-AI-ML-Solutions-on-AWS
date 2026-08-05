@@ -1,8 +1,6 @@
 """Redshift Data API helper: read-only, bounded, masked.
 
-Runs inside the image's project environment (/app, boto3 in pyproject.toml);
-deliberately NO inline script metadata, which would make uv build a separate
-environment on every call.
+Runs inside the image's project environment (/app, boto3 in pyproject.toml); no inline script metadata, which would make uv build a separate environment per call.
 
 Usage:
     from helper import execute_redshift_query
@@ -14,10 +12,8 @@ Env vars:
     REDSHIFT_QUERY_TIMEOUT=30    seconds before the statement is cancelled
     REDSHIFT_MAX_ROWS=10000      result row cap
 
-The same code runs against real AWS and against the local shim: boto3 picks
-up AWS_ENDPOINT_URL_REDSHIFT_DATA when set, which is how the local compose
-stack points this client at the from-source Data API in front of
-redshift-local. Verified against the local stack 2026-07-30 (helper through the shim, masking, and a full Claude Code run); the cloud path is still unrun.
+The same code runs against real AWS and the local shim: boto3 picks up AWS_ENDPOINT_URL_REDSHIFT_DATA when set, pointing this client at the from-source Data API in front of redshift-local.
+Verified against the local stack 2026-07-30 (helper through the shim, masking, and a full Claude Code run); the cloud path is still unrun.
 """
 
 import json
@@ -40,13 +36,7 @@ _WRITE_RE = re.compile(
 
 
 def _audit(event: str, **fields: Any) -> None:
-    """One structured line per event, written to the container's main stdout.
-
-    Under ttyd the helper's own stdout goes to the browser terminal, not the
-    container log; /proc/1/fd/1 is the main process's stdout, which the
-    awslogs driver ships to CloudWatch. Falls back to stderr outside a
-    container so the terminal result stream stays clean either way.
-    """
+    """One structured line per event, written to the container's main stdout (/proc/1/fd/1, which awslogs ships to CloudWatch; falls back to stderr outside a container so the terminal stream stays clean)."""
     line = json.dumps({"audit": event, **fields}, default=str)
     try:
         with open("/proc/1/fd/1", "w") as out:

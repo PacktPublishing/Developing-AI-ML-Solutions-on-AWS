@@ -1,10 +1,4 @@
-# Single source of truth for PII columns in the warehouse.
-#
-# Consumed by both enforcement layers so they cannot drift:
-#   - skills/redshift-data-api/masking.py: masks results before they reach
-#     the model or the transcript
-#   - the warehouse-side ATTACH MASKING POLICY DDL for the service accounts
-#     (real enforcement at the engine)
+# Single source of truth for PII columns; read by masking.py and the warehouse-side masking DDL so the two enforcement layers cannot drift.
 #
 # Keyed schema.table.column: strategy. Strategies:
 #   hash           deterministic token; joins and COUNT(DISTINCT) survive

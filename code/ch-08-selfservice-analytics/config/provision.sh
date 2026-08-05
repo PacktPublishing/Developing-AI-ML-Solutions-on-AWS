@@ -1,18 +1,7 @@
 #!/usr/bin/env bash
 # -------------------------------------------------------------------------------
 # Provision the warehouse side of the security model. Idempotent.
-#
-#   1. A read-only service account: bi_analyst, PASSWORD DISABLE, so the only
-#      way in is temporary IAM credentials (redshift-serverless:GetCredentials,
-#      the task role's path). GRANT USAGE + SELECT on analytics, nothing else:
-#      read-only by construction, not by prompt.
-#   2. Dynamic data masking policies generated from config/pii_columns.yaml,
-#      the SAME file the helper's result masking reads, so the two enforcement
-#      layers cannot drift. The policies attach to bi_analyst: even hand-written
-#      SQL through the Data API comes back masked at the engine.
-#
-# Redshift-native DDM does not exist in redshift-local; locally the helper
-# layer carries the masking, and this script belongs to the cloud round.
+# Creates read-only PASSWORD DISABLE accounts (IAM credentials only) and engine-side masking policies from config/pii_columns.yaml, the same file the helper reads. Cloud round only; redshift-local has no native DDM.
 #
 # Requires: REDSHIFT_WORKGROUP, REDSHIFT_DB_NAME, AWS credentials.
 # Untested scaffold: run against the deployed workgroup before the chapter ships.
@@ -56,11 +45,7 @@ def run(sql: str, label: str, ignore: tuple = ("already exists", "already attach
         time.sleep(0.5)
 
 
-# 1. The read-only accounts. bi_analyst is the named service account; on
-# Redshift Serverless the Data API maps the task's IAM role to an
-# auto-created user "IAMR:<role-name>", and THAT is the identity the
-# container's queries actually run as, so it gets the same grants and the
-# same masking policies. Set TASK_ROLE to the stack's task role name.
+# 1. The read-only accounts. bi_analyst is the named service account; on Redshift Serverless the Data API runs the container's queries as an auto-created "IAMR:<role-name>" user, so it gets the same grants and masking. Set TASK_ROLE to the stack's task role name.
 users = ["bi_analyst"]
 task_role = os.environ.get("TASK_ROLE")
 if task_role:

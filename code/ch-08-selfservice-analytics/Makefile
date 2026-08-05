@@ -2,10 +2,7 @@ COMPOSE := docker compose -f local/analytics-stack.yml
 
 .PHONY: iam llm local local-stop lint
 
-# Local means local: Claude Code drives gpt-oss:20b on the host through
-# Ollama's Anthropic-compatible API (the model Ollama recommends for Claude
-# Code; 16 GB machine). No account, no login, no cloud call; the terminal
-# starts straight at the prompt, exactly like the Bedrock task does.
+# Local means local: Claude Code drives gpt-oss:20b on the host through Ollama's Anthropic-compatible API. No account, no login, no cloud call.
 # Prerequisite: ollama pull gpt-oss:20b
 local:
 	BEDROCK_LOCAL=1 $(COMPOSE) up -d --build
@@ -18,9 +15,7 @@ local:
 		claude -p "Reply with exactly: OK" --model gpt-oss:20b \
 		--dangerously-skip-permissions
 
-# The Fargate-faithful variant: Claude runs on real Bedrock, and credentials
-# arrive through the ecs-local-endpoints sidecar exactly as the task role
-# will supply them on ECS. Run before the cloud round as the parity check.
+# The Fargate-faithful variant: Claude runs on real Bedrock, credentials arrive through the ecs-local-endpoints sidecar as the task role supplies them on ECS. The pre-cloud parity check.
 local-bedrock:
 	AWS_PROFILE=$${AWS_PROFILE:-default} CLAUDE_CODE_USE_BEDROCK=1 \
 		$(COMPOSE) up -d --build
@@ -46,10 +41,7 @@ llm:
 
 # -------------------------------------------------------------------------------
 # iam: provision THIS chapter's deploy identity, when you start the chapter
-# Creates ch08-user from aws/iam/deploy.json (least-privilege for ch-08 only) and trusts you to
-# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
-# editing the policy. Then add a [profile ch08] (role_arn + source_profile) and
-# run cloud targets with AWS_PROFILE=ch08.
+# Creates ch08-user from aws/iam/deploy.json and trusts you to assume it; re-run after editing the policy, then add a [profile ch08] and run cloud targets with AWS_PROFILE=ch08.
 # -------------------------------------------------------------------------------
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}

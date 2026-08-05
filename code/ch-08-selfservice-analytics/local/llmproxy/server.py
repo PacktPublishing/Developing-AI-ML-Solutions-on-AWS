@@ -1,9 +1,5 @@
-"""Anthropic-API shim for the offline mode.
+"""Anthropic-API shim for the offline mode: injects think="low" into every request (gpt-oss floods otherwise) and passes everything else through to Ollama untouched.
 
-Injects think="low" into every request: gpt-oss floods otherwise (measured
-2,000+ hidden reasoning tokens per question, minutes at laptop decode
-speed). Everything else passes through to Ollama untouched, including the
-small utility model Claude Code uses alongside the main one.
 Verified with the local stack 2026-08-01.
 """
 
