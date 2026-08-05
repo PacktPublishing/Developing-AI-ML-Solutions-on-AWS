@@ -3,11 +3,6 @@
 # ///
 """Generate a day's worth of nested bureau JSON and write it to the raw zone.
 
-Every line of every file is one bureau response, with a nested score block
-and arrays of tradelines and inquiries. Passing --drift adds a couple of
-extra fields to the payload, which is what you get when a bureau starts
-sending new attributes and nobody downstream is told about it.
-
 Usage:
   uv run generate_bureau_files.py --date 2026-07-17 --records 200
   uv run generate_bureau_files.py --date 2026-07-18 --records 200 --drift

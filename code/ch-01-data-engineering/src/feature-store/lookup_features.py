@@ -3,10 +3,6 @@
 # ///
 """Read one applicant's features back from the online store.
 
-This is the serving-path read: given an applicant id, it fetches the latest
-feature row straight from DynamoDB by key, the same way a model would when it
-scores a request at inference time.
-
 Usage:
   uv run lookup_features.py --applicant 10073
 """

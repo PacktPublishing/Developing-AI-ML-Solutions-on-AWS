@@ -3,14 +3,6 @@
 # ///
 """Load one day of bureau files from the raw zone into the warehouse.
 
-It runs as a Glue Python shell job, so it is plain Python with no Spark. The
-job lists the day's files, reads the nested JSON, and hands the records to
-dlt, which flattens them into parent and child tables and widens the schema
-on its own whenever the bureau adds a field. dlt's redshift destination does
-the loading in both worlds: locally it points at redshift-local, on AWS at a
-real Redshift cluster. The code is the same either way; only the credentials
-change.
-
 Usage:
   uv run glue_bureau_job.py --date 2026-07-17
 """

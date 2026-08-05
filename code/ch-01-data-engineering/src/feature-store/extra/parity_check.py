@@ -3,10 +3,6 @@
 # ///
 """Parity check: the same Feature Store op matrix, shim or AWS.
 
-Runs describe, put x2, get, batch_get, delete, get-after-delete, and
-batch-after-delete against whichever endpoint the environment selects,
-printing one normalized line per op so two runs can be diffed directly.
-
 Usage:
   FEATURE_STORE_URL=http://localhost:8007 uv run feature-store/extra/parity_check.py
   uv run feature-store/extra/parity_check.py   # real AWS

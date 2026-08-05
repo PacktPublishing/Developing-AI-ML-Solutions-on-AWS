@@ -1,10 +1,4 @@
-"""Tests for the local Feature Store shim: both API planes and the flush logic.
-
-Needs DynamoDB Local on :8000: uses the running one from the chapter stack,
-or starts its own container with docker-py and stops it afterwards. Groups
-are created online-only so no Iceberg catalog is needed; the offline
-batching is tested against a stub.
-"""
+"""Tests for the local Feature Store shim: both API planes and the flush logic."""
 
 import atexit
 import socket

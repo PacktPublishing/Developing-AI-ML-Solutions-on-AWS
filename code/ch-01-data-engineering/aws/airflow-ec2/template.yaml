@@ -13,9 +13,7 @@ Parameters:
 
   InstanceType:
 
-    # Airflow 3 standalone (scheduler + api + dag-processor) plus the metadata
-    # Postgres and redshift-local need real memory; t3.micro (1 GB) starves them
-    # and tasks never run. t3.medium (4 GB) is the smallest that works reliably.
+    # Airflow 3 standalone plus metadata Postgres and redshift-local need real memory; t3.medium (4 GB) is the smallest that works reliably.
     Type: String
     Default: t3.medium
 
@@ -105,11 +103,8 @@ Resources:
   # -----------------------------------------------------------------------------
   # Redshift Serverless: WarehouseMode=serverless only
   # -----------------------------------------------------------------------------
-  # The managed warehouse the DAG targets on a standard plan. Everything here is
-  # gated behind UseServerless, so a `local` deploy carries none of it. The admin
-  # password is generated into Secrets Manager (nothing typed at deploy); the DAG
-  # fetches it at run time with the instance role, so no secret is baked into the
-  # instance UserData.
+  # The managed warehouse the DAG targets on a standard plan; everything here is gated behind UseServerless, so a `local` deploy carries none of it.
+  # The admin password is generated into Secrets Manager and the DAG fetches it at run time via the instance role, so no secret is baked into UserData.
   WarehouseSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -261,7 +256,7 @@ Resources:
             cat > /opt/af/compose.yml <<'YML'
             services:
               # Airflow's own metadata store: real Postgres, so the scheduler can run
-              # LocalExecutor and tasks run in parallel — not the single-threaded
+              # LocalExecutor and tasks run in parallel, not the single-threaded
               # SQLite + SequentialExecutor Airflow falls back to by default.
               metadata:
                 image: postgres:16

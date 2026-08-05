@@ -2,20 +2,14 @@
 
 S3TABLES_ARN ?= arn:aws:s3tables:us-east-1:$(ACCOUNT):bucket/ch01-lake
 
-# Cloud verification: the SAME scripts as the local targets, run against
-# real AWS through the default credential chain. Bucket names get the
-# account id suffix because the S3 namespace is global.
+# Cloud verification: the same scripts as the local targets, run against real AWS; bucket names get the account-id suffix because the S3 namespace is global.
 ACCOUNT := $(shell aws sts get-caller-identity --query Account --output text)
 LAKE_BUCKET ?= credit-lake-$(ACCOUNT)
 RAW_BUCKET ?= bureau-raw-$(ACCOUNT)
 RUN_STAMP := $(shell date +%Y-%m-%d)
 
-# Airflow on EC2 (Postgres metadata + LocalExecutor, nightly pg_dump to S3).
-# AllowedCidr is set to your current public IP so only you reach the UI on :8080;
-# stack name, region, and capabilities come from airflow-ec2/samconfig.toml.
-# WAREHOUSE=local (default, free tier: redshift-local on the instance) or
-# WAREHOUSE=serverless (SAM also provisions Redshift Serverless in this stack —
-# pass SUBNETS=subnet-a,subnet-b,subnet-c across >= 3 AZs for the workgroup).
+# Airflow on EC2 (Postgres metadata + LocalExecutor, nightly pg_dump to S3); AllowedCidr opens the :8080 UI to your public IP only.
+# WAREHOUSE=local (free tier: redshift-local on the instance) or serverless (also provisions Redshift Serverless; pass SUBNETS across >= 3 AZs).
 WAREHOUSE ?= local
 SUBNETS ?=
 airflow-deploy:
@@ -84,10 +78,7 @@ clean-lake:
 
 # -------------------------------------------------------------------------------
 # iam: provision THIS chapter's deploy identity, when you start the chapter
-# Creates ch01-user from iam/deploy.json (least-privilege for ch-01 only) and trusts you to
-# assume it — per chapter, not an account-wide up-front bootstrap. Re-run after
-# editing the policy. Then add a [profile ch01] (role_arn + source_profile) and
-# run cloud targets with AWS_PROFILE=ch01.
+# Creates ch01-user from iam/deploy.json (least-privilege) and trusts you to assume it; then use AWS_PROFILE=ch01 for cloud targets.
 # -------------------------------------------------------------------------------
 PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
 TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}

@@ -46,11 +46,7 @@ query:
 		"select count(*) as tradelines from bureau_raw.reports__tradelines;" -c \
 		"select column_name from information_schema.columns where table_name = 'reports' order by ordinal_position;"
 
-# Refetch the warehouse's self-signed cert and rebuild the trust bundle on every
-# run: the local warehouse issues a fresh cert on each container start, so a
-# cached bundle goes stale after a teardown/up and does not exist on a fresh
-# clone. certifi's CAs plus the warehouse cert let redshift_connector verify the
-# local warehouse while uv itself still verifies PyPI.
+# Refetch the warehouse's fresh-per-start cert and rebuild the certifi-plus-warehouse trust bundle each run so redshift_connector can verify it.
 certs:
 	openssl s_client -starttls postgres -connect localhost:5439 </dev/null 2>/dev/null | openssl x509 -outform pem > oblako-ca.pem
 	uv run --with certifi python -c "import certifi, shutil; shutil.copy(certifi.where(), 'oblako-bundle.pem')"
@@ -86,11 +82,7 @@ features-query:
 	$(COMPOSE) exec trino trino --execute \
 		"select applicant_id, score, tradeline_count, total_balance from iceberg.features.applicant_credit_profile order by score desc limit 5"
 
-# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
-# AWS icons are fetched at render time; custom icons live in the shared
-# assets/diagrams/ (Strands, Lambda coin, local-stack tools). Icon PNGs are
-# re-rendered from their SVG sources at ICON_HEIGHT (needs librsvg's rsvg-convert).
-# WIDTH sets output pixel width (0 = awsdac native; raise it for print).
+# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac; custom icon PNGs re-render from SVG at ICON_HEIGHT (needs rsvg-convert), WIDTH sets output pixels (0 = awsdac native).
 AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0

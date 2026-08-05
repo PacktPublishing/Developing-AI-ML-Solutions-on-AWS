@@ -3,14 +3,6 @@
 # ///
 """A local SageMaker Feature Store: both planes on one endpoint.
 
-The sagemaker control plane (CreateFeatureGroup, DescribeFeatureGroup) is
-AWS json protocol, dispatched on the X-Amz-Target header. The
-sagemaker-featurestore-runtime data plane (PutRecord, GetRecord) is
-rest-json on /FeatureGroup/{name}. One Starlette app serves both, so
-pointing both boto3 clients at this endpoint is the only change between
-local and AWS. Backing engines: DynamoDB Local (metadata + online store)
-and the Iceberg REST catalog (offline store).
-
 Usage:
   uv run sagemaker-local/app.py          # serves on :8007
 """

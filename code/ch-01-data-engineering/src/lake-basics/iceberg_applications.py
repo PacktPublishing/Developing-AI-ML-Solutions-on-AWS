@@ -3,10 +3,6 @@
 # ///
 """A better table: applications as Iceberg, appended and read back.
 
-Creates an Iceberg applications table through the REST catalog (the same
-open format S3 Tables manages for you on AWS), appends rows, and reads
-them back. Query it with Trino too: make lake-table-query.
-
 Usage:
   uv run lake-basics/iceberg_applications.py
 """

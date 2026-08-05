@@ -3,15 +3,6 @@
 # ///
 """Ship the gold mart into the feature store, both the offline and online halves.
 
-The script reads applicant_credit_profile from the warehouse and appends it
-to an Iceberg table for the offline store, along with the bookkeeping columns
-a SageMaker Feature Store keeps on every record (event_time, write_time,
-api_invocation_time, is_deleted). It then writes the same rows, one per
-applicant, into DynamoDB for the online store. Locally the Iceberg table
-lives in the REST catalog over MinIO and Trino can query it; on AWS the rows
-go to a feature group created with the Iceberg table format, through
-feature_group.ingest().
-
 Usage:
   uv run ingest_features.py
 """

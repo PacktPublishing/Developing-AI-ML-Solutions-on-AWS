@@ -3,12 +3,6 @@
 # ///
 """Why Parquet wins: write a partitioned dataset, query it in place.
 
-Builds a small applications table, writes it to the lake as Parquet
-partitioned by vintage, and answers "average default rate by vintage" by
-reading only the columns and partitions the query needs. awswrangler (the AWS
-SDK for pandas) does the pruning; the same calls run against the local S3
-stand-in or real S3 — only the endpoint changes.
-
 Usage:
   uv run lake-basics/parquet_lake.py
 """
@@ -22,10 +16,8 @@ import pandas as pd
 
 BUCKET = os.environ.get("LAKE_BUCKET", "credit-lake")
 
-# One library, one code path, local or AWS. awswrangler resolves credentials
-# through the boto3 session — env vars, a named profile, or an assumed role such
-# as ch01-user — and talks to whichever S3 endpoint is set: the local S3 stand-in
-# when AWS_ENDPOINT_URL points at it, real S3 otherwise.
+# One library, one code path, local or AWS: awswrangler resolves credentials through the boto3 session (env vars, a named profile, or an assumed role like ch01-user).
+# It talks to whichever S3 endpoint is set: the local S3 stand-in when AWS_ENDPOINT_URL points at it, real S3 otherwise.
 endpoint = os.environ.get("AWS_ENDPOINT_URL")
 if endpoint:
     wr.config.s3_endpoint_url = endpoint

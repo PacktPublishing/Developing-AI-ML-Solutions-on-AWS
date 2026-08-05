@@ -1,10 +1,4 @@
-"""Backing store for the local Feature Store shim.
-
-Metadata and the online store live in DynamoDB Local; the offline store,
-when a group enables it, is an Iceberg table in the local REST catalog.
-All feature values are kept as strings, which is faithful: the real
-featurestore-runtime speaks ValueAsString on both Put and Get.
-"""
+"""Backing store for the local Feature Store shim."""
 
 import json
 import os

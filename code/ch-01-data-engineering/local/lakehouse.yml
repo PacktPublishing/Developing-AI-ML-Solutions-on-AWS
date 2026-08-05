@@ -58,9 +58,7 @@ services:
       retries: 30
 
   warehouse:
-    # Redshift-flavored Postgres 16: accepts redshift-connector's startup
-    # parameters and reports a Redshift server version, so dlt's redshift
-    # destination and dbt-redshift connect natively, same as production
+    # Redshift-flavored Postgres 16: reports a Redshift server version so dlt's redshift destination and dbt-redshift connect natively, same as production
     image: public.ecr.aws/oblako/redshift-local:16
     environment:
       - POSTGRES_USER=loader

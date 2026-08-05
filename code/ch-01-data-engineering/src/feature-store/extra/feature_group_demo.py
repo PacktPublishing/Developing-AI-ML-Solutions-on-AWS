@@ -3,11 +3,6 @@
 # ///
 """The feature group through the real API, local or AWS by endpoint alone.
 
-Creates an online feature group from the gold mart's schema, puts the top
-mart rows as records, and reads one back by key. Locally both clients
-point at the sagemaker-local shim; on AWS, unset the endpoint and the
-same calls hit the real service.
-
 Usage:
   uv run feature-store/extra/feature_group_demo.py --applicant 10073
 """
