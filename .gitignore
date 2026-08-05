@@ -18,7 +18,7 @@ code/ch-01-data-engineering/oblako-bundle.pem
 deliveries/
 
 # generated at build time from the chapter root (see aws/assistant-api/Makefile)
-code/ch-03-generative-ai/aws/assistant-api/src/corpus_data.py
+code/ch-03-generative-ai/aws/src/corpus_data.py
 
 # Run captures — kept locally as evidence, not shipped in the repo
 code/**/runs/
