@@ -1,5 +1,5 @@
 .PHONY: iam image image-bootstrap image-teardown mlflow-app mlflow-app-status mlflow-app-delete train amt \
-	deploy-byoc deploy-modelbuilder
+	package deploy invoke teardown deploy-modelbuilder
 
 # Reproduce the chapter on real AWS with SDK v3. Account-specific values are
 # derived where possible; override any of them on the command line, e.g.
@@ -94,12 +94,41 @@ amt:
 		MLFLOW_TRACKING_ARN=$(APP_ARN) AWS_DEFAULT_REGION=$(REGION) uv run jobs/amt.py
 
 # -------------------------------------------------------------------------------
-# deploy: a registered model, two ways
+# deploy: the registered challenger, BYOC, behind a serverless endpoint (CFN)
 # -------------------------------------------------------------------------------
-deploy-byoc:
-	IMAGE_URI=$(CHALLENGER_IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
-		MLFLOW_TRACKING_ARN=$(APP_ARN) MLFLOW_MODEL_PATH=$(MODEL_PATH) \
-		AWS_DEFAULT_REGION=$(REGION) uv run deploy/deploy_byoc_from_registry.py
+# package pulls the latest registered version, repacks the serving files, and uploads model.tar.gz (writing its URL to .model-data-url); deploy hands that URL plus the BYOC image to template.yaml, which creates the model, config, and endpoint. Run make image REPO=ch02-challenger first.
+STACK := ch02-serving
+ENDPOINT_NAME ?= ch02-challenger-byoc
+
+package:
+	ARTIFACT_BUCKET=$(BUCKET) MLFLOW_TRACKING_ARN=$(APP_ARN) MLFLOW_MODEL_PATH=$(MODEL_PATH) \
+		ENDPOINT_NAME=$(ENDPOINT_NAME) AWS_DEFAULT_REGION=$(REGION) \
+		uv run deploy/package_model.py > .model-data-url
+	@echo "packaged: $$(cat .model-data-url)"
+
+# cloudformation deploy blocks until the stack is complete, and the Endpoint
+# resource is not complete until it reaches InService, so this waits for serving.
+deploy: package
+	aws cloudformation deploy --template-file template.yaml --stack-name $(STACK) \
+		--capabilities CAPABILITY_IAM \
+		--parameter-overrides ImageUri=$(CHALLENGER_IMAGE) \
+		ModelDataUrl=$$(cat .model-data-url) EndpointName=$(ENDPOINT_NAME)
+	@echo "InService: $(ENDPOINT_NAME)"
+
+# invoke: score one applicant against the live endpoint (the client's path).
+invoke:
+	@aws sagemaker-runtime invoke-endpoint --endpoint-name $(ENDPOINT_NAME) \
+		--content-type application/json \
+		--body '{"annual_income":35800,"debt_to_income":5.9,"bureau_score":631,"credit_utilization":15.7,"employment_length_years":6.7,"loan_amount":55300,"age":72,"home_ownership":"OWN","loan_purpose":"debt_consolidation","employment_status":"self_employed"}' \
+		--cli-binary-format raw-in-base64-out /dev/stdout
+
+teardown:
+	aws cloudformation delete-stack --stack-name $(STACK)
+	aws cloudformation wait stack-delete-complete --stack-name $(STACK)
+	@echo "$(STACK) torn down"
+
+# deploy-modelbuilder: the other way the chapter shows -- SageMaker's ModelBuilder
+# builds the container and model at deploy time (an SDK construct, no CFN).
 deploy-modelbuilder:
 	SAGEMAKER_ROLE_ARN=$(ROLE) MLFLOW_TRACKING_ARN=$(APP_ARN) MLFLOW_MODEL_PATH=$(MODEL_PATH) \
 		AWS_DEFAULT_REGION=$(REGION) uv run deploy/deploy_modelbuilder.py
