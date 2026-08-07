@@ -29,7 +29,9 @@ MODELS := scorecard challenger
 # parallel with make -j2 (build/deploy/teardown both models at once) or serially
 # with plain make. push-model-% builds and pushes; endpoint-% / teardown-endpoint-%
 # deploy and remove one serverless endpoint. endpoint-% depends on its own
-# push-model-% so -j2 overlaps the two models without deploying an unpushed tag.
+# push-model-% so -j2 overlaps the two models without deploying an unpushed tag;
+# that means make endpoints always rebuilds+repushes (pattern targets have no file,
+# so they are never up to date) -- skip with make -o push-model-<m> endpoint-<m>.
 ecr-login:
 	aws ecr get-login-password --region $(REGION) | docker login --username AWS --password-stdin $(ECR)
 
@@ -42,8 +44,15 @@ push-model-%: ecr-login
 
 push-models: $(MODELS:%=push-model-%)
 
+# Fail at parse time if a deploy is requested without SM_ROLE: endpoint-% now runs
+# after push-model-%, so a recipe-line check would only fire after two image pushes.
+ifneq (,$(filter endpoints $(MODELS:%=endpoint-%),$(MAKECMDGOALS)))
+ifeq (,$(SM_ROLE))
+$(error set SM_ROLE=<sagemaker exec role arn> (make iam prints it))
+endif
+endif
+
 endpoint-%: push-model-%
-	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn> (make iam prints it)"; exit 1; }
 	MODE=cloud MODEL_IMAGE=$(ECR)/ch04-$*-model:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
 		ENDPOINT_NAME=ch04-$* uv run --no-project ../src/deploy.py
 
@@ -129,13 +138,13 @@ decide-eks:
 teardown-ecs:
 	-aws ecs update-service --region $(REGION) --cluster ch04-decision \
 		--service decision-service --desired-count 0
-	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
+	-aws s3 rm --recursive s3://$(BUCKET)
 	sam delete --no-prompts --region $(REGION)
 
 teardown-eks:
 	@command -v eksctl >/dev/null 2>&1 || { echo "eksctl is not installed: https://eksctl.io/installation/"; exit 1; }
 	-eksctl delete cluster -f eks/create-cluster.yaml
-	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
+	-aws s3 rm --recursive s3://$(BUCKET)
 	sam delete --no-prompts --region $(REGION)
 
 # -------------------------------------------------------------------------------
