@@ -27,8 +27,9 @@ MODELS := scorecard challenger
 
 # One target per model, so the two are independent prerequisites: run them in
 # parallel with make -j2 (build/deploy/teardown both models at once) or serially
-# with plain make. push-model-% builds and pushes; endpoint-% / endpoint-teardown-%
-# deploy and remove one serverless endpoint.
+# with plain make. push-model-% builds and pushes; endpoint-% / teardown-endpoint-%
+# deploy and remove one serverless endpoint. endpoint-% depends on its own
+# push-model-% so -j2 overlaps the two models without deploying an unpushed tag.
 ecr-login:
 	aws ecr get-login-password --region $(REGION) | docker login --username AWS --password-stdin $(ECR)
 
@@ -41,15 +42,17 @@ push-model-%: ecr-login
 
 push-models: $(MODELS:%=push-model-%)
 
-endpoint-%:
+endpoint-%: push-model-%
 	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn> (make iam prints it)"; exit 1; }
 	MODE=cloud MODEL_IMAGE=$(ECR)/ch04-$*-model:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
 		ENDPOINT_NAME=ch04-$* uv run --no-project ../src/deploy.py
 
 endpoints: $(MODELS:%=endpoint-%)
 
-# teardown-endpoint-% (not endpoint-teardown-%) so it does not also match the
-# endpoint-% pattern above -- two rules matching one target is ambiguous.
+# teardown-endpoint-% (not endpoint-teardown-%), which would also match the
+# endpoint-% pattern above. GNU make >= 3.82 would pick the shortest stem and
+# get it right; make 3.81 (still /usr/bin/make on macOS) picks by file order
+# and would run the deploy recipe instead. This naming is version-independent.
 teardown-endpoint-%:
 	-aws sagemaker delete-endpoint --endpoint-name ch04-$* --region $(REGION) 2>/dev/null
 	-aws sagemaker delete-endpoint-config --endpoint-config-name ch04-$* --region $(REGION) 2>/dev/null
@@ -82,9 +85,13 @@ deploy-eks:
 		../k8s/gateway.yaml | kubectl apply -f -
 	kubectl rollout status deployment/gateway --timeout=300s
 
+# the staging bucket, resolved once at point of use: a lazy global, not a
+# recipe-time $(eval) -- eval mutates global make state during expansion, the one
+# construct that genuinely misbehaves under make -j.
+BUCKET = $(call output,StagingBucketName)
+
 # build the gateway image in the cloud and push it to the stack's ECR repo
 image:
-	$(eval BUCKET := $(call output,StagingBucketName))
 	cd .. && rm -f /tmp/ch04-app-src.zip && \
 		zip -q -j /tmp/ch04-app-src.zip src/gateway/Dockerfile src/gateway/app.py \
 		aws/image/buildspec.yml
