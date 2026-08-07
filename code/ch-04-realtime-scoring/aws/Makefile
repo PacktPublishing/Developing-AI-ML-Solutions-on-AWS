@@ -4,6 +4,12 @@
 REGION := us-east-1
 STACK := realtime-scoring-ch04
 
+# group each target's output under -j so the two build streams don't interleave
+# (make >= 4.0); 3.81, still /usr/bin/make on macOS, has no -O and would error on it.
+ifneq (,$(filter 4.% 5.%,$(MAKE_VERSION)))
+MAKEFLAGS += -Otarget
+endif
+
 output = $(shell aws cloudformation describe-stacks --region $(REGION) \
 	--stack-name $(STACK) \
 	--query "Stacks[0].Outputs[?OutputKey=='$(1)'].OutputValue" --output text)
@@ -48,7 +54,7 @@ push-models: $(MODELS:%=push-model-%)
 # after push-model-%, so a recipe-line check would only fire after two image pushes.
 ifneq (,$(filter endpoints $(MODELS:%=endpoint-%),$(MAKECMDGOALS)))
 ifeq (,$(SM_ROLE))
-$(error set SM_ROLE=<sagemaker exec role arn> (make iam prints it))
+$(error set SM_ROLE=<sagemaker exec role arn>; make iam prints it)
 endif
 endif
 
