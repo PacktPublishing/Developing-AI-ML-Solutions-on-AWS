@@ -16,13 +16,13 @@ faces:
 enrol:
 	cd local && uv run --project . python enrol.py ../$(FACES)
 
-# 1:N match: a genuine selfie should hit its own subject above the threshold
+# KYC verification: a genuine selfie's top hit is its own claimed subject -> matched
 match:
-	cd local && uv run --project . python match.py ../$(FACES)/probe/$(SUBJECT)/selfie.jpg
+	cd local && uv run --project . python match.py ../$(FACES)/probe/$(SUBJECT)/selfie.jpg --claim $(SUBJECT)
 
-# 1:N with an impostor selfie: the top score should fall below the threshold
+# an impostor selfie resolves to a different subject than claimed -> not matched
 match-impostor:
-	cd local && uv run --project . python match.py ../$(FACES)/impostors/$(SUBJECT)/selfie.jpg
+	cd local && uv run --project . python match.py ../$(FACES)/impostors/$(SUBJECT)/selfie.jpg --claim $(SUBJECT)
 
 # 1:1 compare + Captum explanation on a genuine pair
 compare:

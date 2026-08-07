@@ -1,11 +1,12 @@
 """Search Lambda: embed a probe face and return the closest enrolled subjects.
 
-    POST /match  {"key": "probes/applicant.jpg"}
-    ->  {"key", "matches": [{"subject", "score"}, ...], "matched": bool}
+    POST /match  {"key": "probes/applicant.jpg", "claim": "subject_000"}
+    ->  {"key", "matches": [{"subject", "score"}, ...], "identified", "matched": bool}
 
 pgvector's HNSW index returns the candidates; the score column is exact cosine,
-so re-sorting by score is an exact re-rank of the top-k. `matched` is just the
-top score against a threshold.
+so re-sorting by score is an exact re-rank of the top-k. Without `claim` it is a
+1:N search and `matched` is the top score against a threshold; with `claim` it is
+KYC verification and `matched` requires the top hit to BE the claimed subject.
 """
 
 import json
@@ -58,6 +59,7 @@ def lambda_handler(event, context):
     key = params.get("key")
     bucket = params.get("bucket") or DEFAULT_BUCKET
     k = int(params.get("k", 5))
+    claim = params.get("claim")  # optional: the subject the probe claims to be
     if not key:
         return {"statusCode": 400, "body": json.dumps({"error": "key required"})}
 
@@ -81,10 +83,20 @@ def lambda_handler(event, context):
             {"subject": r[0], "score": round(float(r[1]), 4)} for r in cur.fetchall()
         ]
     matches.sort(key=lambda m: m["score"], reverse=True)
-    matched = bool(matches and matches[0]["score"] >= MATCH)
+    top = matches[0] if matches else None
+    identified = top["subject"] if top else None
+    # 1:N when no claim; KYC verification (top hit must be the claim) when claimed.
+    matched = bool(
+        top and top["score"] >= MATCH and (claim is None or identified == claim)
+    )
 
-    result = {"key": key, "matches": matches, "matched": matched}
-    log.info("%s -> %d matches, matched=%s", key, len(matches), matched)
+    result = {
+        "key": key,
+        "matches": matches,
+        "identified": identified,
+        "matched": matched,
+    }
+    log.info("%s -> identified=%s matched=%s", key, identified, matched)
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json"},
