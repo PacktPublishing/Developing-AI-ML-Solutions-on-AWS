@@ -5,9 +5,13 @@ REGION := us-east-1
 STACK := realtime-scoring-ch04
 
 # group each target's output under -j so the two build streams don't interleave
-# (make >= 4.0); 3.81, still /usr/bin/make on macOS, has no -O and would error on it.
+# (make >= 4.0; 3.81, still /usr/bin/make on macOS, has no -O and would error).
+# Scoped to the model fan-out: on deploy, -O would buffer CodeBuild's progress
+# ticks until the build finished and look like a hang.
 ifneq (,$(filter 4.% 5.%,$(MAKE_VERSION)))
+ifneq (,$(filter push-models endpoints endpoints-teardown,$(MAKECMDGOALS)))
 MAKEFLAGS += -Otarget
+endif
 endif
 
 output = $(shell aws cloudformation describe-stacks --region $(REGION) \
@@ -37,7 +41,7 @@ MODELS := scorecard challenger
 # deploy and remove one serverless endpoint. endpoint-% depends on its own
 # push-model-% so -j2 overlaps the two models without deploying an unpushed tag;
 # that means make endpoints always rebuilds+repushes (pattern targets have no file,
-# so they are never up to date) -- skip with make -o push-model-<m> endpoint-<m>.
+# so they are never up to date) -- skip the rebuild with make endpoints SKIP_PUSH=1.
 ecr-login:
 	aws ecr get-login-password --region $(REGION) | docker login --username AWS --password-stdin $(ECR)
 
@@ -58,7 +62,7 @@ $(error set SM_ROLE=<sagemaker exec role arn>; make iam prints it)
 endif
 endif
 
-endpoint-%: push-model-%
+endpoint-%: $(if $(SKIP_PUSH),,push-model-%)
 	MODE=cloud MODEL_IMAGE=$(ECR)/ch04-$*-model:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
 		ENDPOINT_NAME=ch04-$* uv run --no-project ../src/deploy.py
 
