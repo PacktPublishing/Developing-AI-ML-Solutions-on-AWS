@@ -1,4 +1,4 @@
-.PHONY: iam lint push-models endpoints endpoints-teardown deploy deploy-ecs deploy-eks image scale-up scale-down decide decide-ecs decide-eks teardown teardown-ecs teardown-eks
+.PHONY: iam lint ecr-login push-models endpoints endpoints-teardown deploy deploy-ecs deploy-eks image scale-up scale-down decide decide-ecs decide-eks teardown teardown-ecs teardown-eks
 
 # single-region chapter: the EKS config and gateway manifest hardcode us-east-1, so don't override this for COMPUTE=eks.
 REGION := us-east-1
@@ -16,7 +16,6 @@ lint:
 # compute target: ecs (ALB + Fargate, the default) or eks (an eksctl Fargate cluster)
 # -------------------------------------------------------------------------------
 COMPUTE ?= ecs
-REPO = $(call output,ServiceRepoUri)
 
 # -------------------------------------------------------------------------------
 # models: the two SageMaker endpoints the gateway ensembles, deployed apart from the stack
@@ -26,28 +25,37 @@ ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
 SM_ROLE ?=
 MODELS := scorecard challenger
 
-push-models:
+# One target per model, so the two are independent prerequisites: run them in
+# parallel with make -j2 (build/deploy/teardown both models at once) or serially
+# with plain make. push-model-% builds and pushes; endpoint-% / endpoint-teardown-%
+# deploy and remove one serverless endpoint.
+ecr-login:
 	aws ecr get-login-password --region $(REGION) | docker login --username AWS --password-stdin $(ECR)
-	@for m in $(MODELS); do \
-		aws ecr describe-repositories --repository-names ch04-$$m-model --region $(REGION) >/dev/null 2>&1 || \
-		aws ecr create-repository --repository-name ch04-$$m-model --region $(REGION) >/dev/null; \
-		docker buildx build --platform linux/amd64 --provenance=false \
-		-t $(ECR)/ch04-$$m-model:latest --push ../src/models/$$m; \
-	done
 
-endpoints:
+push-model-%: ecr-login
+	aws ecr describe-repositories --repository-names ch04-$*-model --region $(REGION) >/dev/null 2>&1 || \
+		aws ecr create-repository --repository-name ch04-$*-model --region $(REGION) >/dev/null
+	docker buildx build --platform linux/amd64 --provenance=false \
+		--output type=image,oci-mediatypes=false,push=true \
+		-t $(ECR)/ch04-$*-model:latest ../src/models/$*
+
+push-models: $(MODELS:%=push-model-%)
+
+endpoint-%:
 	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn> (make iam prints it)"; exit 1; }
-	@for m in $(MODELS); do \
-		MODE=cloud MODEL_IMAGE=$(ECR)/ch04-$$m-model:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
-		ENDPOINT_NAME=ch04-$$m uv run --no-project ../src/deploy.py; \
-	done
+	MODE=cloud MODEL_IMAGE=$(ECR)/ch04-$*-model:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
+		ENDPOINT_NAME=ch04-$* uv run --no-project ../src/deploy.py
 
-endpoints-teardown:
-	@for m in $(MODELS); do \
-		aws sagemaker delete-endpoint --endpoint-name ch04-$$m --region $(REGION) 2>/dev/null || true; \
-		aws sagemaker delete-endpoint-config --endpoint-config-name ch04-$$m --region $(REGION) 2>/dev/null || true; \
-		aws sagemaker delete-model --model-name ch04-$$m --region $(REGION) 2>/dev/null || true; \
-	done
+endpoints: $(MODELS:%=endpoint-%)
+
+# teardown-endpoint-% (not endpoint-teardown-%) so it does not also match the
+# endpoint-% pattern above -- two rules matching one target is ambiguous.
+teardown-endpoint-%:
+	-aws sagemaker delete-endpoint --endpoint-name ch04-$* --region $(REGION) 2>/dev/null
+	-aws sagemaker delete-endpoint-config --endpoint-config-name ch04-$* --region $(REGION) 2>/dev/null
+	-aws sagemaker delete-model --model-name ch04-$* --region $(REGION) 2>/dev/null
+
+endpoints-teardown: $(MODELS:%=teardown-endpoint-%)
 
 deploy: deploy-$(COMPUTE)
 decide: decide-$(COMPUTE)
@@ -66,7 +74,10 @@ deploy-eks:
 	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides Compute=eks
 	$(MAKE) image
 	eksctl create cluster -f eks/create-cluster.yaml
-	sed -e "s|ch04-decision:local|$(REPO):latest|" \
+	REPO_URI=$$(aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) \
+		--query "Stacks[0].Outputs[?OutputKey=='ServiceRepoUri'].OutputValue" --output text); \
+		test -n "$$REPO_URI" || { echo "ServiceRepoUri output is empty; is the stack up?"; exit 1; }; \
+		sed -e "s|ch04-decision:local|$${REPO_URI}:latest|" \
 		-e "s|imagePullPolicy: Never|imagePullPolicy: Always|" \
 		../k8s/gateway.yaml | kubectl apply -f -
 	kubectl rollout status deployment/gateway --timeout=300s
@@ -106,12 +117,7 @@ decide-ecs:
 
 decide-eks:
 	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed"; exit 1; }
-	kubectl wait --for=condition=ready pod -l app=gateway --timeout=120s
-	@kubectl port-forward svc/gateway 8085:80 >/dev/null 2>&1 & \
-	PF=$$!; trap "kill $$PF 2>/dev/null" EXIT; sleep 2; \
-	curl -s --retry 5 --retry-delay 1 --retry-all-errors \
-	localhost:8085/decision -H 'content-type: application/json' -d $(DECIDE_BODY); \
-	echo
+	uv run --no-project eks/decide.py
 
 teardown-ecs:
 	-aws ecs update-service --region $(REGION) --cluster ch04-decision \
