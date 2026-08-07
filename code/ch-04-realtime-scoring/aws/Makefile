@@ -4,16 +4,6 @@
 REGION := us-east-1
 STACK := realtime-scoring-ch04
 
-# group each target's output under -j so the two build streams don't interleave
-# (make >= 4.0; 3.81, still /usr/bin/make on macOS, has no -O and would error).
-# Scoped to the model fan-out: on deploy, -O would buffer CodeBuild's progress
-# ticks until the build finished and look like a hang.
-ifneq (,$(filter 4.% 5.%,$(MAKE_VERSION)))
-ifneq (,$(filter push-models endpoints endpoints-teardown,$(MAKECMDGOALS)))
-MAKEFLAGS += -Otarget
-endif
-endif
-
 output = $(shell aws cloudformation describe-stacks --region $(REGION) \
 	--stack-name $(STACK) \
 	--query "Stacks[0].Outputs[?OutputKey=='$(1)'].OutputValue" --output text)
@@ -34,6 +24,21 @@ ACCOUNT = $(shell aws sts get-caller-identity --query Account --output text)
 ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
 SM_ROLE ?=
 MODELS := scorecard challenger
+
+# every goal that fans out over the models, aggregate or per-model
+PARALLEL_GOALS := push-models endpoints endpoints-teardown \
+	$(MODELS:%=push-model-%) $(MODELS:%=endpoint-%) $(MODELS:%=teardown-endpoint-%)
+
+# group each target's output under -j so the two build streams don't interleave
+# (make >= 4.0; 3.81, still /usr/bin/make on macOS, has no -O and would error).
+# Scoped to the fan-out goals -- the same list the guard draws from -- so running
+# the per-model targets directly groups too; on deploy, -O would buffer CodeBuild's
+# progress ticks until the build finished and look like a hang.
+ifneq (,$(filter 4.% 5.%,$(MAKE_VERSION)))
+ifneq (,$(filter $(PARALLEL_GOALS),$(MAKECMDGOALS)))
+MAKEFLAGS += -Otarget
+endif
+endif
 
 # One target per model, so the two are independent prerequisites: run them in
 # parallel with make -j2 (build/deploy/teardown both models at once) or serially
