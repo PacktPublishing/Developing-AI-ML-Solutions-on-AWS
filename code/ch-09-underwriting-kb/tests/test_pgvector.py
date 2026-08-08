@@ -75,6 +75,7 @@ os.environ.update(
 import embed_memos  # noqa: E402
 import gen_memos  # noqa: E402
 import models  # noqa: E402
+import pgvector_store  # noqa: E402
 import stores  # noqa: E402
 
 
@@ -100,11 +101,11 @@ def test_exact_chunk_ranks_its_own_memo_first(monkeypatch, tmp_path):
     """An exact memo chunk ranks its own source loan first."""
     monkeypatch.setattr(embed_memos, "embed", _fake_embed)
     monkeypatch.setattr(embed_memos, "get_runtime", lambda: None)
-    monkeypatch.setattr(stores, "embed", _fake_embed)
+    monkeypatch.setattr(pgvector_store, "embed", _fake_embed)
 
     memo_dir = tmp_path / "memos"
     gen_memos.generate(memo_dir, count=8, seed=7, messy=False)
-    embed_memos.seed(memo_dir)
+    embed_memos.seed(memo_dir)  # STORE defaults to pgvector
 
     # a structured memo has a unique first chunk (its business name and address)
     structured = next(
@@ -115,7 +116,7 @@ def test_exact_chunk_ranks_its_own_memo_first(monkeypatch, tmp_path):
     loan_id, _, body = embed_memos.parse_memo(structured)
     chunk = embed_memos.chunk_text(body)[0]
 
-    hits = stores.search(None, chunk, k=3)
+    hits = stores.get_store().search(None, chunk, k=3)
 
     assert len(hits) == 3
     assert hits[0][0] == loan_id

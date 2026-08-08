@@ -1,21 +1,22 @@
 # /// script
-# dependencies = ["boto3", "psycopg2-binary", "ollama"]
+# dependencies = ["boto3", "psycopg2-binary", "ollama", "opensearch-py"]
 # ///
 """Embed the synthetic memo corpus into the vector store, one chunk per row.
 
 Reads the memos written by gen_memos.py, splits each into chunks, embeds them
-through the model seam, and loads them into pgvector for retrieval with
-citations back to the source loan.
+through the model seam, and loads them into the selected store (pgvector or
+OpenSearch) for retrieval with citations back to the source loan.
 
 Usage:
-  make seed    # or: PYTHONPATH=src uv run etl/embed_memos.py --memos data/generated/memos
+  make seed                 # pgvector, the default store
+  STORE=opensearch make seed
 """
 
 import argparse
 from pathlib import Path
 
 from models import EMBED_DIM, embed, get_runtime
-from stores import connect
+from stores import get_store
 
 CHUNK_SIZE = 800
 
@@ -51,18 +52,10 @@ def chunk_text(text: str, size: int = CHUNK_SIZE) -> list[str]:
 
 
 def seed(memo_dir: Path) -> int:
-    """Embed every memo under `memo_dir` into memo_chunks and return the count."""
+    """Embed every memo under `memo_dir` into the selected store; return the count."""
     runtime = get_runtime()
-    conn = connect()
-    conn.autocommit = True
-    cur = conn.cursor()
-    cur.execute("create extension if not exists vector")
-    cur.execute(
-        f"create table if not exists memo_chunks ("
-        f" id bigserial primary key, loan_id bigint not null, borrower text not null,"
-        f" chunk_index int not null, content text not null, embedding vector({EMBED_DIM}))"
-    )
-    cur.execute("truncate memo_chunks restart identity")
+    store = get_store()
+    store.reset(EMBED_DIM)
 
     total = 0
     for path in sorted(memo_dir.glob("*.txt")):
@@ -70,20 +63,10 @@ def seed(memo_dir: Path) -> int:
         chunks = chunk_text(body)
         vectors = embed(runtime, chunks)
         for i, (content, vector) in enumerate(zip(chunks, vectors)):
-            literal = "[" + ",".join(str(x) for x in vector) + "]"
-            cur.execute(
-                "insert into memo_chunks (loan_id, borrower, chunk_index, content, embedding)"
-                " values (%s, %s, %s, %s, %s::vector)",
-                (loan_id, borrower, i, content, literal),
-            )
+            store.add(loan_id, borrower, i, content, vector)
             total += 1
 
-    cur.execute(
-        "create index if not exists memo_chunks_embedding_idx"
-        " on memo_chunks using hnsw (embedding vector_cosine_ops)"
-    )
-    cur.close()
-    conn.close()
+    store.finalize()
     return total
 
 

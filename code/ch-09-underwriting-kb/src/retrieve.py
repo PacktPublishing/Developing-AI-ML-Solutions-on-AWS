@@ -1,21 +1,22 @@
 # /// script
-# dependencies = ["boto3", "psycopg2-binary", "ollama"]
+# dependencies = ["boto3", "psycopg2-binary", "ollama", "opensearch-py"]
 # ///
 """Answer questions over the memo knowledge base, grounded with citations.
 
 Two modes: ask a question about past underwriting, or assemble the most similar
 prior cases into a draft recommendation the underwriter signs off on. Both cite
-the source loan so the underwriter can trace every claim back to a memo.
+the source loan so the underwriter can trace every claim back to a memo. The
+vector store is chosen by STORE (pgvector by default, or opensearch).
 
 Usage (from the chapter root):
   PYTHONPATH=src uv run src/retrieve.py ask --query "How is DTI assessed for grocery businesses?"
-  PYTHONPATH=src uv run src/retrieve.py cases --deal "A logistics firm seeks a 500,000 dollar working-capital loan"
+  STORE=opensearch PYTHONPATH=src uv run src/retrieve.py ask --query "..."
 """
 
 import argparse
 
 from models import generate, get_runtime
-from stores import search
+from stores import get_store
 
 # Headroom for the answer: a small local model (Qwen3 0.6b) spends much of its
 # budget on reasoning over the retrieved passages, so leave room for the reply.
@@ -56,7 +57,7 @@ def _sources(hits: list[tuple[int, str, str, float]]) -> str:
 def ask(query: str, k: int = 5) -> str:
     """Answer a question grounded in the k nearest memo chunks, with citations."""
     runtime = get_runtime()
-    hits = search(runtime, query, k=k)
+    hits = get_store().search(runtime, query, k=k)
     if not hits:
         return "I cannot find anything relevant in the knowledge base."
     user = f"Question: {query}\n\nMemo passages:\n{_context(hits)}"
@@ -67,7 +68,7 @@ def ask(query: str, k: int = 5) -> str:
 def cases(deal: str, k: int = 5) -> str:
     """Assemble the k most similar prior cases into a draft recommendation."""
     runtime = get_runtime()
-    hits = search(runtime, deal, k=k)
+    hits = get_store().search(runtime, deal, k=k)
     if not hits:
         return "I cannot find comparable cases in the knowledge base."
     user = f"New deal: {deal}\n\nSimilar prior cases:\n{_context(hits)}"

@@ -7,6 +7,11 @@ export PYTHONPATH := $(SRC)
 
 COMPOSE := docker compose -f local/kb-stack.yml
 
+# STORE selects the vector store: pgvector (default) or opensearch. The OpenSearch
+# container sits behind a compose profile, so it starts only when STORE=opensearch.
+export STORE ?= pgvector
+PROFILE := $(if $(filter opensearch,$(STORE)),--profile opensearch,)
+
 # Bedrock is the one cloud call and uses your real AWS credentials from the
 # default chain. Set BEDROCK_LOCAL=1 to run the models on Ollama instead.
 export AWS_DEFAULT_REGION ?= us-east-1
@@ -24,13 +29,13 @@ Q ?= How is DTI assessed for a grocery business?
 DEAL ?= A logistics firm seeks a 500,000 US dollar working-capital loan for six months.
 
 up:
-	$(COMPOSE) up -d --wait
+	$(COMPOSE) $(PROFILE) up -d --wait
 
 # gen: write the synthetic memo corpus (reproducible from the seed)
 gen:
 	uv run etl/gen_memos.py --out data/generated/memos --count $(COUNT) --seed $(SEED) --messy
 
-# seed: embed the generated memos into pgvector
+# seed: embed the generated memos into the selected store (STORE=pgvector|opensearch)
 seed:
 	uv run etl/embed_memos.py --memos data/generated/memos
 
@@ -41,7 +46,7 @@ cases:
 	uv run src/retrieve.py cases --deal "$(DEAL)"
 
 down:
-	$(COMPOSE) down -v
+	$(COMPOSE) --profile opensearch down -v
 
 lint:
 	uvx ruff format etl/*.py src/*.py

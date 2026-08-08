@@ -1,8 +1,9 @@
 # The underwriting knowledge base
 
-> **In progress.** The local retrieval path (synthetic corpus, pgvector, grounded
-> answers with citations) is built and verified; the AWS path — Aurora pgvector,
-> S3 Vectors, OpenSearch, and the retrieval interface — is still to come.
+> **In progress.** The local retrieval path is built and verified against two
+> stores — pgvector and OpenSearch — with grounded answers and citations. The AWS
+> path (Aurora pgvector, S3 Vectors, Amazon OpenSearch Service) and the retrieval
+> interface are still to come.
 
 The knowledge base the underwriting agent stands on: policy documents, credit
 reports, and past dossier memos, embedded with Bedrock and stored for retrieval,
@@ -20,7 +21,7 @@ of reasoning.
 ```
 make up                       # pgvector, the local vector store
 make gen                      # write the synthetic memo corpus (reproducible from --seed)
-BEDROCK_LOCAL=1 make seed      # embed the memos into pgvector via Ollama
+BEDROCK_LOCAL=1 make seed      # embed the memos into the store via Ollama
 BEDROCK_LOCAL=1 make ask  Q="How is DTI assessed for a grocery business?"
 BEDROCK_LOCAL=1 make cases DEAL="A logistics firm seeks a 500,000 dollar working-capital loan"
 make down                     # tear it down
@@ -29,19 +30,32 @@ make down                     # tear it down
 `make ask` retrieves the nearest memo chunks and answers the question grounded in
 them, citing each claim's source loan; `make cases` gathers the most similar
 prior cases into a draft recommendation the underwriter signs off on. Unset
-`BEDROCK_LOCAL` to run the embeddings and generation on Amazon Bedrock instead —
-the retrieval SQL is identical either way. On a small local model (Qwen3 0.6b)
-expect terse answers; Bedrock is the graded path.
+`BEDROCK_LOCAL` to run the embeddings and generation on Amazon Bedrock instead.
+On a small local model (Qwen3 0.6b) expect terse answers; Bedrock is the graded
+path.
+
+The same commands run against **OpenSearch** instead of pgvector by setting
+`STORE=opensearch`, which starts the OpenSearch container (a compose profile) and
+targets its knn_vector index — the retrieval code is identical either way:
+
+```
+STORE=opensearch make up
+STORE=opensearch BEDROCK_LOCAL=1 make seed
+STORE=opensearch BEDROCK_LOCAL=1 make ask Q="..."
+```
 
 ## Layout
 
 - `etl/gen_memos.py`: the synthetic-memo generator, two shapes, `--messy` for
   the real-world typos and blank fields an extractor must tolerate
-- `etl/embed_memos.py`: chunk each memo and embed it into the vector store
+- `etl/embed_memos.py`: chunk each memo and embed it into the selected store
 - `src/models.py`: the model seam — one Bedrock-shaped interface, Ollama behind it
-- `src/stores.py`: the vector-store seam — pgvector locally, Aurora on AWS
+- `src/stores.py`: the store seam — one interface, `STORE` picks the backend
+- `src/pgvector_store.py`: the pgvector backend — local Postgres, Aurora on AWS
+- `src/opensearch_store.py`: the OpenSearch backend — local container, Amazon
+  OpenSearch Service on AWS
 - `src/retrieve.py`: grounded question answering and case assembly, with citations
-- `local/kb-stack.yml`: the compose stack — pgvector
+- `local/kb-stack.yml`: the compose stack — pgvector, and OpenSearch behind a profile
 - `tests/test_pgvector.py`: a pgvector round-trip that provisions its own
   container and stubs the embeddings, so it needs no cloud
 
@@ -55,8 +69,7 @@ expect terse answers; Bedrock is the graded path.
 
 ## Still to come
 
-- the second store: **S3 Vectors** alongside pgvector, for comparison
-- **OpenSearch** exercised locally and on AWS
+- a third store: **S3 Vectors** alongside pgvector and OpenSearch, for comparison
 - the retrieval **interface** (open: a small Lambda serving HTML through API
   Gateway to Bedrock, versus an OpenSearch-backed search UI)
-- `aws/template.yaml` and the cloud round
+- `aws/template.yaml` and the cloud round (Aurora, OpenSearch Service, S3 Vectors)
