@@ -30,6 +30,11 @@ def client() -> OpenSearch:
         use_ssl=os.environ.get("OPENSEARCH_SSL") == "1",
         verify_certs=False,
         ssl_show_warn=False,
+        # a small managed node throttles under a burst of writes; ride out the 429s
+        timeout=30,
+        max_retries=5,
+        retry_on_status=(429, 502, 503, 504),
+        retry_on_timeout=True,
     )
 
 
@@ -92,7 +97,16 @@ class OpenSearchStore:
     def finalize(self) -> None:
         """Flush the bulk buffer and refresh the index so it is searchable."""
         if self._buffer:
-            helpers.bulk(self.client, self._buffer)
+            # small chunks with backoff so a modest node is not overrun by one big bulk
+            helpers.bulk(
+                self.client,
+                self._buffer,
+                chunk_size=100,
+                max_retries=4,
+                initial_backoff=2,
+                max_backoff=30,
+                request_timeout=60,
+            )
             self._buffer = []
         self.client.indices.refresh(index=INDEX)
 
