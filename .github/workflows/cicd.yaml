@@ -18,6 +18,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+      # rain formats the CFN/SAM templates; the pre-commit hook is language:system
+      # so the binary must be on PATH here too. Pinned to the author's local version
+      # so CI and the working tree format identically.
+      - name: install rain (CloudFormation formatter)
+        run: |
+          curl -fsSL -o /tmp/rain.zip \
+            https://github.com/aws-cloudformation/rain/releases/download/v1.24.3/rain-v1.24.3_linux-amd64.zip
+          unzip -q -j /tmp/rain.zip '*/rain' -d /tmp/rain-bin
+          sudo install /tmp/rain-bin/rain /usr/local/bin/rain
+          rain --version
       - name: pre-commit (ruff, ty, shfmt, shellcheck, mbake)
         run: uvx pre-commit run --all-files --show-diff-on-failure
 
