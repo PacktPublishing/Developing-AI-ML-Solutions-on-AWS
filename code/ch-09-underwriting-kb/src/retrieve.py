@@ -46,34 +46,67 @@ def _context(hits: list[tuple[int, str, str, float]]) -> str:
     return "\n\n".join(f"[{loan_id}] {content}" for loan_id, _, content, _ in hits)
 
 
-def _sources(hits: list[tuple[int, str, str, float]]) -> str:
-    """Render a Sources line listing each cited loan and borrower, deduplicated."""
+def _sources_list(hits: list[tuple[int, str, str, float]]) -> list[dict]:
+    """Return the cited loans as [{loan_id, borrower}], deduplicated, in order."""
     seen: dict[int, str] = {}
     for loan_id, borrower, _, _ in hits:
         seen.setdefault(loan_id, borrower)
-    return "> Sources: " + ", ".join(f"{lid} {name}" for lid, name in seen.items())
+    return [{"loan_id": lid, "borrower": name} for lid, name in seen.items()]
+
+
+def _respond(
+    system: str, header: str, body: str, text: str, k: int, empty: str
+) -> dict:
+    """Retrieve, generate a grounded answer, and return {answer, sources}."""
+    runtime = get_runtime()
+    hits = get_store().search(runtime, text, k=k)
+    if not hits:
+        return {"answer": empty, "sources": []}
+    user = f"{header}: {text}\n\n{body}:\n{_context(hits)}"
+    answer = generate(runtime, system, user, max_tokens=MAX_TOKENS)
+    return {"answer": answer, "sources": _sources_list(hits)}
+
+
+def ask_result(query: str, k: int = 5) -> dict:
+    """Answer a question grounded in the k nearest memo chunks: {answer, sources}."""
+    return _respond(
+        ASK_SYSTEM,
+        "Question",
+        "Memo passages",
+        query,
+        k,
+        "I cannot find anything relevant in the knowledge base.",
+    )
+
+
+def cases_result(deal: str, k: int = 5) -> dict:
+    """Assemble the k most similar prior cases into a recommendation: {answer, sources}."""
+    return _respond(
+        CASES_SYSTEM,
+        "New deal",
+        "Similar prior cases",
+        deal,
+        k,
+        "I cannot find comparable cases in the knowledge base.",
+    )
+
+
+def _format(result: dict) -> str:
+    """Render a structured result as the answer followed by a Sources line."""
+    if not result["sources"]:
+        return result["answer"]
+    cited = ", ".join(f"{s['loan_id']} {s['borrower']}" for s in result["sources"])
+    return f"{result['answer']}\n\n> Sources: {cited}"
 
 
 def ask(query: str, k: int = 5) -> str:
     """Answer a question grounded in the k nearest memo chunks, with citations."""
-    runtime = get_runtime()
-    hits = get_store().search(runtime, query, k=k)
-    if not hits:
-        return "I cannot find anything relevant in the knowledge base."
-    user = f"Question: {query}\n\nMemo passages:\n{_context(hits)}"
-    answer = generate(runtime, ASK_SYSTEM, user, max_tokens=MAX_TOKENS)
-    return f"{answer}\n\n{_sources(hits)}"
+    return _format(ask_result(query, k))
 
 
 def cases(deal: str, k: int = 5) -> str:
     """Assemble the k most similar prior cases into a draft recommendation."""
-    runtime = get_runtime()
-    hits = get_store().search(runtime, deal, k=k)
-    if not hits:
-        return "I cannot find comparable cases in the knowledge base."
-    user = f"New deal: {deal}\n\nSimilar prior cases:\n{_context(hits)}"
-    answer = generate(runtime, CASES_SYSTEM, user, max_tokens=MAX_TOKENS)
-    return f"{answer}\n\n{_sources(hits)}"
+    return _format(cases_result(deal, k))
 
 
 def main() -> None:

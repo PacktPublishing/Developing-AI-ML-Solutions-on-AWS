@@ -1,4 +1,4 @@
-.PHONY: up gen seed ask cases down lint test
+.PHONY: up gen seed ask cases app down lint test
 
 # The scripts under src/ and etl/ import the shared seam (models.py, stores.py)
 # as top-level modules, so src/ is on the path.
@@ -49,6 +49,11 @@ ask:
 
 cases:
 	uv run src/retrieve.py cases --deal "$(DEAL)"
+
+# app: the FastAPI ask/recommend UI over the selected store, on http://localhost:8080.
+# The same app image deploys to Lambda; here it runs under uvicorn.
+app:
+	uv run app/main.py
 
 down:
 	$(COMPOSE) --profile opensearch --profile s3vectors down -v
