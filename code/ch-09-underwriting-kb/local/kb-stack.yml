@@ -45,3 +45,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 40
+
+  s3proxy:
+    # Local S3 for the S3 Vectors stand-in: the shim keeps each vector as one S3
+    # object here, exactly as S3 Vectors keeps vectors in a vector bucket. On AWS
+    # this is the real S3 Vectors service. Started only when STORE=s3vectors.
+    profiles: ["s3vectors"]
+    image: andrewgaul/s3proxy:latest
+    environment:
+      - S3PROXY_ENDPOINT=http://0.0.0.0:9000
+      - S3PROXY_AUTHORIZATION=aws-v2-or-v4
+      - S3PROXY_IDENTITY=local
+      - S3PROXY_CREDENTIAL=localsecret
+      - JCLOUDS_PROVIDER=filesystem
+      - JCLOUDS_FILESYSTEM_BASEDIR=/data
+    ports:
+      - "9000:9000"
+    healthcheck:
+      # S3Proxy answers an unauthenticated GET / with 403; curl without -f still
+      # exits 0 once the server responds, which is all readiness needs here.
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:9000 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

@@ -7,10 +7,15 @@ export PYTHONPATH := $(SRC)
 
 COMPOSE := docker compose -f local/kb-stack.yml
 
-# STORE selects the vector store: pgvector (default) or opensearch. The OpenSearch
-# container sits behind a compose profile, so it starts only when STORE=opensearch.
+# STORE selects the vector store: pgvector (default), opensearch, or s3vectors.
+# pgvector runs in the default compose services; the others sit behind a compose
+# profile named after the store, started only when that store is selected.
 export STORE ?= pgvector
-PROFILE := $(if $(filter opensearch,$(STORE)),--profile opensearch,)
+PROFILE := $(if $(filter pgvector,$(STORE)),,--profile $(STORE))
+
+# S3 Vectors runs on a local S3Proxy-backed shim in local mode (with BEDROCK_LOCAL).
+export S3VECTORS_LOCAL ?= $(BEDROCK_LOCAL)
+export S3_ENDPOINT ?= http://localhost:9000
 
 # Bedrock is the one cloud call and uses your real AWS credentials from the
 # default chain. Set BEDROCK_LOCAL=1 to run the models on Ollama instead.
@@ -46,7 +51,7 @@ cases:
 	uv run src/retrieve.py cases --deal "$(DEAL)"
 
 down:
-	$(COMPOSE) --profile opensearch down -v
+	$(COMPOSE) --profile opensearch --profile s3vectors down -v
 
 lint:
 	uvx ruff format etl/*.py src/*.py

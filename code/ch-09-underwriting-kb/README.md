@@ -1,9 +1,9 @@
 # The underwriting knowledge base
 
-> **In progress.** The local retrieval path is built and verified against two
-> stores — pgvector and OpenSearch — with grounded answers and citations. The AWS
-> path (Aurora pgvector, S3 Vectors, Amazon OpenSearch Service) and the retrieval
-> interface are still to come.
+> **In progress.** The local retrieval path is built and verified against all
+> three stores — pgvector, OpenSearch, and S3 Vectors — with grounded answers and
+> citations. The AWS cloud round (Aurora, Amazon OpenSearch Service, S3 Vectors)
+> and the retrieval interface are still to come.
 
 The knowledge base the underwriting agent stands on: policy documents, credit
 reports, and past dossier memos, embedded with Bedrock and stored for retrieval,
@@ -34,15 +34,20 @@ prior cases into a draft recommendation the underwriter signs off on. Unset
 On a small local model (Qwen3 0.6b) expect terse answers; Bedrock is the graded
 path.
 
-The same commands run against **OpenSearch** instead of pgvector by setting
-`STORE=opensearch`, which starts the OpenSearch container (a compose profile) and
-targets its knn_vector index — the retrieval code is identical either way:
+The same commands run against **OpenSearch** or **S3 Vectors** instead of
+pgvector by setting `STORE`, which starts that store's container (a compose
+profile) — the retrieval code is identical for all three:
 
 ```
-STORE=opensearch make up
-STORE=opensearch BEDROCK_LOCAL=1 make seed
-STORE=opensearch BEDROCK_LOCAL=1 make ask Q="..."
+STORE=opensearch make up   && STORE=opensearch BEDROCK_LOCAL=1 make seed
+STORE=s3vectors  make up   && STORE=s3vectors  BEDROCK_LOCAL=1 make seed
+STORE=s3vectors  BEDROCK_LOCAL=1 make ask Q="..."
 ```
+
+Locally, S3 Vectors is a from-source shim over S3Proxy: each vector is one S3
+object and the query is a brute-force cosine scan, mirroring the real service's
+create_vector_bucket / create_index / put_vectors / query_vectors. Unset
+`S3VECTORS_LOCAL` (and `BEDROCK_LOCAL`) to talk to the real `s3vectors` API.
 
 ## Layout
 
@@ -54,8 +59,11 @@ STORE=opensearch BEDROCK_LOCAL=1 make ask Q="..."
 - `src/pgvector_store.py`: the pgvector backend — local Postgres, Aurora on AWS
 - `src/opensearch_store.py`: the OpenSearch backend — local container, Amazon
   OpenSearch Service on AWS
+- `src/s3vectors_store.py`: the S3 Vectors backend, plus its local shim over
+  S3Proxy — Amazon S3 Vectors on AWS
 - `src/retrieve.py`: grounded question answering and case assembly, with citations
-- `local/kb-stack.yml`: the compose stack — pgvector, and OpenSearch behind a profile
+- `local/kb-stack.yml`: the compose stack — pgvector, with OpenSearch and S3Proxy
+  each behind a profile
 - `tests/test_pgvector.py`: a pgvector round-trip that provisions its own
   container and stubs the embeddings, so it needs no cloud
 
@@ -65,11 +73,10 @@ STORE=opensearch BEDROCK_LOCAL=1 make ask Q="..."
   PostgreSQL + pgvector, Amazon S3 Vectors, Amazon OpenSearch Service, AWS
   Lambda, Amazon API Gateway
 - **Local stand-ins:** Ollama (Bedrock), pgvector Postgres (Aurora), OpenSearch
-  in a container
+  in a container, a from-source shim over S3Proxy (S3 Vectors)
 
 ## Still to come
 
-- a third store: **S3 Vectors** alongside pgvector and OpenSearch, for comparison
 - the retrieval **interface** (open: a small Lambda serving HTML through API
   Gateway to Bedrock, versus an OpenSearch-backed search UI)
 - `aws/template.yaml` and the cloud round (Aurora, OpenSearch Service, S3 Vectors)
