@@ -1,0 +1,17 @@
+version: 0.2
+
+# Builds the assistant image natively on amd64 (Fargate's architecture) and pushes it to the stack's ECR repository, so a laptop never cross-builds under emulation. Start a build with `make image`.
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  build:
+    commands:
+      - echo "Building $IMAGE_URI"
+      - docker build -t "$IMAGE_URI" .
+  post_build:
+    commands:
+      - echo "Pushing $IMAGE_URI"
+      - docker push "$IMAGE_URI"
+      - echo "Done"

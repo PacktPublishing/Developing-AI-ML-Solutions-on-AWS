@@ -1,0 +1,83 @@
+# The realtime decision service on AWS: a request hits the ALB, routes to the gateway on ECS Fargate, which ensembles two SageMaker endpoints (scorecard and challenger) and logs to DynamoDB. The gateway image is built by CodeBuild into ECR.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Applicant, AWSCloud]
+
+    Applicant:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Applicant"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: vertical
+      Children: [BuildRow, GatewayRow, Backend]
+
+    BuildRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Developer, Git, CodeBuild, ECR]
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Developer"
+    Git:
+      Type: AWS::Diagram::Resource
+      Preset: "Git repository"
+      Title: "Git repo"
+    CodeBuild:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS CodeBuild"
+      Title: "CodeBuild"
+    ECR:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Elastic Container Registry (Amazon ECR)"
+      Title: "ECR\ngateway image"
+
+    GatewayRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Alb, Gateway]
+    Alb:
+      Type: AWS::Diagram::Resource
+      Preset: "Application Load Balancer"
+      Title: "ALB\n/health"
+    Gateway:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "ECS Fargate\ngateway"
+
+    Backend:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Scorecard, Challenger, Dynamo]
+    Scorecard:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "SageMaker\nscorecard"
+    Challenger:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "SageMaker\nchallenger"
+    Dynamo:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon DynamoDB"
+      Title: "DynamoDB\ndecision log"
+
+  Links:
+    - {Source: Developer, SourcePosition: E, Target: Git, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Git, SourcePosition: E, Target: CodeBuild, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: CodeBuild, SourcePosition: E, Target: ECR, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: ECR, SourcePosition: S, Target: Gateway, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Applicant, SourcePosition: E, Target: Alb, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Alb, SourcePosition: E, Target: Gateway, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Gateway, SourcePosition: S, Target: Scorecard, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: S, Target: Challenger, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: S, Target: Dynamo, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}

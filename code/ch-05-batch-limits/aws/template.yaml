@@ -1,0 +1,552 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  The batch limit run on AWS: the pipeline's S3 bucket, the step image built in the cloud, the role the pipeline runs as, the EventBridge schedule that starts it, and an SNS topic that hears about failures. The pipeline itself is registered by src/pipeline/pipeline.py with PIPELINE_MODE=aws; the warehouse is the Redshift Serverless namespace/workgroup declared below, created only when VpcId is set (the HasWarehouse condition).
+  Every stateful resource is deliberately disposable: `make teardown` leaves nothing behind.
+
+Metadata:
+  cfn-lint:
+    config:
+
+      # W1033: WarehouseSubnetIds' empty default never reaches the workgroup (created only when HasWarehouse)
+      ignore_checks:
+        - W1033
+
+Parameters:
+  PipelineName:
+    Type: String
+    Default: batch-credit-limits
+
+  ScheduleExpression:
+    Description: when the batch runs (monthly, first day, 02:00 UTC)
+    Type: String
+    Default: cron(0 2 1 * ? *)
+
+  AlertEmail:
+    Description: subscribe this address to failure alerts; empty skips the subscription
+    Type: String
+    Default: ""
+
+  # true creates the warehouse and its own VPC (self-contained); it bills per second while active, so set back to false the same day. An empty stack (false) is free.
+  DeployWarehouse:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
+
+Conditions:
+  HasEmail: !Not
+    - !Equals
+      - !Ref AlertEmail
+      - ""
+
+  HasWarehouse: !Equals
+    - !Ref DeployWarehouse
+    - "true"
+
+Resources:
+  BatchBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-batch-artifacts
+            Status: Enabled
+            ExpirationInDays: 7
+
+  StepRepo:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch05-step
+      EmptyOnDelete: true
+
+  ImageBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build-step-image
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub ${BatchBucket.Arn}/ch05/source/*
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !GetAtt StepRepo.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/ch05-step-build*
+
+  ImageBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: ch05-step-build
+      ServiceRole: !GetAtt ImageBuildRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      TimeoutInMinutes: 20
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REGISTRY
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+          - Name: IMAGE_URI
+            Value: !Sub ${StepRepo.RepositoryUri}:latest
+      Source:
+        Type: S3
+        Location: !Sub ${BatchBucket}/ch05/source/steps.zip
+
+  # the role the pipeline's jobs run as: read and write the batch bucket,
+  # pull the step image, write logs
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: run-batch-steps
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt BatchBucket.Arn
+                  - !Sub ${BatchBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: !GetAtt StepRepo.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
+              - Effect: Allow
+                Action:
+                  - sagemaker:CreateProcessingJob
+                  - sagemaker:DescribeProcessingJob
+                  - sagemaker:CreateTrainingJob
+                  - sagemaker:DescribeTrainingJob
+                  - sagemaker:AddTags
+                Resource: '*'
+
+              # the standard SageMaker execution baseline the SDK validates:
+              # job metrics, and the ENI actions VPC-attached jobs would need
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                  - ec2:CreateNetworkInterface
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DeleteNetworkInterfacePermission
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: sagemaker.amazonaws.com
+
+  ScheduleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: start-batch-pipeline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sagemaker:StartPipelineExecution
+                Resource: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:pipeline/${PipelineName}
+
+  # the trigger from the preface: EventBridge starts the pipeline on a
+  # schedule; no compute sits waiting between runs
+  Schedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: the monthly batch limit run
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Id: batch-pipeline
+          Arn: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:pipeline/${PipelineName}
+          RoleArn: !GetAtt ScheduleRole.Arn
+          SageMakerPipelineParameters:
+            PipelineParameterList: []
+
+  Alerts:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: ch05-batch-alerts
+
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref Alerts
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+    Condition: HasEmail
+
+  AlertsPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref Alerts
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref Alerts
+
+  # a failed execution publishes to the topic; CloudWatch keeps the logs
+  FailureRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: batch pipeline failures to SNS
+      EventPattern:
+        source:
+          - aws.sagemaker
+        detail-type:
+          - SageMaker Model Building Pipeline Execution Status Change
+        detail:
+          currentPipelineExecutionStatus:
+            - Failed
+          pipelineArn:
+            - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:pipeline/${PipelineName}
+      State: ENABLED
+      Targets:
+        - Id: alerts
+          Arn: !Ref Alerts
+
+  # -----------------------------------------------------------------------------
+  # the warehouse, in its own VPC (the ch-07 self-contained pattern), only when DeployWarehouse=true
+  # -----------------------------------------------------------------------------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+    Condition: HasWarehouse
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+    Condition: HasWarehouse
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+    Condition: HasWarehouse
+
+  SubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs
+    Condition: HasWarehouse
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+    Condition: HasWarehouse
+
+  SubnetARoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  SubnetBRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  SubnetCRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetC
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  JobSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: the batch pipeline SageMaker jobs
+      VpcId: !Ref Vpc
+    Condition: HasWarehouse
+
+  WarehouseSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: portfolio warehouse, 5439 from the pipeline jobs only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          SourceSecurityGroupId: !Ref JobSg
+    Condition: HasWarehouse
+
+  EndpointSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: interface endpoints, https from the jobs
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref JobSg
+    Condition: HasWarehouse
+
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref RouteTable
+    Condition: HasWarehouse
+
+  EcrApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !Ref EndpointSg
+    Condition: HasWarehouse
+
+  EcrDkrEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.dkr
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !Ref EndpointSg
+    Condition: HasWarehouse
+
+  LogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !Ref EndpointSg
+    Condition: HasWarehouse
+
+  # the role Redshift assumes to COPY the seed in from S3
+  CopyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: redshift.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-seed
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt BatchBucket.Arn
+                  - !Sub ${BatchBucket.Arn}/*
+    Condition: HasWarehouse
+
+  WarehouseSecret:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: portfolio warehouse admin credentials
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "analyst"}'
+        GenerateStringKey: password
+        ExcludePunctuation: true
+        PasswordLength: 24
+    Condition: HasWarehouse
+
+  PortfolioNamespace:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RedshiftServerless::Namespace
+    Properties:
+      NamespaceName: portfolio
+      DbName: portfolio
+      AdminUsername: analyst
+      AdminUserPassword: !Sub '{{resolve:secretsmanager:${WarehouseSecret}:SecretString:password}}'
+      IamRoles:
+        - !GetAtt CopyRole.Arn
+      DefaultIamRoleArn: !GetAtt CopyRole.Arn
+    Condition: HasWarehouse
+
+  PortfolioWorkgroup:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RedshiftServerless::Workgroup
+    Properties:
+      WorkgroupName: portfolio-wg
+      NamespaceName: !Ref PortfolioNamespace
+      BaseCapacity: 8
+      PubliclyAccessible: false
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !GetAtt WarehouseSg.GroupId
+    Condition: HasWarehouse
+
+Outputs:
+  BatchBucketName:
+    Value: !Ref BatchBucket
+
+  StepRepoUri:
+    Value: !GetAtt StepRepo.RepositoryUri
+
+  PipelineRoleArn:
+    Description: SAGEMAKER_ROLE_ARN for src/pipeline/pipeline.py
+    Value: !GetAtt PipelineRole.Arn
+
+  WarehouseEndpoint:
+    Description: host for WAREHOUSE_DSN
+    Value: !GetAtt PortfolioWorkgroup.Workgroup.Endpoint.Address
+    Condition: HasWarehouse
+
+  WarehouseSecretArn:
+    Description: admin credentials (username analyst, key password)
+    Value: !Ref WarehouseSecret
+    Condition: HasWarehouse
+
+  WorkgroupName:
+    Description: Redshift Serverless workgroup, for the Data API seed
+    Value: !Ref PortfolioWorkgroup
+    Condition: HasWarehouse
+
+  JobSubnetIds:
+    Description: NETWORK_SUBNETS for src/pipeline/pipeline.py (VpcConfig)
+    Value: !Join
+      - ','
+      - - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+    Condition: HasWarehouse
+
+  JobSecurityGroupId:
+    Description: NETWORK_SG for src/pipeline/pipeline.py (VpcConfig)
+    Value: !GetAtt JobSg.GroupId
+    Condition: HasWarehouse
+
+  CopyRoleArn:
+    Description: IAM role for the Redshift COPY-from-S3 seed
+    Value: !GetAtt CopyRole.Arn
+    Condition: HasWarehouse

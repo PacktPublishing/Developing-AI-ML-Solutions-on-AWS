@@ -1,0 +1,18 @@
+version: 0.2
+
+# Builds the facenet Lambda image natively on amd64 in CodeBuild and pushes it to ECR.
+# ECR_REGISTRY and IMAGE_URI come from the CodeBuild project env.
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  build:
+    commands:
+      - echo "Building $IMAGE_URI"
+      - docker build -t "$IMAGE_URI" .
+  post_build:
+    commands:
+      - echo "Pushing $IMAGE_URI"
+      - docker push "$IMAGE_URI"
+      - echo "Done"

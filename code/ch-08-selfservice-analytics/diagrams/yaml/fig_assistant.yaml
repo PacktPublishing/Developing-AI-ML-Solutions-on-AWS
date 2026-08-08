@@ -1,0 +1,87 @@
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children:
+        - Analyst
+        - AWSCloud
+
+    Analyst:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Analyst\n(browser terminal)"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children:
+        - TaskCol
+        - BackendCol
+
+    TaskCol:
+      Type: AWS::Diagram::VerticalStack
+      Children:
+        - Task
+        - TaskRole
+
+    Task:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "ECS Fargate"
+
+    TaskRole:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Identity and Access Management (IAM)"
+      Title: "IAM task role\nread-only, scoped"
+
+    BackendCol:
+      Type: AWS::Diagram::VerticalStack
+      Children:
+        - Bedrock
+        - Warehouse
+
+    Bedrock:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "Bedrock\nClaude (InvokeModel)"
+
+    Warehouse:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "Redshift Serverless\nData API, read-only"
+
+  Links:
+    - Source: Analyst
+      SourcePosition: E
+      Target: Task
+      TargetPosition: W
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
+    - Source: Task
+      SourcePosition: E
+      Target: Bedrock
+      TargetPosition: W
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
+    - Source: TaskRole
+      SourcePosition: E
+      Target: Warehouse
+      TargetPosition: W
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
+    - Source: TaskRole
+      SourcePosition: N
+      Target: Task
+      TargetPosition: S
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal

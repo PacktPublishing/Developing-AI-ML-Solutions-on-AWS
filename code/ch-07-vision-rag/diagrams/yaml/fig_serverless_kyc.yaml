@@ -1,0 +1,60 @@
+# The serverless Vision RAG service: a containerized facenet Lambda embeds an identity photo
+# and matches it against known-identity vectors in RDS Postgres (pgvector, HNSW).
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Applicant, AWSCloud]
+
+    Applicant:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Applicant"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Ingress, Compute, Store]
+
+    Ingress:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Images, APIGW]
+    Images:
+      Type: AWS::S3::Bucket
+      Title: "S3\nidentity images"
+    APIGW:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon API Gateway"
+      Title: "API Gateway"
+
+    Compute:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Embed, Search]
+    Embed:
+      Type: AWS::Diagram::Resource
+      Preset: "LambdaCoin"
+      Title: "embeddings Lambda\n(facenet)"
+    Search:
+      Type: AWS::Diagram::Resource
+      Preset: "LambdaCoin"
+      Title: "search Lambda\n(facenet)"
+
+    Store:
+      Type: AWS::RDS::DBInstance
+      Title: "RDS Postgres\npgvector (HNSW)"
+
+  Links:
+    - {Source: Images, SourcePosition: E, Target: Embed, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Applicant, SourcePosition: E, Target: APIGW, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: APIGW, SourcePosition: E, Target: Search, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Embed, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Search, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Search, SourcePosition: N, Target: Embed, TargetPosition: S, TargetArrowHead: {Type: Open}, Type: orthogonal}

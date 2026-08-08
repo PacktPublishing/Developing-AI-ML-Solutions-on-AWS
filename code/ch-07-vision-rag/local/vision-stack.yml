@@ -1,0 +1,17 @@
+name: ch07-vision
+
+services:
+  db:
+    # Postgres + pgvector: the local vector store (RDS Postgres on AWS; only KYC_DSN changes).
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=kyc
+      - POSTGRES_PASSWORD=kyc
+      - POSTGRES_DB=kyc
+    ports:
+      - "5507:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kyc -d kyc"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

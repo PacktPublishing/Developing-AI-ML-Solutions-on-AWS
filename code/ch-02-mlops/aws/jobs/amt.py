@@ -1,22 +1,10 @@
 # /// script
-# requires-python = ">=3.10,<3.13"
+# requires-python = ">=3.12,<3.13"
 # dependencies = ["sagemaker>=3,<4", "boto3"]
 # ///
 """SageMaker Automatic Model Tuning for the challenger (SDK v3).
 
-The instance-based hyperparameter search: a HyperparameterTuner drives many
-training jobs of the BYOC image over ranges, reads the objective from each job's
-logs (the "validation_auc:" line the container prints), and returns the best. The
-same serverless MLflow App captures every trial as a run, so the search is both
-an AMT tuning job and an MLflow experiment.
-
-This is the v3 form of the classic tuner: the training image is our own ECR
-image, and MLFLOW_TRACKING_URI is a serverless MLflow App ARN rather than an
-always-on tracking server.
-
-Requires SageMaker training-job quota (0 on a fresh account — see aws/README).
-For a search that runs without that quota, use tuning/amt.py (Syne Tune Bayesian
-search running the same training code locally, tracked in the same MLflow App).
+Instance-based HPO: a HyperparameterTuner drives training jobs of the BYOC image over ranges and returns the best, every trial captured in the serverless MLflow App. Needs training-job quota (0 on a fresh account, see aws/README); for a quota-free search use src/tuning/amt.py.
 
 Env: IMAGE_URI, SAGEMAKER_ROLE_ARN, ARTIFACT_BUCKET, MLFLOW_TRACKING_ARN (required)
 """
@@ -41,13 +29,14 @@ IMAGE_URI = os.environ["IMAGE_URI"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]
 BUCKET = os.environ["ARTIFACT_BUCKET"]
 APP_ARN = os.environ["MLFLOW_TRACKING_ARN"]
+# ml.m5.large; AMT spends training-job instances, so needs "ml.m5.large for training job usage" quota (fresh account = 0). Cold-run 2026-07-23 (tuning job Completed).
 INSTANCE_TYPE = os.environ.get("INSTANCE_TYPE", "ml.m5.large")
 
 # -------------------------------------------------------------------------------
 # The base trainer
 # -------------------------------------------------------------------------------
 # The training image and its static (non-tuned) settings, exactly as a single
-# training job would run — the tuner varies the ranges below on top of this.
+# training job would run; the tuner varies the ranges below on top of this.
 trainer = ModelTrainer(
     training_image=IMAGE_URI,
     role=ROLE,
@@ -75,15 +64,8 @@ tuner = HyperparameterTuner(
         "n_estimators": IntegerParameter(200, 600),
         "learning_rate": ContinuousParameter(0.01, 0.1, scaling_type="Logarithmic"),
     },
-    # How SageMaker learns the objective: it does NOT read a return value or a
-    # file. Each training job's stdout goes to CloudWatch, and SageMaker scrapes it
-    # with these regexes, capturing the last match of the (…) group as the metric.
-    # So the contract is a print statement: the container must emit a line the regex
-    # matches. Here challenger/train.py prints "validation_auc: 0.882431" and this
-    # regex captures 0.882431; objective_metric_name must equal one Name below. If
-    # the container never prints a matching line, the metric is never captured — the
-    # tuner runs but cannot rank trials. (The same metric_definitions on a plain
-    # ModelTrainer is also what surfaces training metrics in the console/CloudWatch.)
+    # SageMaker scrapes each training job's stdout from CloudWatch with these regexes (last match of the group is the metric), so the container must print a matching line.
+    # src/challenger/train.py prints "validation_auc: 0.882431"; objective_metric_name must equal one Name below.
     metric_definitions=[
         {"Name": "validation_auc", "Regex": "validation_auc: ([0-9\\.]+)"}
     ],

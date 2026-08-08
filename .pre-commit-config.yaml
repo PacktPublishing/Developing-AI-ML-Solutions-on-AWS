@@ -57,14 +57,14 @@ repos:
   - repo: local
     hooks:
       - id: ty
-        name: ty (type check, per chapter)
-        # ty uses one config per invocation, so run it inside each chapter, where
-        # that chapter's ty.toml applies. ty is a 0.0.x pre-release, so pin the
-        # version (unpinned auto-updates change behavior) and pass --ignore on the
-        # CLI (0.0.62 stopped honoring unresolved-import from ty.toml). The book's
-        # scripts declare deps per-script, so third-party imports never resolve.
+        name: ty (type check)
+        # one central config in pyproject [tool.ty]; run once from the root over
+        # code/. ty is a 0.0.x pre-release, so pin the version (unpinned
+        # auto-updates change behavior) and pass --ignore on the CLI (0.0.62
+        # stopped honoring unresolved-import from config). The book's scripts
+        # declare deps per-script, so third-party imports never resolve.
         # --exit-zero-on-warning passes on warnings, still fails on real errors.
-        entry: "bash -c 'for d in code/ch-*/; do [ -f \"$d/ty.toml\" ] || continue; ( cd \"$d\" && uvx ty@0.0.62 check --exit-zero-on-warning --ignore unresolved-import ) || exit 1; done'"
+        entry: "bash -c 'uvx ty@0.0.62 check code --exit-zero-on-warning --ignore unresolved-import'"
         language: system
         pass_filenames: false
       - id: mbake
@@ -72,6 +72,14 @@ repos:
         entry: uvx --from mbake mbake format
         language: system
         files: (^|/)Makefile$
+      - id: rain-fmt
+        name: rain fmt (CloudFormation format)
+        # canonical formatting for the chapters' CFN/SAM templates; rain must
+        # be on PATH (brew install rain). Scoped to template files so it never
+        # touches compose files or buildspecs.
+        entry: rain fmt -w
+        language: system
+        files: (^|/)(template|redshift-serverless)\.yaml$
 
   # Validate the commit message against [tool.commitizen] in pyproject.toml:
   # "<scope> (<+|~|->): <subject>", scope one of ch-NN, book, repo, tools.

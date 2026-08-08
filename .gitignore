@@ -2,6 +2,8 @@
 .venv/
 .tmp/
 .vscode/
+.zed/
+.env
 .claude/settings.local.json
 .ruff_cache/
 __pycache__/
@@ -16,7 +18,7 @@ code/ch-01-data-engineering/oblako-bundle.pem
 deliveries/
 
 # generated at build time from the chapter root (see aws/assistant-api/Makefile)
-code/ch-03-generative-ai/aws/assistant-api/src/corpus_data.py
+code/ch-03-generative-ai/aws/src/corpus_data.py
 
 # Run captures — kept locally as evidence, not shipped in the repo
 code/**/runs/
@@ -24,3 +26,10 @@ code/**/runs/
 # not for the public repo
 tools/
 code/ch-03-generative-ai/data/guardrail.json
+
+# CatBoost training scratch, dropped wherever a trainer runs
+catboost_info/
+
+# ch-05 generated outputs — `make seed` recreates them
+code/ch-05-batch-limits/data/portfolio.csv
+code/ch-05-batch-limits/data/feature_spec.json

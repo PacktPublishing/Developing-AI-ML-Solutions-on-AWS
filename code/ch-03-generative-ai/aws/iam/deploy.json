@@ -108,6 +108,8 @@
         "lambda:CreateFunctionUrlConfig",
         "lambda:DeleteFunctionUrlConfig",
         "lambda:GetFunctionUrlConfig",
+        "lambda:InvokeFunction",
+        "lambda:InvokeFunctionUrl",
         "lambda:AddPermission",
         "lambda:RemovePermission",
         "lambda:TagResource",
@@ -133,6 +135,22 @@
         "iam:PassRole"
       ],
       "Resource": "*"
-    }
+    },
+    {
+      "Sid": "BedrockInvoke",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
+        "arn:aws:bedrock:*::foundation-model/qwen.qwen3-next-80b-a3b"
+      ]
+    },
+    {
+      "Sid": "BedrockGuardrail",
+      "Effect": "Allow",
+      "Action": ["bedrock:CreateGuardrail", "bedrock:CreateGuardrailVersion", "bedrock:GetGuardrail", "bedrock:DeleteGuardrail"],
+      "Resource": "*"
+    },
+    {"Sid": "BedrockApplyGuardrail", "Effect": "Allow", "Action": ["bedrock:ApplyGuardrail"], "Resource": "arn:aws:bedrock:*:*:guardrail/*"}
   ]
 }

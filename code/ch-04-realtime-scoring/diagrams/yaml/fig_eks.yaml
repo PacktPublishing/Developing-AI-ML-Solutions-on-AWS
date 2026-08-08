@@ -1,0 +1,46 @@
+# The EKS deploy: eksctl creates the Fargate-only cluster, manifests apply, the image comes from ECR, and a test request goes through a port-forward.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Developer, AWSCloud]
+
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Developer"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Cluster, Ecr]
+
+    Cluster:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Elastic Kubernetes Service (Amazon EKS)"
+      Direction: horizontal
+      Title: "EKS ch04-decision"
+      Children: [Pod]
+
+    Pod:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "decision-service"
+
+    Ecr:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Elastic Container Registry (Amazon ECR)"
+      Title: "ch04-decision:latest"
+
+  Links:
+    - {Source: Developer, SourcePosition: NNE, Target: Cluster, TargetPosition: NW, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Developer, SourcePosition: SSE, Target: Pod, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Ecr, SourcePosition: W, Target: Pod, TargetPosition: E, TargetArrowHead: {Type: Open}, Type: orthogonal}

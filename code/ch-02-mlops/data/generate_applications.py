@@ -1,21 +1,10 @@
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.12"
 # dependencies = ["numpy", "pandas"]
 # ///
 """Synthesize the chapter's credit-application dataset and its business spec.
 
-The running example is a mid-sized bank moving its scoring off-prem onto
-SageMaker. A data scientist wants to test a built-in XGBoost model against the
-bank's established Weight-of-Evidence (WOE) logistic-regression scorecard. Both
-models must obey the same business rule: risk moves monotonically with certain
-features (a higher bureau score may never raise predicted default risk, a higher
-debt-to-income may never lower it, and so on). That rule is regulatory, not
-cosmetic, so it is captured once here, in feature_spec.json, and read by both
-trainers — the scorecard gets monotonicity for free from monotone WOE binning,
-the challenger has it imposed through XGBoost monotone_constraints.
-
-The target is generated from a monotone logit so the signal genuinely respects
-those directions; that keeps the comparison honest rather than accidental.
+Both models (the WOE logistic-regression scorecard and the XGBoost challenger) must obey the same monotonic business rule, captured once in feature_spec.json; the target is drawn from a monotone logit so those directions genuinely hold.
 
 Usage:
   uv run data/generate_applications.py --rows 20000 --seed 7
@@ -33,9 +22,8 @@ import pandas as pd
 # -------------------------------------------------------------------------------
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# The business spec. monotone: sign of the allowed relationship between the
-# feature and predicted probability of default (+1 up, -1 down, 0 unconstrained),
-# in scikit-learn / XGBoost convention. Categoricals carry no direction.
+# The business spec. monotone: sign of the allowed feature-vs-default-probability
+# relationship (+1 up, -1 down, 0 unconstrained), XGBoost convention. Categoricals carry no direction.
 NUMERIC = {
     "annual_income": -1,
     "debt_to_income": +1,

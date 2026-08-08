@@ -1,8 +1,6 @@
 """Tests for the local Syne Tune search: the trial contract, parity, and a mini run.
 
-Everything runs offline — trials are plain subprocesses, so no Docker and no
-AWS credentials are involved. The mini search exercises the same LocalBackend +
-TPE combination tuning/amt.py uses, just with a tiny dataset and two trials.
+Everything runs offline (trials are plain subprocesses, no Docker, no AWS credentials). The mini search exercises the same LocalBackend + TPE combination tuning/amt.py uses, with a tiny dataset and two trials.
 """
 
 import json
@@ -14,10 +12,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-TUNING = Path(__file__).resolve().parent.parent / "tuning"
+ROOT = Path(__file__).resolve().parent.parent
+TUNING = ROOT / "src" / "tuning"
 TRIAL = TUNING / "trial.py"
 LOCAL_AMT = TUNING / "amt.py"
-CLOUD_AMT = TUNING.parent / "aws" / "jobs" / "amt.py"
+CLOUD_AMT = ROOT / "aws" / "jobs" / "amt.py"
 
 
 # -------------------------------------------------------------------------------

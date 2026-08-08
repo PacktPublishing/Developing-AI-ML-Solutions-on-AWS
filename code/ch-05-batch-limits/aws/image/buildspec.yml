@@ -1,0 +1,12 @@
+version: 0.2
+
+# Builds the decision-service image in the cloud (amd64, docker manifest)
+# and pushes it to ECR. The laptop never builds or loads an image.
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+      - docker buildx create --use
+  build:
+    commands:
+      - docker buildx build --platform linux/amd64 --provenance=false --output "type=image,oci-mediatypes=false,name=$IMAGE_URI,push=true" .

@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""SageMaker training entrypoint: history channel in, model.tar.gz out."""
+
+import json
+import os
+
+import pandas as pd
+from catboost import CatBoostClassifier
+
+TRAIN = "/opt/ml/input/data/train"
+MODEL = "/opt/ml/model"
+HYPER = "/opt/ml/input/config/hyperparameters.json"
+
+
+def main() -> None:
+    """Fit the behavior model on the labeled history channel."""
+    params = {}
+    if os.path.exists(HYPER):
+        with open(HYPER) as f:
+            params = json.load(f)
+    features = params.get("features", os.environ.get("FEATURES", "")).split(",")
+
+    history = pd.read_csv(f"{TRAIN}/history.csv")
+    model = CatBoostClassifier(
+        iterations=int(params.get("iterations", "300")), random_seed=5, verbose=0
+    )
+    model.fit(history[features], history["default_12m"].astype(int))
+    os.makedirs(MODEL, exist_ok=True)
+    model.save_model(f"{MODEL}/model.cbm")
+    print(f"trained on {len(history)} labeled customers")
+
+
+if __name__ == "__main__":
+    main()

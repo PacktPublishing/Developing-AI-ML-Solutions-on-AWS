@@ -1,21 +1,12 @@
-"""Tests for the local Feature Store shim: both API planes and the flush logic.
-
-Needs DynamoDB Local on :8000: uses the running one from the chapter stack,
-or starts its own container with docker-py and stops it afterwards. Groups
-are created online-only so no Iceberg catalog is needed; the offline
-batching is tested against a stub.
-"""
+"""Tests for the local Feature Store shim: both API planes and the flush logic."""
 
 import atexit
 import socket
-import sys
 import time
 import uuid
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sagemaker-local"))
+from starlette.testclient import TestClient
 
 
 # -------------------------------------------------------------------------------
@@ -55,8 +46,6 @@ def _start_dynamodb() -> None:
 
 if not _dynamodb_up():
     _start_dynamodb()
-
-from starlette.testclient import TestClient  # noqa: E402
 
 import app as shim  # noqa: E402
 

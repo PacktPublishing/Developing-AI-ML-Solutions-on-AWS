@@ -1,0 +1,72 @@
+#!/bin/bash
+# Receives the warehouse username as $1 from ttyd's ?arg= (defaults to the
+# shared analyst service account, so a missing arg never breaks a session).
+export REDSHIFT_USER_NAME="${1:-bi_analyst}"
+
+# The model seam, three modes:
+#   default            standard Claude auth (subscription via /login, or
+#                      ANTHROPIC_API_KEY) — the fast local mode
+#   CLAUDE_CODE_USE_BEDROCK=1   Bedrock with the task role's credentials
+#                      (set by the Fargate task definition and local-bedrock)
+#   BEDROCK_LOCAL=1    fully offline: Ollama's Anthropic-compatible API,
+#                      chapter 3's flag; expect laptop-model speed and limits
+if [ "${BEDROCK_LOCAL:-}" = "1" ]; then
+  # llmproxy caps the model's hidden reasoning; without it a question costs
+  # minutes of thinking at laptop decode speed
+  export ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-http://llmproxy:8091}"
+  export ANTHROPIC_AUTH_TOKEN="${ANTHROPIC_AUTH_TOKEN:-local}"
+  CLAUDE_MODEL="${LOCAL_MODEL:-gpt-oss:20b}"
+  export ANTHROPIC_SMALL_FAST_MODEL="${SMALL_MODEL:-qwen3:0.6b}"
+  export ANTHROPIC_DEFAULT_HAIKU_MODEL="${SMALL_MODEL:-qwen3:0.6b}"
+  unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY
+  # Dummy signing credentials for the local shim; without these boto3 walks
+  # the container-credentials chain into the sidecar and dies retrying.
+  export AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local
+  unset AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
+  # The analyst needs Bash and Read only; every removed schema is prompt the
+  # local model does not prefill. Measured: retrieval at 58s on a 32 GB Mac.
+  EXTRA_ARGS="--disallowedTools Task,WebFetch,WebSearch,NotebookEdit,TodoWrite,Write,Edit,ExitPlanMode,KillShell,BashOutput,CronCreate,CronDelete,CronList,DesignSync,EnterWorktree,ExitWorktree,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskUpdate,Workflow"
+fi
+export AWS_REGION="${AWS_REGION:-us-east-1}"
+if [ "${CLAUDE_CODE_USE_BEDROCK:-}" = "1" ]; then
+  CLAUDE_MODEL="${CLAUDE_MODEL:-global.anthropic.claude-haiku-4-5-20251001-v1:0}"
+fi
+# Utility model calls must also resolve to a region-valid profile.
+export ANTHROPIC_SMALL_FAST_MODEL="${ANTHROPIC_SMALL_FAST_MODEL:-$CLAUDE_MODEL}"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="${ANTHROPIC_DEFAULT_HAIKU_MODEL:-$CLAUDE_MODEL}"
+
+# Per-user Claude state: chat history survives disconnects within the
+# container's lifetime; --continue resumes the latest conversation. A second
+# URL arg of "fresh" (?arg=<user>&arg=fresh) wipes the state and starts a
+# clean session instead.
+export CLAUDE_CONFIG_DIR="/home/analyst/state/${REDSHIFT_USER_NAME}"
+if [ "${2:-}" = "fresh" ]; then
+  rm -rf "$CLAUDE_CONFIG_DIR"
+fi
+mkdir -p "$CLAUDE_CONFIG_DIR"
+# Claude Code's own colors, tuned for the light terminal.
+claude config set -g theme light 2>/dev/null || true
+# Kiosk deployment: pre-accept first-run onboarding so an analyst lands straight
+# at the prompt, not a welcome / theme / trust / bypass-mode gauntlet (the bypass
+# screen even defaults to "No, exit"). Merged into the per-user config.
+python3 - "$CLAUDE_CONFIG_DIR/.claude.json" <<'PY' 2>/dev/null || true
+import json, os, sys
+p = sys.argv[1]
+d = json.load(open(p)) if os.path.exists(p) else {}
+d["hasCompletedOnboarding"] = True
+d["bypassPermissionsModeAccepted"] = True
+proj = d.setdefault("projects", {}).setdefault("/app", {})
+proj["hasTrustDialogAccepted"] = True
+proj["hasCompletedProjectOnboarding"] = True
+json.dump(d, open(p, "w"))
+PY
+RESUME_ARGS=""
+if [ -d "$CLAUDE_CONFIG_DIR/projects" ] && [ -n "$(ls -A "$CLAUDE_CONFIG_DIR/projects" 2>/dev/null)" ]; then
+  RESUME_ARGS="--continue"
+fi
+
+cd /app
+if [ -n "${CLAUDE_MODEL:-}" ]; then
+  exec claude $RESUME_ARGS ${EXTRA_ARGS:-} --model "$CLAUDE_MODEL" --dangerously-skip-permissions
+fi
+exec claude $RESUME_ARGS ${EXTRA_ARGS:-} --dangerously-skip-permissions

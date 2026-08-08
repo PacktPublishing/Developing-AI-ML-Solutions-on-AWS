@@ -1,0 +1,300 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  Serverless Vision RAG for KYC on AWS: two container Lambdas (facenet embeddings +
+  face search) behind API Gateway, with RDS for PostgreSQL + pgvector as the vector
+  store. The embedder and retrieval code are the same as the local chapter; only
+  the Postgres host and the image source move to AWS.
+  Self-contained: the embeddings Lambda creates the pgvector extension, the per-type
+  tables, and the HNSW index (index-first) on its first call, so a fresh deploy
+  needs no manual SQL and every async write lands on the existing index.
+  RDS db.t3.micro is free-tier eligible. Aurora is the scale-up, but Aurora on a
+  free-plan account needs the express configuration, which CloudFormation does not
+  yet expose, so a plain RDS instance keeps this runnable with no account upgrade.
+
+Parameters:
+  DBName:
+    Type: String
+    Default: kyc
+
+  DBUsername:
+    Type: String
+    Default: kyc
+
+  ImageUri:
+    Description: ECR image URI built and pushed by CodeBuild (see aws/image/).
+    Type: String
+
+Transform: AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 2048
+    VpcConfig:
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+      SecurityGroupIds:
+        - !Ref LambdaSg
+
+Resources:
+
+  # A small VPC so the Lambdas can reach a private database: S3 via a gateway endpoint,
+  # Secrets Manager via an interface endpoint, so no NAT gateway (weights baked into the image).
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+
+  SubnetARoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+
+  SubnetBRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+
+  LambdaSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: vision-rag lambdas
+      VpcId: !Ref Vpc
+
+  DbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: postgres from the lambdas only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref LambdaSg
+
+  EndpointSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: interface endpoints, https from the lambdas
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref LambdaSg
+
+  # S3 gateway endpoint (free) so the lambdas read identity images privately.
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref RouteTable
+
+  SecretsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+      SecurityGroupIds:
+        - !Ref EndpointSg
+
+  # Identity images. Disposable chapter bucket. A production store would Retain.
+  ImagesBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+
+      # Explicit name so the triggered Lambda can reference it as a string
+      # (not !Ref), which breaks the S3-event circular dependency.
+      BucketName: !Sub ${AWS::StackName}-images-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Both stateful resources are deliberately disposable: a chapter stack over a
+  # synthetic face set, so teardown leaves nothing to pay for.
+  DbSecret:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: database credentials for the vision-rag store
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${DBUsername}"}'
+        GenerateStringKey: password
+        ExcludePunctuation: true
+        PasswordLength: 24
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: vision-rag database subnets
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+
+  Database:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: "20"
+      StorageType: gp3
+      DBName: !Ref DBName
+      MasterUsername: !Sub '{{resolve:secretsmanager:${DbSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DbSecret}:SecretString:password}}'
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DbSg
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 0
+      DeletionProtection: false
+
+  # One container image, two handlers. facenet weights are baked in at build time
+  # (from the public facenet-pytorch release), so cold starts need no internet.
+  EmbeddingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - embeddings_handler.lambda_handler
+      Environment:
+        Variables:
+          PGHOST: !GetAtt Database.Endpoint.Address
+          PGDATABASE: !Ref DBName
+          DB_SECRET_ARN: !Ref DbSecret
+          IMAGES_S3_BUCKET: !Sub ${AWS::StackName}-images-${AWS::AccountId}
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub ${AWS::StackName}-images-${AWS::AccountId}
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref DbSecret
+      Events:
+
+        # only enrolled/ uploads enrol; probes/ objects are matched, not stored
+        Enrolled:
+          Type: S3
+          Properties:
+            Bucket: !Ref ImagesBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: enrolled/
+
+  SearchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - search_handler.lambda_handler
+      Environment:
+        Variables:
+          PGHOST: !GetAtt Database.Endpoint.Address
+          PGDATABASE: !Ref DBName
+          DB_SECRET_ARN: !Ref DbSecret
+          IMAGES_S3_BUCKET: !Sub ${AWS::StackName}-images-${AWS::AccountId}
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub ${AWS::StackName}-images-${AWS::AccountId}
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref DbSecret
+      Events:
+        Match:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /match
+            Method: POST
+
+  # 1:1 compare of two images (no DB). Optional Captum explanation writes a
+  # heatmap grid to S3, so this function needs S3 write as well as read.
+  CompareFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - compare_handler.lambda_handler
+      Environment:
+        Variables:
+          IMAGES_S3_BUCKET: !Sub ${AWS::StackName}-images-${AWS::AccountId}
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Sub ${AWS::StackName}-images-${AWS::AccountId}
+      Events:
+        Compare:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /compare
+            Method: POST
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+
+Outputs:
+  ApiUrl:
+    Description: 'POST a probe key to /match, e.g. {"key": "probes/applicant.jpg"}'
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod/match
+
+  ImagesBucket:
+    Description: upload identity images here (key = {id}/{ts}/{type}/{file})
+    Value: !Ref ImagesBucket
+
+  DatabaseEndpoint:
+    Value: !GetAtt Database.Endpoint.Address

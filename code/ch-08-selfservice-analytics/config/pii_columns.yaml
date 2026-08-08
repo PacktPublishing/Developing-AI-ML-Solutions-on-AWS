@@ -1,0 +1,10 @@
+# Single source of truth for PII columns; read by masking.py and the warehouse-side masking DDL so the two enforcement layers cannot drift.
+#
+# Keyed schema.table.column: strategy. Strategies:
+#   hash           deterministic token; joins and COUNT(DISTINCT) survive
+#   partial_last4  keep last 4 characters
+#   redact         full '***'
+
+analytics.applicants.email: hash
+analytics.applicants.phone: partial_last4
+analytics.applicants.full_name: redact

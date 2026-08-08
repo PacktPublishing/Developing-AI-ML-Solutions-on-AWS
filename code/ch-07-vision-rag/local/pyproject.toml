@@ -1,0 +1,14 @@
+[project]
+name = "ch07-vision-rag-local"
+version = "0.1.0"
+description = "Local inference + demos for the Serverless Vision RAG KYC chapter"
+readme = "README.md"
+requires-python = ">=3.10, <3.13"
+dependencies = [
+    "facenet-pytorch>=2.5.3",
+    "numpy<2",
+    "pillow>=10.0.0",
+    "captum>=0.7.0",
+    "kaggle>=1.6.0",
+    "psycopg[binary]>=3.1",
+]

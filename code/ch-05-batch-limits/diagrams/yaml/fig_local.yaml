@@ -1,0 +1,40 @@
+# The batch run on your laptop: PIPELINE_MODE=local runs the steps in the ch05-step container against a redshift-local warehouse and S3Proxy. Same code; only the endpoints change.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [Local]
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local (Docker Compose)"
+      Children: [Steps, Store]
+
+    Steps:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "batch steps\nPIPELINE_MODE=local"
+
+    Store:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Warehouse, S3Proxy]
+    Warehouse:
+      Type: AWS::Diagram::Resource
+      Preset: "RedshiftLocal"
+      Title: "redshift-local :5433\n(Redshift)"
+    S3Proxy:
+      Type: AWS::S3::Bucket
+      Title: "S3Proxy :9000\n(S3)"
+
+  Links:
+    - {Source: Steps, SourcePosition: E, Target: Warehouse, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Steps, SourcePosition: E, Target: S3Proxy, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

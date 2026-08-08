@@ -1,0 +1,383 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  The decision gateway on AWS. Always created: the ECR repo the gateway image is built into (by this stack's CodeBuild project; the laptop never builds an image), and the DynamoDB decision log. With Compute=ecs (the default) the stack also builds the ECS Fargate runtime: a VPC, an Application Load Balancer whose /health check gates traffic, and the service at desired count 0. With Compute=eks the runtime is an eksctl cluster instead, so the stack builds none of that; the gateway pod invokes the same endpoints and writes the same table.
+  Every stateful resource is deliberately disposable: `make teardown` leaves nothing behind.
+
+Parameters:
+  Compute:
+    Description: where the gateway runs; ecs builds the Fargate runtime, eks builds only the shared repo, log, and image build.
+    Type: String
+    AllowedValues:
+      - ecs
+      - eks
+    Default: ecs
+
+Conditions:
+  IsEcs: !Equals
+    - !Ref Compute
+    - ecs
+
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+
+  # -----------------------------------------------------------------------------
+  # shared: the gateway image repo, the decision log, and the cloud image build
+  # -----------------------------------------------------------------------------
+  DecisionLog:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: decision_log
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: application_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: application_id
+          KeyType: HASH
+
+  ServiceRepo:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch04-decision
+      EmptyOnDelete: true
+
+  StagingBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-build-sources
+            Status: Enabled
+            ExpirationInDays: 1
+
+  ImageBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build-decision-image
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub ${StagingBucket.Arn}/ch04/source/*
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !GetAtt ServiceRepo.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/ch04-decision-build*
+
+  ImageBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: ch04-decision-build
+      ServiceRole: !GetAtt ImageBuildRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      TimeoutInMinutes: 20
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REGISTRY
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+          - Name: IMAGE_URI
+            Value: !Sub ${ServiceRepo.RepositoryUri}:latest
+      Source:
+        Type: S3
+        Location: !Sub ${StagingBucket}/ch04/source/app.zip
+
+  # -----------------------------------------------------------------------------
+  # ecs runtime (Compute=ecs only): VPC, ALB, and the Fargate service
+  # -----------------------------------------------------------------------------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+    Condition: IsEcs
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: IsEcs
+
+  VpcGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+    Condition: IsEcs
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+    Condition: IsEcs
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+    Condition: IsEcs
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+    Condition: IsEcs
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGateway
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    Condition: IsEcs
+
+  SubnetARoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+    Condition: IsEcs
+
+  SubnetBRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+    Condition: IsEcs
+
+  AlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: decision service alb, http from anywhere
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+    Condition: IsEcs
+
+  ServiceSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: decision service tasks, traffic from the alb only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !Ref AlbSg
+    Condition: IsEcs
+
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref AlbSg
+      Subnets:
+        - !Ref SubnetA
+        - !Ref SubnetB
+    Condition: IsEcs
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref Vpc
+      Port: 8000
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 15
+      HealthyThresholdCount: 2
+    Condition: IsEcs
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+    Condition: IsEcs
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: ch04-decision
+    Condition: IsEcs
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+
+        # the managed policy can create streams but not groups; the task
+        # definition asks awslogs to create the group on first start
+        - PolicyName: create-log-group
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/ch04-decision*
+    Condition: IsEcs
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: score-and-log
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+
+              # invoke the model endpoints the gateway ensembles
+              - Effect: Allow
+                Action:
+                  - sagemaker:InvokeEndpoint
+                Resource:
+                  - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/ch04-scorecard
+                  - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/ch04-challenger
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource: !GetAtt DecisionLog.Arn
+    Condition: IsEcs
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: ch04-decision
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      Cpu: "256"
+      Memory: "512"
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: service
+          Image: !Sub ${ServiceRepo.RepositoryUri}:latest
+          PortMappings:
+            - ContainerPort: 8000
+          Environment:
+            - Name: DECISIONS_TABLE
+              Value: !Ref DecisionLog
+
+            # the model endpoints to ensemble (name=SageMaker endpoint name)
+            - Name: ENDPOINTS
+              Value: scorecard=ch04-scorecard,challenger=ch04-challenger
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/ch04-decision
+              awslogs-create-group: "true"
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: service
+    Condition: IsEcs
+
+  # desired count 0: the stack deploys without running (or billing) a task;
+  # `make scale-up` starts one once the image is pushed
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: Listener
+    Properties:
+      ServiceName: decision-service
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      DesiredCount: 0
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref SubnetA
+            - !Ref SubnetB
+          SecurityGroups:
+            - !Ref ServiceSg
+      LoadBalancers:
+        - ContainerName: service
+          ContainerPort: 8000
+          TargetGroupArn: !Ref TargetGroup
+    Condition: IsEcs
+
+Outputs:
+  ServiceUrl:
+    Description: the decision endpoint (ecs)
+    Value: !Sub http://${Alb.DNSName}
+    Condition: IsEcs
+
+  ServiceRepoUri:
+    Value: !GetAtt ServiceRepo.RepositoryUri
+
+  StagingBucketName:
+    Value: !Ref StagingBucket

@@ -1,0 +1,212 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudFormation",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:*:stack/realtime-scoring-ch04/*",
+        "arn:aws:cloudformation:us-east-1:*:stack/aws-sam-cli-managed-*/*"
+      ]
+    },
+    {
+      "Sid": "CloudFormationRead",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:Describe*",
+        "cloudformation:List*",
+        "cloudformation:GetTemplateSummary"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SamTransform",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateChangeSet",
+      "Resource": "arn:aws:cloudformation:us-east-1:aws:transform/*"
+    },
+    {
+      "Sid": "ManageChapterRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PassRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/ch04-*",
+        "arn:aws:iam::*:role/realtime-scoring-ch04-*"
+      ]
+    },
+    {
+      "Sid": "Network",
+      "Effect": "Allow",
+      "Action": "ec2:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "LoadBalancer",
+      "Effect": "Allow",
+      "Action": "elasticloadbalancing:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Ecs",
+      "Effect": "Allow",
+      "Action": "ecs:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DynamoDb",
+      "Effect": "Allow",
+      "Action": "dynamodb:*",
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:*:table/ch04-*",
+        "arn:aws:dynamodb:us-east-1:*:table/decision_log"
+      ]
+    },
+    {
+      "Sid": "EcrRepository",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:us-east-1:*:repository/ch04-*"
+    },
+    {
+      "Sid": "SageMakerModels",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CreateModel",
+        "sagemaker:DeleteModel",
+        "sagemaker:DescribeModel",
+        "sagemaker:CreateEndpointConfig",
+        "sagemaker:DeleteEndpointConfig",
+        "sagemaker:DescribeEndpointConfig",
+        "sagemaker:CreateEndpoint",
+        "sagemaker:DeleteEndpoint",
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:UpdateEndpoint",
+        "sagemaker:AddTags",
+        "sagemaker:ListTags"
+      ],
+      "Resource": [
+        "arn:aws:sagemaker:us-east-1:*:model/ch04-*",
+        "arn:aws:sagemaker:us-east-1:*:endpoint-config/ch04-*",
+        "arn:aws:sagemaker:us-east-1:*:endpoint/ch04-*"
+      ]
+    },
+    {
+      "Sid": "SageMakerInvoke",
+      "Effect": "Allow",
+      "Action": "sagemaker:InvokeEndpoint",
+      "Resource": "arn:aws:sagemaker:us-east-1:*:endpoint/ch04-*"
+    },
+    {
+      "Sid": "PassSageMakerExecutionRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/ch04-sagemaker",
+      "Condition": {
+        "StringEquals": {"iam:PassedToService": "sagemaker.amazonaws.com"}
+      }
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "CodeBuild",
+      "Effect": "Allow",
+      "Action": [
+        "codebuild:CreateProject",
+        "codebuild:UpdateProject",
+        "codebuild:DeleteProject",
+        "codebuild:StartBuild",
+        "codebuild:BatchGetBuilds",
+        "codebuild:BatchGetProjects"
+      ],
+      "Resource": "arn:aws:codebuild:us-east-1:*:project/ch04-*"
+    },
+    {
+      "Sid": "StagingBucket",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::ch04-*",
+        "arn:aws:s3:::ch04-*/*",
+        "arn:aws:s3:::realtime-scoring-ch04-*",
+        "arn:aws:s3:::realtime-scoring-ch04-*/*",
+        "arn:aws:s3:::aws-sam-cli-managed-*",
+        "arn:aws:s3:::aws-sam-cli-managed-*/*"
+      ]
+    },
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch04*"
+    },
+    {
+      "Sid": "Eks",
+      "Effect": "Allow",
+      "Action": "eks:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "EksServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/*"
+    },
+    {
+      "Sid": "EksReadRoles",
+      "Effect": "Allow",
+      "Action": "iam:GetRole",
+      "Resource": "*"
+    },
+    {
+      "Sid": "EksCtlStacks",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/eksctl-ch04-*/*"
+    },
+    {
+      "Sid": "EksCtlRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PassRole",
+        "iam:CreateOpenIDConnectProvider",
+        "iam:DeleteOpenIDConnectProvider",
+        "iam:GetOpenIDConnectProvider",
+        "iam:TagOpenIDConnectProvider"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/eksctl-ch04-*",
+        "arn:aws:iam::*:oidc-provider/*"
+      ]
+    }
+  ]
+}

@@ -1,48 +1,61 @@
-.PHONY: airflow-deploy airflow-delete lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
+.PHONY: iam airflow-deploy airflow-password airflow-delete lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
 
-S3TABLES_ARN ?= arn:aws:s3tables:us-east-1:$(ACCOUNT):bucket/book-lake-ch01
+S3TABLES_ARN ?= arn:aws:s3tables:us-east-1:$(ACCOUNT):bucket/ch01-lake
 
-# Cloud verification: the SAME scripts as the local targets, run against
-# real AWS through the default credential chain. Bucket names get the
-# account id suffix because the S3 namespace is global.
+# Cloud verification: the same scripts as the local targets, run against real AWS; bucket names get the account-id suffix because the S3 namespace is global.
 ACCOUNT := $(shell aws sts get-caller-identity --query Account --output text)
 LAKE_BUCKET ?= credit-lake-$(ACCOUNT)
 RAW_BUCKET ?= bureau-raw-$(ACCOUNT)
 RUN_STAMP := $(shell date +%Y-%m-%d)
 
-# Airflow on EC2 (Postgres metadata + LocalExecutor, nightly pg_dump to S3).
-# AllowedCidr is set to your current public IP so only you reach the UI on :8080;
-# stack name, region, and capabilities come from airflow-ec2/samconfig.toml.
+# Airflow on EC2 (Postgres metadata + LocalExecutor, nightly pg_dump to S3); AllowedCidr opens the :8080 UI to your public IP only.
+# WAREHOUSE=local (free tier: redshift-local on the instance) or serverless (also provisions Redshift Serverless; pass SUBNETS across >= 3 AZs).
+WAREHOUSE ?= local
+SUBNETS ?=
 airflow-deploy:
-	cd airflow-ec2 && sam deploy --parameter-overrides AllowedCidr=$$(curl -4 -s ifconfig.me)/32 --no-fail-on-empty-changeset
+	sam deploy --no-fail-on-empty-changeset \
+		--parameter-overrides AllowedCidr=$$(curl -4 -s ifconfig.me)/32 \
+		WarehouseMode=$(WAREHOUSE) $(if $(SUBNETS),WorkgroupSubnetIds=$(SUBNETS),)
+
+# Airflow 3 standalone generates the admin password on the instance; fetch it
+# over SSM (no SSH, no extra open port). Log in to the UI as user "admin".
+airflow-password:
+	@IID=$$(aws ec2 describe-instances --filters Name=tag:Name,Values=ch01-airflow \
+	  Name=instance-state-name,Values=running \
+	  --query 'Reservations[0].Instances[0].InstanceId' --output text); \
+	  CID=$$(aws ssm send-command --instance-ids $$IID --document-name AWS-RunShellScript \
+	  --parameters commands='docker exec af-airflow-1 cat /opt/airflow/simple_auth_manager_passwords.json.generated' \
+	  --query Command.CommandId --output text); \
+	  aws ssm wait command-executed --command-id $$CID --instance-id $$IID 2>/dev/null || true; \
+	  aws ssm get-command-invocation --command-id $$CID --instance-id $$IID --query StandardOutputContent --output text
 
 # S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
 # backup bucket (read from the stack outputs) before sam delete tears it down.
 airflow-delete:
-	@BUCKET=$$(aws cloudformation describe-stacks --stack-name book-airflow \
+	@BUCKET=$$(aws cloudformation describe-stacks --stack-name ch01-airflow \
 	  --query "Stacks[0].Outputs[?OutputKey=='BackupBucket'].OutputValue" \
 	  --output text 2>/dev/null); \
 	if [ -n "$$BUCKET" ] && [ "$$BUCKET" != "None" ]; then \
 		echo "emptying s3://$$BUCKET"; aws s3 rm "s3://$$BUCKET" --recursive; \
 	fi
-	cd airflow-ec2 && sam delete --no-prompts
+	sam delete --no-prompts
 
 check-account:
 	@echo "account: $(ACCOUNT)  lake bucket: $(LAKE_BUCKET)"
 
 lake-objects:
 	cd .. && env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		LAKE_BUCKET=$(LAKE_BUCKET) uv run lake-basics/s3_objects.py \
+		LAKE_BUCKET=$(LAKE_BUCKET) uv run src/lake-basics/s3_objects.py \
 		| tee /tmp/ch01-lake-objects-$(RUN_STAMP).txt
 
 lake-parquet:
 	cd .. && env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		LAKE_BUCKET=$(LAKE_BUCKET) uv run lake-basics/parquet_lake.py \
+		LAKE_BUCKET=$(LAKE_BUCKET) uv run src/lake-basics/parquet_lake.py \
 		| tee /tmp/ch01-lake-parquet-$(RUN_STAMP).txt
 
 lake-table:
 	cd .. && env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		S3TABLES_ARN=$(S3TABLES_ARN) uv run lake-basics/iceberg_applications.py \
+		S3TABLES_ARN=$(S3TABLES_ARN) uv run src/lake-basics/iceberg_applications.py \
 		| tee /tmp/ch01-lake-table-$(RUN_STAMP).txt
 
 glue-run:
@@ -53,7 +66,7 @@ glue-run:
 
 feature-group:
 	cd .. && env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		uv run feature-store/extra/feature_group_demo.py --applicant 10046 \
+		uv run src/feature-store/extra/feature_group_demo.py --applicant 10046 \
 		| tee /tmp/ch01-feature-group-$(RUN_STAMP).txt
 
 clean-feature-group:
@@ -62,3 +75,16 @@ clean-feature-group:
 clean-lake:
 	env -u AWS_ENDPOINT_URL aws s3 rm s3://$(LAKE_BUCKET) --recursive
 	env -u AWS_ENDPOINT_URL aws s3 rb s3://$(LAKE_BUCKET)
+
+# -------------------------------------------------------------------------------
+# iam: provision THIS chapter's deploy identity, when you start the chapter
+# Creates ch01-user from iam/deploy.json (least-privilege) and trusts you to assume it; then use AWS_PROFILE=ch01 for cloud targets.
+# -------------------------------------------------------------------------------
+PRINCIPAL ?= $(shell aws sts get-caller-identity --query Arn --output text)
+TRUST = {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$(PRINCIPAL)"},"Action":"sts:AssumeRole"}]}
+iam:
+	@aws iam create-role --role-name ch01-user --description "Deploy/operate ch-01" \
+		--assume-role-policy-document '$(TRUST)' 2>/dev/null \
+		|| aws iam update-assume-role-policy --role-name ch01-user --policy-document '$(TRUST)'
+	aws iam put-role-policy --role-name ch01-user --policy-name deploy --policy-document file://iam/deploy.json
+	@echo "ch01-user ready"

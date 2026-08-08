@@ -1,0 +1,20 @@
+# local dev environments and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# model weights + torch cache (auto-downloaded, never committed)
+weights/
+*.pth
+*.onnx
+.torch/
+
+# generated data + demo outputs (reproduce from the generator script)
+outputs/
+data/generated/
+*.png.tmp
+
+# sam local build output
+.aws-sam/

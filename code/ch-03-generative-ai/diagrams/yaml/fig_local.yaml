@@ -1,6 +1,4 @@
-# Local mode: the same Strands underwriting agent, with Ollama standing in for
-# Bedrock and a pgvector Postgres container for the RDS vector store. Set
-# BEDROCK_LOCAL=1 and the agent runs entirely offline; only the endpoints change.
+# Local mode: the same Strands agent with Ollama for Bedrock and a pgvector container for RDS; BEDROCK_LOCAL=1 runs it offline.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile

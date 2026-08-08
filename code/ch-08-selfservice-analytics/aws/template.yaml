@@ -1,0 +1,280 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  Self-service analytics assistant: Claude Code on Bedrock in an ECS Fargate task, querying Redshift Serverless through the Data API under a scoped, read-only task role. Costs nothing at rest: the service parks at desired count 0 and Redshift Serverless bills per second of query time only. The assistant image is a Docker build pushed to the ECR repository below; any Lambda added to this stack resolves its dependencies with uv (Metadata BuildMethod python-uv + pyproject.toml). Untested scaffold: validate and deploy before the chapter ships.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  SubnetIds:
+    Description: Public subnets; the task gets a public IP instead of an ALB
+    Type: List<AWS::EC2::Subnet::Id>
+
+  AllowedCidr:
+    Description: Your IP as x.x.x.x/32; the terminal port opens to this only
+    Type: String
+
+  ImageUri:
+    Description: ECR URI of the assistant image (see the repository resource)
+    Type: String
+
+  ClaudeModel:
+    Type: String
+    Default: global.anthropic.claude-haiku-4-5-20251001-v1:0
+
+  SourceBucket:
+    Description: Bucket holding the chapter source zip for CodeBuild (key ch08/source.zip)
+    Type: String
+
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+
+  # -----------------------------------------------------------------------------
+  # warehouse
+  # -----------------------------------------------------------------------------
+  Namespace:
+    Type: AWS::RedshiftServerless::Namespace
+    Properties:
+      NamespaceName: ch08-analytics
+      DbName: analytics
+      AdminUsername: bi_admin
+      AdminUserPassword: '{{resolve:secretsmanager:ch08-admin-password}}'
+
+      # The warehouse-side audit trail: every statement, as which user, to
+      # CloudWatch, complementing the helper's own audit lines from the task.
+      LogExports:
+        - useractivitylog
+
+  Workgroup:
+    Type: AWS::RedshiftServerless::Workgroup
+    Properties:
+      WorkgroupName: ch08-analytics
+      NamespaceName: !Ref Namespace
+      BaseCapacity: 8
+      PubliclyAccessible: false
+
+  # -----------------------------------------------------------------------------
+  # container plumbing
+  # -----------------------------------------------------------------------------
+  Repository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch08-assistant
+      EmptyOnDelete: true # the demo is ephemeral; images go with the stack
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: ch08-analytics
+
+  # -----------------------------------------------------------------------------
+  # the image build, in the cloud: no laptop cross-builds
+  # -----------------------------------------------------------------------------
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Push
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: '*'
+              - Sid: Logs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              - Sid: Source
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:aws:s3:::${SourceBucket}/ch08/*
+
+  Build:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: ch08-assistant
+      ServiceRole: !GetAtt BuildRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true # docker build needs the daemon
+        EnvironmentVariables:
+          - Name: ECR_REGISTRY
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+          - Name: IMAGE_URI
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${Repository}:latest
+      Source:
+        Type: S3
+        Location: !Sub ${SourceBucket}/ch08/source.zip
+        BuildSpec: aws/image/buildspec.yml
+
+  Logs:
+
+    # The demo is ephemeral by design; delete the logs with the stack.
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/ch08-assistant
+      RetentionInDays: 14
+
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: assistant terminal, restricted to one address
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 7681
+          ToPort: 7681
+          CidrIp: !Ref AllowedCidr
+
+  # -----------------------------------------------------------------------------
+  # the task role: everything the assistant may do, nothing else
+  # -----------------------------------------------------------------------------
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: assistant
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Model
+                Effect: Allow
+
+                # both actions: Claude Code streams (InvokeModelWithResponseStream)
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:aws:bedrock:*::foundation-model/anthropic.*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+              - Sid: ModelSubscription
+
+                # Anthropic models on Bedrock are marketplace-subscribed; the
+                # invoking role must be able to see the subscription
+                Effect: Allow
+                Action:
+                  - aws-marketplace:ViewSubscriptions
+                Resource: '*'
+              - Sid: DataApi
+                Effect: Allow
+                Action:
+                  - redshift-data:ExecuteStatement
+                  - redshift-data:DescribeStatement
+                  - redshift-data:GetStatementResult
+                  - redshift-data:CancelStatement
+                Resource: '*'
+              - Sid: WorkgroupCredentials
+                Effect: Allow
+                Action: redshift-serverless:GetCredentials
+                Resource: !GetAtt Workgroup.Workgroup.WorkgroupArn
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: ch08-assistant
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      Cpu: "1024"
+      Memory: "2048"
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: assistant
+          Image: !Ref ImageUri
+          PortMappings:
+            - ContainerPort: 7681
+          Environment:
+            - Name: REDSHIFT_REGION
+              Value: !Ref AWS::Region
+            - Name: REDSHIFT_WORKGROUP
+              Value: !Ref Workgroup
+            - Name: REDSHIFT_DB_NAME
+              Value: analytics
+            - Name: CLAUDE_CODE_USE_BEDROCK
+              Value: "1"
+            - Name: CLAUDE_MODEL
+              Value: !Ref ClaudeModel
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref Logs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: assistant
+
+  # Desired count 0: the chapter scales to 1 for the demo and back to 0
+  # after. Nothing bills while parked.
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref Cluster
+      DesiredCount: 0
+      LaunchType: FARGATE
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
+          SecurityGroups:
+            - !Ref TaskSecurityGroup
+
+Outputs:
+  RepositoryUri:
+    Value: !GetAtt Repository.RepositoryUri
+
+  WorkgroupName:
+    Value: !Ref Workgroup
+
+  ServiceName:
+    Value: !Ref Service
+
+  # the task's role name: on Serverless the Data API runs the assistant's queries
+  # as the auto-mapped "IAMR:<this>" user, so provision grants and masks it too.
+  TaskRoleName:
+    Value: !Ref TaskRole

@@ -1,0 +1,35 @@
+# The chapter's EKS cluster, Fargate only, no nodes and no EC2; a create-run-delete resource like the ch-5 warehouse.
+#
+# Create:  eksctl create cluster -f aws/eks/create-cluster.yaml   (~15 minutes)
+# Delete:  eksctl delete cluster -f aws/eks/create-cluster.yaml
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: ch04-decision
+  region: us-east-1
+
+# the gateway pod's identity: an IRSA role on the `gateway` service account, the EKS counterpart of the ECS task role.
+iam:
+  withOIDC: true
+  serviceAccounts:
+    - metadata:
+        name: gateway
+        namespace: default
+      attachPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sagemaker:InvokeEndpoint
+            Resource:
+              - arn:aws:sagemaker:us-east-1:*:endpoint/ch04-scorecard
+              - arn:aws:sagemaker:us-east-1:*:endpoint/ch04-challenger
+          - Effect: Allow
+            Action: dynamodb:PutItem
+            Resource: arn:aws:dynamodb:us-east-1:*:table/decision_log
+
+fargateProfiles:
+  - name: default
+    selectors:
+      - namespace: default
+      - namespace: kube-system

@@ -1,12 +1,12 @@
-.PHONY: up seed train train-challenger mlflow-train mlflow-ui serve score batch \
+.PHONY: up seed train train-challenger mlflow-train mlflow-ui serve score batch sm-push sm-local sm-batch \
 	amt lambda-build lambda-local fargate-build fargate-local pipeline-parity down lint diagrams
 
-# The local cloud is S3Proxy (S3 API) only; MLflow is serverless — no tracking
-# server. Locally it writes runs to a sqlite file and artifacts to S3Proxy; on
-# AWS the one change is MLFLOW_TRACKING_URI -> a SageMaker MLflow App ARN.
+# Local cloud is S3Proxy (S3 API) only; MLflow is serverless (sqlite + S3Proxy locally). On AWS the one change is MLFLOW_TRACKING_URI -> a SageMaker MLflow App ARN.
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
 export AWS_DEFAULT_REGION ?= us-east-1
+
+COMPOSE := docker compose -f local/mlflow-stack.yml
 
 # /opt/ml training channels and the serverless-MLflow env, passed to the container.
 INPUT := -v $(PWD)/runs-local/input:/opt/ml/input:ro -v $(PWD)/runs-local/output:/opt/ml/output
@@ -17,7 +17,7 @@ MLFLOW := -e MLFLOW_TRACKING_URI=sqlite:////mlflow-store/mlruns.db \
 	-v $(PWD)/mlflow-store:/mlflow-store
 
 up:
-	docker compose up -d --wait
+	$(COMPOSE) up -d --wait
 
 # synthesize the dataset and lay out the SageMaker training channels
 seed:
@@ -29,21 +29,21 @@ seed:
 
 # train the incumbent scorecard in its custom container (no MLflow)
 train:
-	docker build -q -t ch02-scorecard:latest scorecard/
+	docker build -q -t ch02-scorecard:latest src/scorecard/
 	rm -rf runs-local/model && mkdir -p runs-local/model
 	docker run --rm $(INPUT) -v $(PWD)/runs-local/model:/opt/ml/model ch02-scorecard:latest train
 
 # train the monotone XGBoost challenger
 train-challenger:
-	docker build -q -t ch02-challenger:latest challenger/
+	docker build -q -t ch02-challenger:latest src/challenger/
 	rm -rf runs-local/model-challenger && mkdir -p runs-local/model-challenger
 	docker run --rm $(INPUT) -v $(PWD)/runs-local/model-challenger:/opt/ml/model ch02-challenger:latest train
 
 # train both, logged to serverless MLflow (sqlite + S3Proxy); needs `make up`
 mlflow-train: up
 	mkdir -p mlflow-store runs-local/model runs-local/model-challenger
-	docker build -q -t ch02-scorecard:latest scorecard/
-	docker build -q -t ch02-challenger:latest challenger/
+	docker build -q -t ch02-scorecard:latest src/scorecard/
+	docker build -q -t ch02-challenger:latest src/challenger/
 	docker run --rm $(MLFLOW) $(INPUT) -v $(PWD)/runs-local/model:/opt/ml/model ch02-scorecard:latest train
 	docker run --rm $(MLFLOW) $(INPUT) -v $(PWD)/runs-local/model-challenger:/opt/ml/model ch02-challenger:latest train
 
@@ -60,37 +60,61 @@ serve:
 score:
 	curl -s -X POST http://localhost:8091/invocations -H 'Content-Type: application/json' --data-binary @fixtures/sample.json; echo
 
+# SageMaker local mode: the same BYOC image run through SDK v3 (make serve/batch's counterpart).
+# Needs real AWS creds, SM_ROLE, the image in ECR (make sm-push); env -u strips the S3Proxy placeholders. First `make seed train`.
+ACCOUNT ?= $(shell env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY aws sts get-caller-identity --query Account --output text)
+ECR := $(ACCOUNT).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com
+SM_ROLE ?=
+
+sm-push:
+	aws ecr describe-repositories --repository-names ch02-scorecard --region $(AWS_DEFAULT_REGION) >/dev/null 2>&1 || \
+		aws ecr create-repository --repository-name ch02-scorecard --region $(AWS_DEFAULT_REGION) >/dev/null
+	aws ecr get-login-password --region $(AWS_DEFAULT_REGION) | docker login --username AWS --password-stdin $(ECR)
+	docker buildx build --platform linux/amd64 --provenance=false -t $(ECR)/ch02-scorecard:latest --push src/scorecard
+
+# real-time: the container as a local SageMaker endpoint (Mode.LOCAL_CONTAINER)
+sm-local:
+	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn>"; exit 1; }
+	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
+		MODEL_IMAGE=$(ECR)/ch02-scorecard:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
+		MODEL_PATH=runs-local/model uv run --no-project src/serving/local_endpoint.py
+
+# batch: the same container as a local SageMaker Batch Transform job
+sm-batch:
+	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn>"; exit 1; }
+	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
+		MODEL_IMAGE=$(ECR)/ch02-scorecard:latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) \
+		MODEL_PATH=runs-local/model uv run --no-project src/serving/local_transform.py
+
 # batch-score a file through a local serving container (parity with the endpoint)
 batch:
 	docker rm -f ch02-batch 2>/dev/null || true
 	docker run -d --name ch02-batch -p 8094:8080 -v $(PWD)/runs-local/model-challenger:/opt/ml/model:ro ch02-challenger:latest serve
 	sleep 4
-	uv run serving/batch.py --url http://localhost:8094 --input data/split/test.csv --output /tmp/ch02-scored.csv
+	uv run src/serving/batch.py --url http://localhost:8094 --input data/split/test.csv --output /tmp/ch02-scored.csv
 	docker rm -f ch02-batch 2>/dev/null || true
 
-# Local AMT: Syne Tune runs the same search as managed AMT on your laptop — each
-# trial a local subprocess, a Bayesian (TPE) scheduler, no instance and no Docker.
-# Trials log to the serverless MLflow App, so this needs REAL AWS credentials: env -u
-# strips the Makefile's S3Proxy placeholders (override with make amt APP_ARN=...).
+# Local AMT: Syne Tune runs the same search as managed AMT on your laptop (each trial a local subprocess, TPE scheduler, no instance, no Docker).
+# Trials log to the serverless MLflow App, so this needs REAL AWS credentials: env -u strips the S3Proxy placeholders (override with make amt APP_ARN=...).
 APP_ARN ?= $(shell env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY aws sagemaker list-mlflow-apps --query "Summaries[?Name=='ch02-mlflow'].Arn | [0]" --output text)
 
 amt:
 	@test -n "$(APP_ARN)" && test "$(APP_ARN)" != "None" || \
 		{ echo "no MLflow App named ch02-mlflow on this account: make mlflow-app (aws/) or pass APP_ARN=..."; exit 1; }
 	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		MLFLOW_TRACKING_URI="$(APP_ARN)" uv run tuning/amt.py
+		MLFLOW_TRACKING_URI="$(APP_ARN)" uv run src/tuning/amt.py
 
 # the local-tuning suite: trial contract, local/cloud search-space parity, and a
-# two-trial TPE mini search — all offline, no Docker, no AWS
+# two-trial TPE mini search, all offline, no Docker, no AWS
 test:
 	uv run --python 3.12 --with pytest --with syne-tune --with xgboost \
 		--with scikit-learn --with pandas --with numpy pytest tests/ -q
 
 # assemble + build the Lambda container (model baked in), then run it via the RIE
 lambda-build:
-	cp challenger/challenger_model.py serving/lambda/challenger_model.py
-	mkdir -p serving/lambda/model && cp runs-local/model-challenger/challenger.ubj runs-local/model-challenger/feature_spec.json serving/lambda/model/
-	docker build -q -t ch02-lambda:latest serving/lambda/
+	cp src/challenger/challenger_model.py src/serving/lambda/challenger_model.py
+	mkdir -p src/serving/lambda/model && cp runs-local/model-challenger/challenger.ubj runs-local/model-challenger/feature_spec.json src/serving/lambda/model/
+	docker build -q -t ch02-lambda:latest src/serving/lambda/
 
 lambda-local: lambda-build
 	docker rm -f ch02-lambda-rie 2>/dev/null || true
@@ -101,17 +125,15 @@ lambda-local: lambda-build
 
 # assemble + build the Fargate image, then run it as a local ECS task (compose)
 fargate-build: train-challenger
-	mkdir -p serving/fargate/model && cp runs-local/model-challenger/challenger.ubj runs-local/model-challenger/feature_spec.json serving/fargate/model/
-	docker build -q --build-arg BASE_IMAGE=ch02-challenger:latest -t ch02-fargate:latest serving/fargate/
+	mkdir -p src/serving/fargate/model && cp runs-local/model-challenger/challenger.ubj runs-local/model-challenger/feature_spec.json src/serving/fargate/model/
+	docker build -q --build-arg BASE_IMAGE=ch02-challenger:latest -t ch02-fargate:latest src/serving/fargate/
 
 fargate-local: fargate-build
-	cd serving/fargate && docker compose up -d && sleep 5 && \
-		curl -s -XPOST http://localhost:8093/invocations -H 'Content-Type: application/json' --data-binary @../../fixtures/sample.json; echo; \
-		docker compose down
+	cd src/serving/fargate && docker compose -f fargate-task.yml -f ecs-endpoints.yml up -d && sleep 5 && \
+		curl -s -XPOST http://localhost:8093/invocations -H 'Content-Type: application/json' --data-binary @../../../fixtures/sample.json; echo; \
+		docker compose -f fargate-task.yml -f ecs-endpoints.yml down
 
-# the pipeline parity check: download the local-mode and cloud-mode score
-# exports (pipeline/README.md runs the pipeline twice, once per prefix) and
-# compare them byte for byte. Real AWS credentials, hence env -u.
+# the pipeline parity check: download the local-mode and cloud-mode score exports and compare them byte for byte. Real AWS credentials, hence env -u.
 LOCAL_SCORES ?= ch02/pipeline-scores-local
 AWS_SCORES ?= ch02/pipeline-scores-aws
 pipeline-parity:
@@ -123,17 +145,14 @@ pipeline-parity:
 		echo "parity: scores.csv byte-identical"'
 
 down:
-	docker compose down
+	$(COMPOSE) down
 	docker rm -f ch02-serve ch02-batch ch02-lambda-rie 2>/dev/null || true
 
 lint:
 	uvx ruff check .
 
-# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
-# AWS icons are fetched at render time; custom icons live in the shared
-# assets/diagrams/ (Strands, Lambda coin, local-stack tools). Icon PNGs are
-# re-rendered from their SVG sources at ICON_HEIGHT (needs librsvg's rsvg-convert).
-# WIDTH sets output pixel width (0 = awsdac native; raise it for print).
+# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS icons fetched at render time, custom icons from shared assets/diagrams/).
+# Icon PNGs are re-rendered from SVG at ICON_HEIGHT (needs rsvg-convert); WIDTH sets output pixel width (0 = awsdac native).
 AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0

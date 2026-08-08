@@ -1,8 +1,5 @@
-# The local cloud as the chapter actually runs it: raw bureau files land in
-# MinIO, a Glue job with dlt loads redshift-local, dbt builds the marts, and
-# ingest_features ships the gold mart to the feature store — offline as an
-# Iceberg table over MinIO (Trino can query it) and online into DynamoDB Local.
-# Local container names, with their AWS equivalents in parentheses.
+# The local cloud as the chapter runs it: MinIO raw zone, Glue+dlt into redshift-local, dbt marts, ingest_features to the feature store (Iceberg offline over MinIO, DynamoDB Local online).
+# Local container names shown with their AWS equivalents in parentheses.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -18,7 +15,7 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Title: "Local cloud (Docker)"
+      Title: "Local cloud (Docker Compose)"
       Children: [RawZone, GlueJob, Warehouse, FeatureStore]
     RawZone:
       Type: AWS::Diagram::Resource

@@ -1,0 +1,518 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  Streaming fraud detection on AWS: the cloud counterpart of the chapter's local stack. Transactions flow through a Kinesis stream into a Lambda consumer, the consumer scores each event against the SageMaker Serverless Inference endpoint and writes blocks to DynamoDB, and every decision goes onward through a second stream to Data Firehose, which stages batches to S3 and, when a warehouse is configured, issues the COPY into Redshift.
+  The scoring endpoint itself is deployed separately (deploy.py) because it needs the container image pushed first; this stack creates the ECR repository the image lands in and the execution role the endpoint runs as.
+  Every stateful resource is deliberately disposable: chapter data is synthetic and reproducible, so `make teardown` should leave nothing behind and nothing to pay for.
+
+Parameters:
+  EndpointName:
+    Description: the SageMaker endpoint the consumer invokes (created by deploy.py)
+    Type: String
+    Default: fraud-scoring
+
+  ScoreThreshold:
+    Description: |
+      The operating threshold frozen at training time; copy it from artifacts/model_meta.json. The endpoint returns a probability; the consumer owns the block-or-pass decision, same as the local run.
+    Type: String
+    Default: "0.04"
+
+  EnableWarehouse:
+    Description: |
+      "true" builds the analytics warehouse in this stack: a publicly accessible Redshift Serverless workgroup that Firehose COPYs decisions into. "false" skips it, and Firehose stages the batches to S3 only (run the COPY from the staged objects later). One template either way.
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "true"
+
+Conditions:
+  HasWarehouse: !Equals
+    - !Ref EnableWarehouse
+    - "true"
+
+  NoWarehouse: !Equals
+    - !Ref EnableWarehouse
+    - "false"
+
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+
+  # The two streams, same names as the local kinesalite pair. One provisioned
+  # shard each: replay fits inside a shard's 1 MB/s and bills less than on-demand.
+  TransactionsStream:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: transactions
+      ShardCount: 1
+      RetentionPeriodHours: 24
+      StreamModeDetails:
+        StreamMode: PROVISIONED
+
+  DecisionsStream:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: decisions
+      ShardCount: 1
+      RetentionPeriodHours: 24
+      StreamModeDetails:
+        StreamMode: PROVISIONED
+
+  # The fast-path block store: blocks only, keyed by transaction id. A miss lets
+  # the payment through, so reads must stay single-digit-ms, hence DynamoDB.
+  BlockedTransactions:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: blocked_transactions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: transaction_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: transaction_id
+          KeyType: HASH
+
+  # Where the serving image lands. EmptyOnDelete so teardown does not strand a
+  # repository that still holds image layers.
+  ScoringRepo:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch06-scoring
+      EmptyOnDelete: true
+
+  # Firehose's staging area and the endpoint's model.tar.gz. Objects expire
+  # after a day so the bucket stays small; teardown empties whatever is left.
+  StagingBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-staged-batches
+            Status: Enabled
+            ExpirationInDays: 1
+
+  # The serverless endpoint's execution role: pull the image, read the tarball,
+  # write logs. deploy.py reads its ARN from the stack outputs.
+  EndpointRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: serve-fraud-model
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub ${StagingBucket.Arn}/ch06/*
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                Resource: !GetAtt ScoringRepo.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
+
+  # The image pipeline: CodeBuild builds the scoring container and pushes a
+  # multi-arch manifest to ECR (amd64 for the endpoint, arm64 for local mode).
+  ImageBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build-scoring-image
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub ${StagingBucket.Arn}/ch06/source/*
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !GetAtt ScoringRepo.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/ch06-scoring-build*
+
+  ImageBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: ch06-scoring-build
+      ServiceRole: !GetAtt ImageBuildRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      TimeoutInMinutes: 30
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REGISTRY
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+          - Name: IMAGE_URI
+            Value: !Sub ${ScoringRepo.RepositoryUri}:latest
+      Source:
+        Type: S3
+        Location: !Sub ${StagingBucket}/ch06/source/scoring.zip
+
+  # The consumer: the cloud twin of src/streaming/consumer.py. The Kinesis event
+  # source mapping replaces the polling loop; same body: score, block, forward.
+  Consumer:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: python-uv
+    Properties:
+      CodeUri: consumer/
+      Handler: handler.score
+      Runtime: python3.12
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          ENDPOINT_NAME: !Ref EndpointName
+          SCORE_THRESHOLD: !Ref ScoreThreshold
+          BLOCKS_TABLE: !Ref BlockedTransactions
+          DECISIONS_STREAM: !Ref DecisionsStream
+      Events:
+        Transactions:
+          Type: Kinesis
+          Properties:
+            Stream: !GetAtt TransactionsStream.Arn
+            StartingPosition: LATEST
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 1
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+      Policies:
+        - KinesisStreamReadPolicy:
+            StreamName: !Ref TransactionsStream
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sagemaker:InvokeEndpoint
+              Resource: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/${EndpointName}
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt BlockedTransactions.Arn
+            - Effect: Allow
+              Action:
+                - kinesis:PutRecord
+                - kinesis:PutRecords
+              Resource: !GetAtt DecisionsStream.Arn
+
+  FirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: deliver-decisions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kinesis:DescribeStream
+                  - kinesis:GetShardIterator
+                  - kinesis:GetRecords
+                  - kinesis:ListShards
+                Resource: !GetAtt DecisionsStream.Arn
+              - Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:GetBucketLocation
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                  - s3:PutObject
+                Resource:
+                  - !GetAtt StagingBucket.Arn
+                  - !Sub ${StagingBucket.Arn}/*
+
+  # The analytics warehouse, in this same stack. The workgroup is publicly
+  # accessible (SG open to the Firehose CIDR on 5439 only), needing an IGW + route.
+  Vpc:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+    Condition: HasWarehouse
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: HasWarehouse
+
+  GatewayAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+    Condition: HasWarehouse
+
+  # Redshift Serverless requires subnets across at least three AZs.
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+    Condition: HasWarehouse
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+    Condition: HasWarehouse
+
+  SubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs
+    Condition: HasWarehouse
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+    Condition: HasWarehouse
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttach
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    Condition: HasWarehouse
+
+  SubnetARoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  SubnetBRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  SubnetCRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetC
+      RouteTableId: !Ref RouteTable
+    Condition: HasWarehouse
+
+  # Redshift COPY reads the intermediate S3 bucket; a gateway endpoint keeps
+  # that traffic on the AWS backbone and off the internet route.
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref RouteTable
+    Condition: HasWarehouse
+
+  WarehouseSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: fraud warehouse, 5439 from the Firehose service CIDR only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+
+        # us-east-1 Amazon Data Firehose service CIDR (one block per Region;
+        # source: Firehose dev guide, "Controlling access" VPC-access table).
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 52.70.63.192/27
+    Condition: HasWarehouse
+
+  WarehouseSecret:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: fraud warehouse admin credentials (username analyst, key password)
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "analyst"}'
+        GenerateStringKey: password
+
+        # Redshift rejects a handful of characters in the admin password;
+        # ExcludePunctuation keeps the generated value inside the rules.
+        ExcludePunctuation: true
+        PasswordLength: 24
+    Condition: HasWarehouse
+
+  FraudNamespace:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RedshiftServerless::Namespace
+    Properties:
+      NamespaceName: fraud
+      DbName: fraud
+      AdminUsername: analyst
+      AdminUserPassword: !Sub '{{resolve:secretsmanager:${WarehouseSecret}:SecretString:password}}'
+    Condition: HasWarehouse
+
+  FraudWorkgroup:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::RedshiftServerless::Workgroup
+    Properties:
+      WorkgroupName: fraud-wg
+      NamespaceName: !Ref FraudNamespace
+      BaseCapacity: 8
+      PubliclyAccessible: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !GetAtt WarehouseSg.GroupId
+    Condition: HasWarehouse
+
+  # The managed firehose-local shim: buffer, stage to S3, then COPY. One delivery
+  # stream deploys, chosen by EnableWarehouse: Redshift when built, else plain S3.
+  DeliveryToRedshift:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamType: KinesisStreamAsSource
+      KinesisStreamSourceConfiguration:
+        KinesisStreamARN: !GetAtt DecisionsStream.Arn
+        RoleARN: !GetAtt FirehoseRole.Arn
+      RedshiftDestinationConfiguration:
+        ClusterJDBCURL: !Sub jdbc:redshift://${FraudWorkgroup.Workgroup.Endpoint.Address}:5439/fraud
+        Username: analyst
+        Password: !Sub '{{resolve:secretsmanager:${WarehouseSecret}:SecretString:password}}'
+        RoleARN: !GetAtt FirehoseRole.Arn
+        CopyCommand:
+          DataTableName: fraud_decisions
+          CopyOptions: FORMAT AS JSON 'auto'
+        S3Configuration:
+          BucketARN: !GetAtt StagingBucket.Arn
+          Prefix: decisions/
+          RoleARN: !GetAtt FirehoseRole.Arn
+          BufferingHints:
+            IntervalInSeconds: 60
+            SizeInMBs: 1
+          CompressionFormat: UNCOMPRESSED
+    Condition: HasWarehouse
+
+  DeliveryToS3:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamType: KinesisStreamAsSource
+      KinesisStreamSourceConfiguration:
+        KinesisStreamARN: !GetAtt DecisionsStream.Arn
+        RoleARN: !GetAtt FirehoseRole.Arn
+      ExtendedS3DestinationConfiguration:
+        BucketARN: !GetAtt StagingBucket.Arn
+        Prefix: decisions/
+        RoleARN: !GetAtt FirehoseRole.Arn
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 1
+        CompressionFormat: UNCOMPRESSED
+    Condition: NoWarehouse
+
+Outputs:
+  ScoringRepoUri:
+    Description: push the serving image here
+    Value: !GetAtt ScoringRepo.RepositoryUri
+
+  StagingBucketName:
+    Description: model.tar.gz and Firehose staging
+    Value: !Ref StagingBucket
+
+  EndpointRoleArn:
+    Description: execution role for deploy.py
+    Value: !GetAtt EndpointRole.Arn
+
+  ConsumerFunction:
+    Description: the stream consumer
+    Value: !Ref Consumer
+
+  WorkgroupName:
+    Description: Redshift Serverless workgroup, for the Data API seed and query
+    Value: !Ref FraudWorkgroup
+    Condition: HasWarehouse
+
+  WarehouseSecretArn:
+    Description: warehouse admin secret (username analyst, key password)
+    Value: !Ref WarehouseSecret
+    Condition: HasWarehouse

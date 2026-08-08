@@ -1,0 +1,344 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  Airflow on EC2 for the data engineering chapter: one free-tier instance running
+  Airflow (Postgres metadata + LocalExecutor) and redshift-local under docker
+  compose, with the bureau pipeline DAG installed and a nightly pg_dump of Airflow's
+  metadata to S3. Deploy with: sam deploy --guided
+
+Parameters:
+  AllowedCidr:
+    Description: Your IP in CIDR form (x.x.x.x/32) for the Airflow UI
+    Type: String
+
+  InstanceType:
+
+    # Airflow 3 standalone plus metadata Postgres and redshift-local need real memory; t3.medium (4 GB) is the smallest that works reliably.
+    Type: String
+    Default: t3.medium
+
+  SubnetId:
+    Description: Subnet to launch into; empty uses the default VPC's default subnet
+    Type: String
+    Default: ""
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+  WarehouseMode:
+    Description: local runs redshift-local on the instance (free tier, mirrors the local stack); serverless provisions Amazon Redshift Serverless in this same stack and points the DAG at it (standard-plan account)
+    Type: String
+    AllowedValues:
+      - local
+      - serverless
+    Default: local
+
+  WorkgroupSubnetIds:
+    Description: Subnets for the Redshift Serverless workgroup (>= 3, across AZs). Required only when WarehouseMode=serverless; ignored for local.
+    Type: CommaDelimitedList
+    Default: ""
+
+Conditions:
+  HasSubnet: !Not
+    - !Equals
+      - !Ref SubnetId
+      - ""
+
+  UseServerless: !Equals
+    - !Ref WarehouseMode
+    - serverless
+
+Resources:
+
+  # Off-instance home for the metadata dumps: the EC2 volume dies with the
+  # instance, so Airflow's run history and connections live here instead.
+  BackupBucket:
+    DeletionPolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-backups
+            Status: Enabled
+            ExpirationInDays: 30
+
+  AirflowInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: airflow-backup-to-s3
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub ${BackupBucket.Arn}/airflow-metadata/*
+
+  AirflowInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref AirflowInstanceRole
+
+  AirflowSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Airflow UI access from one address
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: !Ref AllowedCidr
+
+  # -----------------------------------------------------------------------------
+  # Redshift Serverless: WarehouseMode=serverless only
+  # -----------------------------------------------------------------------------
+  # The managed warehouse the DAG targets on a standard plan; everything here is gated behind UseServerless, so a `local` deploy carries none of it.
+  # The admin password is generated into Secrets Manager and the DAG fetches it at run time via the instance role, so no secret is baked into UserData.
+  WarehouseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Redshift Serverless admin password for ch01-airflow
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "bureau_admin"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+    Condition: UseServerless
+
+  WarehouseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Redshift Serverless reachable from the Airflow instance
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          SourceSecurityGroupId: !GetAtt AirflowSecurityGroup.GroupId
+    Condition: UseServerless
+
+  WarehouseNamespace:
+    Type: AWS::RedshiftServerless::Namespace
+    Properties:
+      NamespaceName: ch01-bureau
+      DbName: bureau
+      AdminUsername: bureau_admin
+      AdminUserPassword: !Sub '{{resolve:secretsmanager:${WarehouseSecret}:SecretString:password}}'
+    Condition: UseServerless
+
+  WarehouseWorkgroup:
+    Type: AWS::RedshiftServerless::Workgroup
+    Properties:
+      WorkgroupName: ch01-bureau
+      NamespaceName: !Ref WarehouseNamespace
+      BaseCapacity: 8
+      PubliclyAccessible: false
+      SubnetIds: !Ref WorkgroupSubnetIds
+      SecurityGroupIds:
+        - !GetAtt WarehouseSecurityGroup.GroupId
+    Condition: UseServerless
+
+  # let the instance role read just the generated warehouse secret
+  WarehouseSecretAccess:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: read-warehouse-secret
+      Roles:
+        - !Ref AirflowInstanceRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource: !Ref WarehouseSecret
+    Condition: UseServerless
+
+  AirflowInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref AirflowInstanceProfile
+      SubnetId: !If
+        - HasSubnet
+        - !Ref SubnetId
+        - !Ref AWS::NoValue
+      SecurityGroupIds:
+        - !GetAtt AirflowSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: ch01-airflow
+      UserData: !Base64
+        Fn::Sub:
+          - |
+            #!/bin/bash
+            dnf install -y docker cronie
+            systemctl enable --now docker crond
+            fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+            mkdir -p /usr/local/lib/docker/cli-plugins
+            curl -sL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+              -o /usr/local/lib/docker/cli-plugins/docker-compose
+            chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+            mkdir -p /opt/af/dags
+            cat > /opt/af/dags/bureau_pipeline.py <<'DAG'
+            """The nightly bureau pipeline as a DAG: stage raw bureau reports,
+            transform them into the credit-profile mart, then gate on a data
+            quality check. The same shape the chapter runs locally, orchestrated
+            here against the warehouse (redshift-local or Redshift Serverless)."""
+            import json
+            import os
+            from datetime import datetime
+
+            import boto3
+            import psycopg2
+            from airflow.providers.standard.operators.python import PythonOperator
+            from airflow.sdk import DAG
+
+            # local (free tier): redshift-local on this instance. serverless: the
+            # instance role reads the generated secret and targets Redshift Serverless.
+            if os.environ.get("WAREHOUSE_SECRET_ARN"):
+                secret = json.loads(
+                    boto3.client("secretsmanager").get_secret_value(
+                        SecretId=os.environ["WAREHOUSE_SECRET_ARN"]
+                    )["SecretString"]
+                )
+                host = os.environ["WAREHOUSE_HOST"]
+                DSN = f"postgresql://{secret['username']}:{secret['password']}@{host}:5439/bureau"
+            else:
+                DSN = "postgresql://loader:loader@warehouse:5439/bureau"
+
+            STAGE = """
+            create table if not exists bureau_reports (applicant_id int, state varchar(2), score int);
+            truncate bureau_reports;
+            insert into bureau_reports values
+                (10001, 'CA', 712), (10002, 'TX', 668), (10003, 'NY', 741),
+                (10004, 'CA', 590), (10005, 'TX', 805);
+            """
+            TRANSFORM = """
+            drop table if exists applicant_credit_profile;
+            create table applicant_credit_profile as
+                select state, count(*) as applicants, round(avg(score)) as avg_score
+                from bureau_reports group by state;
+            """
+
+
+            def run_sql(sql):
+                """Run a statement against the target warehouse."""
+                with psycopg2.connect(DSN) as conn, conn.cursor() as cur:
+                    cur.execute(sql)
+
+
+            def check_profile():
+                """Data-quality gate: the credit-profile mart must not be empty."""
+                with psycopg2.connect(DSN) as conn, conn.cursor() as cur:
+                    cur.execute("select count(*) from applicant_credit_profile")
+                    if not cur.fetchone()[0]:
+                        raise ValueError("applicant_credit_profile is empty")
+
+
+            with DAG("bureau_pipeline", start_date=datetime(2026, 1, 1),
+                     schedule="@daily", catchup=False) as dag:
+                stage = PythonOperator(task_id="stage", python_callable=run_sql, op_args=[STAGE])
+                transform = PythonOperator(task_id="transform", python_callable=run_sql, op_args=[TRANSFORM])
+                check = PythonOperator(task_id="check", python_callable=check_profile)
+                stage >> transform >> check
+            DAG
+            cat > /opt/af/compose.yml <<'YML'
+            services:
+              # Airflow's own metadata store: real Postgres, so the scheduler can run
+              # LocalExecutor and tasks run in parallel, not the single-threaded
+              # SQLite + SequentialExecutor Airflow falls back to by default.
+              metadata:
+                image: postgres:16
+                container_name: af-metadata
+                environment:
+                  - POSTGRES_USER=airflow
+                  - POSTGRES_PASSWORD=airflow
+                  - POSTGRES_DB=airflow
+                volumes:
+                  - af-metadata:/var/lib/postgresql/data
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U airflow"]
+                  interval: 5s
+                  timeout: 3s
+                  retries: 20
+              # the DAG's target warehouse (redshift-local), separate from metadata
+              warehouse:
+                image: public.ecr.aws/oblako/redshift-local:16
+                environment:
+                  - POSTGRES_USER=loader
+                  - POSTGRES_PASSWORD=loader
+                  - POSTGRES_DB=bureau
+                  - POSTGRES_HOST_AUTH_METHOD=md5
+              airflow:
+                image: apache/airflow:3.3.0
+                command: standalone
+                environment:
+                  - AIRFLOW__CORE__LOAD_EXAMPLES=False
+                  - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+                  - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@metadata/airflow
+                  # local mode leaves these empty and the DAG uses redshift-local;
+                  # serverless mode fills them and the DAG targets Redshift Serverless
+                  - WAREHOUSE_SECRET_ARN=${SecretArn}
+                  - WAREHOUSE_HOST=${WarehouseHost}
+                  - AWS_DEFAULT_REGION=${AWS::Region}
+                  # the bureau DAG needs psycopg2 (warehouse) and boto3 (read the
+                  # secret), neither in the base image; install them at container start
+                  - _PIP_ADDITIONAL_REQUIREMENTS=psycopg2-binary boto3
+                ports:
+                  - "8080:8080"
+                volumes:
+                  - /opt/af/dags:/opt/airflow/dags
+                depends_on:
+                  metadata:
+                    condition: service_healthy
+                  warehouse:
+                    condition: service_started
+            volumes:
+              af-metadata:
+            YML
+            cd /opt/af && docker compose up -d
+            # nightly backup: dump the Airflow metadata DB and stream it to S3 (the
+            # aws-cli container inherits the instance role, so no host install/creds)
+            cat > /opt/af/backup.sh <<'BK'
+            #!/bin/bash
+            set -euo pipefail
+            TS=$(date -u +%Y%m%dT%H%M%SZ)
+            /usr/bin/docker exec af-metadata pg_dump -U airflow airflow | gzip | \
+              /usr/bin/docker run --rm -i amazon/aws-cli \
+                s3 cp - "s3://${BackupBucket}/airflow-metadata/airflow-$TS.sql.gz"
+            BK
+            chmod +x /opt/af/backup.sh
+            echo "0 3 * * * root /opt/af/backup.sh >> /var/log/af-backup.log 2>&1" > /etc/cron.d/af-backup
+          - SecretArn: !If
+              - UseServerless
+              - !Ref WarehouseSecret
+              - ""
+            WarehouseHost: !If
+              - UseServerless
+              - !GetAtt WarehouseWorkgroup.Workgroup.Endpoint.Address
+              - ""
+
+Outputs:
+  AirflowUrl:
+    Description: Airflow UI (login admin; Airflow 3 standalone prints the generated password to the container logs and simple_auth_manager_passwords.json.generated)
+    Value: !Sub http://${AirflowInstance.PublicDnsName}:8080
+
+  BackupBucket:
+    Description: S3 bucket holding the nightly Airflow metadata dumps
+    Value: !Ref BackupBucket
+
+  WarehouseEndpoint:
+    Description: Redshift Serverless workgroup endpoint the DAG targets
+    Value: !GetAtt WarehouseWorkgroup.Workgroup.Endpoint.Address
+    Condition: UseServerless

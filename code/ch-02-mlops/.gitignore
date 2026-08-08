@@ -1,4 +1,5 @@
 # local run artifacts — nothing here is manuscript
+std.out
 data/*.csv
 data/split/
 model/
@@ -13,11 +14,11 @@ __pycache__/
 .aws-sam/
 
 # lambda build artifacts (assembled by make lambda-build)
-serving/lambda/challenger_model.py
-serving/lambda/model/
+src/serving/lambda/challenger_model.py
+src/serving/lambda/model/
 
 # fargate build artifacts (assembled by make fargate-build)
-serving/fargate/model/
+src/serving/fargate/model/
 
 # SageMaker local-mode run artifacts (docker-compose, model output, staged data)
 docker-compose.yaml

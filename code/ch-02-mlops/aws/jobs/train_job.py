@@ -1,14 +1,10 @@
 # /// script
-# requires-python = ">=3.10,<3.13"
+# requires-python = ">=3.12,<3.13"
 # dependencies = ["sagemaker>=3,<4", "boto3"]
 # ///
 """Run the scorecard container as a real SageMaker training job (SDK v3).
 
-Parity with local mode: the container is byte-identical (the image CodeBuild
-pushed to ECR). Only the runner changes — local mode does `docker run ... train`,
-this submits the same image to a managed training job through the v3
-sagemaker.train.ModelTrainer. Set MLFLOW_TRACKING_URI to a serverless MLflow App
-ARN to log the run; leave it unset to just produce model.tar.gz in S3.
+Parity with local mode: the container is byte-identical, only the runner changes (a managed job via sagemaker.train.ModelTrainer instead of docker run). Set MLFLOW_TRACKING_URI to log the run; leave it unset to just produce model.tar.gz in S3.
 
 Env:
   IMAGE_URI, SAGEMAKER_ROLE_ARN, ARTIFACT_BUCKET (required)
@@ -30,6 +26,7 @@ REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 IMAGE_URI = os.environ["IMAGE_URI"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]
 BUCKET = os.environ["ARTIFACT_BUCKET"]
+# ml.m5.large, 1 instance; needs "ml.m5.large for training job usage" quota >= 1 (fresh account = 0). Cold-verified 2026-08-03: training job ran and Completed.
 INSTANCE_TYPE = os.environ.get("INSTANCE_TYPE", "ml.m5.large")
 
 env = {

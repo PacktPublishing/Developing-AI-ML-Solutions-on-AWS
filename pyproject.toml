@@ -3,7 +3,7 @@ name = "developing-ai-ml-solutions-on-aws"
 version = "0.1.0"
 description = "Book about developing AI/ML solutions on AWS"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "python-docx>=1.2.0",
 ]
@@ -37,3 +37,25 @@ message = "Change type: + added, ~ changed, - removed"
 type = "input"
 name = "subject"
 message = "Short description:"
+
+[tool.ruff.lint]
+extend-select = ["D"]
+ignore = ["D107"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.rules]
+possibly-unresolved-reference = "warn"
+division-by-zero = "ignore"
+unresolved-import = "ignore"
+
+[tool.ty.analysis]
+replace-imports-with-any = [
+    "pandas.**", "numpy.**", "sklearn.**", "sagemaker.**", "mlflow.**",
+    "fastwoe.**", "xgboost.**", "catboost.**", "boto3.**", "botocore.**",
+]
+respect-type-ignore-comments = false

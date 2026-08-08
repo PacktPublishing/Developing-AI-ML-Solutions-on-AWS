@@ -1,10 +1,7 @@
 version: 0.2
 
-# Builds the scorecard's custom container natively on amd64 (the architecture
-# SageMaker training and endpoints run) and pushes it to ECR. This is the
-# Developer -> Git -> CodeBuild -> ECR leg of the pipeline: the image is built
-# in the cloud, not on a laptop, so an Apple-silicon machine never has to
-# cross-build under emulation.
+# Builds the scorecard's custom container natively on amd64 (the architecture SageMaker training and endpoints run) and pushes it to ECR.
+# The Developer -> Git -> CodeBuild -> ECR leg: built in the cloud, so an Apple-silicon machine never cross-builds under emulation.
 phases:
   pre_build:
     commands:

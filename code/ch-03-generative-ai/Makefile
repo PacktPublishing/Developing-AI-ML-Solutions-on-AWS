@@ -1,8 +1,11 @@
 .PHONY: up seed guardrail ask decide serve down lint test diagrams
 
-# The element scripts live in sub-folders but import the shared seam (models.py,
-# stores.py) from the chapter root, so the root is on the path.
-export PYTHONPATH := $(CURDIR)
+# The element scripts live under src/ but import the shared seam (models.py,
+# stores.py) as top-level modules, so src/ is on the path.
+SRC := $(CURDIR)/src
+export PYTHONPATH := $(SRC)
+
+COMPOSE := docker compose -f local/rag-stack.yml
 
 # Bedrock is the one cloud call and uses your real AWS credentials from the
 # default chain. Set BEDROCK_LOCAL=1 to run the models on Ollama instead.
@@ -19,45 +22,41 @@ Q ?= What DSCR floor applies to a solar project company?
 DEAL ?= GreenRoof Installers, a residential solar installer, seeks a 3.5 million US dollar term loan for working capital.
 
 up:
-	docker compose up -d --wait
+	$(COMPOSE) up -d --wait
 
 seed:
-	uv run knowledge-base/corpus.py
+	uv run src/knowledge-base/corpus.py
 
+# BEDROCK_LOCAL=1 exercises the local shim (no AWS); unset creates the managed
+# Bedrock guardrail on your account.
 guardrail:
-	uv run underwriting-agent/guardrails.py create
+	uv run src/underwriting-agent/guardrails.py $(if $(BEDROCK_LOCAL),local,create)
 
 ask:
-	uv run underwriting-agent/agent.py ask --query "$(Q)" --guardrail
+	uv run src/underwriting-agent/agent.py ask --query "$(Q)" --guardrail
 
 decide:
-	uv run underwriting-agent/agent.py decide --deal "$(DEAL)"
+	uv run src/underwriting-agent/agent.py decide --deal "$(DEAL)"
 
 # serve the agent on the AgentCore contract (POST /invocations on :8080);
 # same request shape locally and on the managed runtime
 serve:
-	uv run underwriting-agent/agent.py serve
+	uv run src/underwriting-agent/agent.py serve
 
 down:
-	docker compose down -v
+	$(COMPOSE) down -v
 
 lint:
-	uvx ruff format *.py knowledge-base/*.py underwriting-agent/*.py
-	uvx ruff check *.py knowledge-base/*.py underwriting-agent/*.py
+	uvx ruff format src/*.py src/knowledge-base/*.py src/underwriting-agent/*.py
+	uvx ruff check src/*.py src/knowledge-base/*.py src/underwriting-agent/*.py
 
 # Unit tests plus a pgvector round-trip. The pgvector test provisions its own
 # container with docker-py and stubs the embeddings, so it needs no cloud.
 test:
 	uv run --with pytest --with psycopg2-binary --with boto3 --with docker pytest tests/ -q
 
-# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac
-# (AWS diagram-as-code). AWS service icons are fetched from AWS at render time;
-# the custom icons (Strands, Lambda coin) are vendored under ../../assets/diagrams/icons/ as
-# SVG sources and declared in diagrams/defs/custom-icons.yaml, so the figures
-# reproduce from the repo. The icon PNGs awsdac consumes are (re)rendered from
-# those SVGs at ICON_HEIGHT px (needs librsvg's rsvg-convert). WIDTH sets output
-# pixel width (0 = awsdac native; raise it for print — awsdac stamps 72 dpi in
-# metadata regardless, so pixels are what matter).
+# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS diagram-as-code).
+# ICON_HEIGHT sizes the custom-icon PNGs (needs rsvg-convert); WIDTH sets output pixel width (0 = awsdac native).
 AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0

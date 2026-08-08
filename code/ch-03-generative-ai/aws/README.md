@@ -1,19 +1,17 @@
 # On AWS
 
-The chapter runs on your machine first. This folder takes it to real AWS: a smoke
-check of the Bedrock models, and a SAM stack in `assistant-api/` that deploys the
-whole assistant. Bedrock runs on real AWS in every chapter run too, since there
-is no local Bedrock; the offline path swaps in Ollama. `make smoke` tees its
-output to `/tmp` with the date.
+The chapter runs on your machine first. This folder takes it to real AWS: a SAM
+stack (`template.yaml`) that deploys the whole assistant. Bedrock runs on real
+AWS in every chapter run too, since there is no local Bedrock; the offline path
+swaps in Ollama.
 
 ```
 make check-account   # which account the runs use
-make smoke           # Titan embeddings + Qwen3 Converse on real Bedrock
 ```
 
 ## Deploy the assistant
 
-`assistant-api/` is a SAM application: Amazon RDS for PostgreSQL with pgvector as
+The SAM application (`template.yaml`) uses Amazon RDS for PostgreSQL with pgvector as
 the store and a Lambda, behind a function URL, that answers a question the same
 way the chapter does. The Lambda seeds itself on its first call, so one deploy
 leaves a working endpoint. RDS `db.t3.micro` is free-tier. Aurora is the scale-up,
@@ -21,7 +19,6 @@ but Aurora on a free-plan account needs an express configuration that
 CloudFormation does not yet expose, so the template uses plain RDS.
 
 ```
-cd assistant-api
 make deploy      # sync the knowledge base, sam build, then sam deploy
 make teardown    # when done
 ```
