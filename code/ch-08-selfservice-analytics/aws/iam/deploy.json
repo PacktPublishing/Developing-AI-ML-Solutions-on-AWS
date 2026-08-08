@@ -34,9 +34,13 @@
         "s3:GetBucketPolicy",
         "s3:PutEncryptionConfiguration",
         "s3:PutBucketVersioning",
-        "s3:PutBucketPublicAccessBlock"
+        "s3:PutBucketPublicAccessBlock",
+        "s3:DeleteBucket"
       ],
-      "Resource": "arn:aws:s3:::aws-sam-cli-managed-default*"
+      "Resource": [
+        "arn:aws:s3:::aws-sam-cli-managed-default*",
+        "arn:aws:s3:::ch08-source-*"
+      ]
     },
     {
       "Sid": "Warehouse",
@@ -51,7 +55,8 @@
         "redshift-serverless:GetWorkgroup",
         "redshift-serverless:UpdateWorkgroup",
         "redshift-serverless:ListTagsForResource",
-        "redshift-serverless:TagResource"
+        "redshift-serverless:TagResource",
+        "redshift-serverless:ListWorkgroups"
       ],
       "Resource": "*"
     },
@@ -63,7 +68,8 @@
         "redshift-data:DescribeStatement",
         "redshift-data:GetStatementResult",
         "redshift-data:CancelStatement",
-        "redshift-serverless:GetCredentials"
+        "redshift-serverless:GetCredentials",
+        "redshift-data:BatchExecuteStatement"
       ],
       "Resource": "*"
     },
@@ -74,7 +80,8 @@
         "secretsmanager:CreateSecret",
         "secretsmanager:DeleteSecret",
         "secretsmanager:DescribeSecret",
-        "secretsmanager:GetSecretValue"
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:GetRandomPassword"
       ],
       "Resource": "*"
     },
@@ -122,18 +129,15 @@
       "Sid": "Networking",
       "Effect": "Allow",
       "Action": [
-        "ec2:CreateSecurityGroup",
-        "ec2:DeleteSecurityGroup",
-        "ec2:DescribeSecurityGroups",
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:RevokeSecurityGroupIngress",
         "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:RevokeSecurityGroupEgress",
-        "ec2:DescribeVpcs",
-        "ec2:DescribeSubnets",
-        "ec2:DescribeNetworkInterfaces",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:CreateSecurityGroup",
         "ec2:CreateTags",
-        "ec2:DeleteTags"
+        "ec2:DeleteSecurityGroup",
+        "ec2:DeleteTags",
+        "ec2:Describe*",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress"
       ],
       "Resource": "*"
     },
@@ -165,7 +169,8 @@
         "iam:ListRolePolicies",
         "iam:ListAttachedRolePolicies",
         "iam:TagRole",
-        "iam:PassRole"
+        "iam:PassRole",
+        "iam:UntagRole"
       ],
       "Resource": "*"
     }

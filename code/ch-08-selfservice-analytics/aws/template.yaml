@@ -273,3 +273,8 @@ Outputs:
 
   ServiceName:
     Value: !Ref Service
+
+  # the task's role name: on Serverless the Data API runs the assistant's queries
+  # as the auto-mapped "IAMR:<this>" user, so provision grants and masks it too.
+  TaskRoleName:
+    Value: !Ref TaskRole

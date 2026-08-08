@@ -46,6 +46,20 @@ fi
 mkdir -p "$CLAUDE_CONFIG_DIR"
 # Claude Code's own colors, tuned for the light terminal.
 claude config set -g theme light 2>/dev/null || true
+# Kiosk deployment: pre-accept first-run onboarding so an analyst lands straight
+# at the prompt, not a welcome / theme / trust / bypass-mode gauntlet (the bypass
+# screen even defaults to "No, exit"). Merged into the per-user config.
+python3 - "$CLAUDE_CONFIG_DIR/.claude.json" <<'PY' 2>/dev/null || true
+import json, os, sys
+p = sys.argv[1]
+d = json.load(open(p)) if os.path.exists(p) else {}
+d["hasCompletedOnboarding"] = True
+d["bypassPermissionsModeAccepted"] = True
+proj = d.setdefault("projects", {}).setdefault("/app", {})
+proj["hasTrustDialogAccepted"] = True
+proj["hasCompletedProjectOnboarding"] = True
+json.dump(d, open(p, "w"))
+PY
 RESUME_ARGS=""
 if [ -d "$CLAUDE_CONFIG_DIR/projects" ] && [ -n "$(ls -A "$CLAUDE_CONFIG_DIR/projects" 2>/dev/null)" ]; then
   RESUME_ARGS="--continue"

@@ -39,7 +39,7 @@ source:
 # deploy: the whole stack -- Redshift Serverless, ECR, CodeBuild, ECS at desired 0
 deploy: secret source
 	sam deploy --stack-name $(STACK) --region $(REGION) --resolve-s3 \
-		--capabilities CAPABILITY_IAM \
+		--capabilities CAPABILITY_IAM --no-fail-on-empty-changeset \
 		--parameter-overrides VpcId=$(VPC) SubnetIds=$(SUBNETS) AllowedCidr=$(MYIP) \
 		ImageUri=$(IMAGE) SourceBucket=$(SOURCE_BUCKET)
 
@@ -56,12 +56,14 @@ image:
 
 seed:
 	REDSHIFT_WORKGROUP=$(WORKGROUP) REDSHIFT_DB_NAME=$(DB) REDSHIFT_REGION=$(REGION) \
-		uv run aws/seed.py
+		uv run --no-project seed.py
 
-# provision: the security model -- read-only IAM accounts + engine-side masking
+# provision: the security model -- read-only IAM accounts + engine-side masking.
+# TASK_ROLE lets provision grant and mask the assistant's own Data API identity
+# (IAMR:<task role>), not just the named bi_analyst account.
 provision:
 	REDSHIFT_WORKGROUP=$(WORKGROUP) REDSHIFT_DB_NAME=$(DB) REDSHIFT_REGION=$(REGION) \
-		bash ../config/provision.sh
+		TASK_ROLE=$(call output,TaskRoleName) bash ../config/provision.sh
 
 # scale the Fargate service to 1 for a session, back to 0 after (nothing bills parked)
 scale-up:
