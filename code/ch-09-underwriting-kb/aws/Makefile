@@ -63,7 +63,7 @@ image:
 deploy: secret
 	aws cloudformation deploy --region $(REGION) --stack-name $(STACK) \
 		--template-file template.yaml --no-fail-on-empty-changeset \
-		--capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+		--capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
 		--parameter-overrides ImageUri=$(IMAGE) MasterUserName=$(MASTER)
 
 # gen + seed: build the synthetic corpus, then embed it into the domain with the

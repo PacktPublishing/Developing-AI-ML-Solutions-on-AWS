@@ -16,8 +16,11 @@ Parameters:
     Default: kbadmin
 
   EngineVersion:
+
+    # 2.13+ enables the RAG (conversational search) pipeline feature by default;
+    # 2.11 leaves it off and OpenSearch Service will not let you set the flag.
     Type: String
-    Default: OpenSearch_2.11
+    Default: OpenSearch_2.17
 
   ImageUri:
     Description: ECR URI of the app image (built by the app-build stack)
@@ -74,6 +77,39 @@ Resources:
               AWS: '*'
             Action: es:ESHttp*
             Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/ch09-kb/*
+
+  # ---------------------------------------------------------------------------
+  # the RAG connector role: OpenSearch ml-commons assumes this to call Bedrock,
+  # so Dashboards conversational search can generate grounded answers in place.
+  # ---------------------------------------------------------------------------
+  RagRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ch09-rag-connector
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: opensearchservice.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/ch09-kb
+      Policies:
+        - PolicyName: invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:aws:bedrock:*::foundation-model/anthropic.*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
 
   # ---------------------------------------------------------------------------
   # the underwriter app: one FastAPI image, container Lambda via the Web Adapter
@@ -153,6 +189,10 @@ Outputs:
   AppUrl:
     Description: The underwriter app (ask/recommend) behind API Gateway
     Value: !Sub https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com
+
+  RagRoleArn:
+    Description: Role ml-commons assumes to call Bedrock for Dashboards RAG
+    Value: !GetAtt RagRole.Arn
 
   MasterUserName:
     Value: !Ref MasterUserName
