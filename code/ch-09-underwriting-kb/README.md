@@ -44,6 +44,11 @@ STORE=s3vectors  make up   && STORE=s3vectors  BEDROCK_LOCAL=1 make seed
 STORE=s3vectors  BEDROCK_LOCAL=1 make ask Q="..."
 ```
 
+With `STORE=opensearch`, **OpenSearch Dashboards** comes up at
+http://localhost:5601 — the same search UI Amazon OpenSearch Service hosts on the
+domain, so the browser experience is identical locally and on AWS. Open Discover
+on the `memo_chunks` index, or run a k-NN query in Dev Tools.
+
 Locally, S3 Vectors is a from-source shim over S3Proxy: each vector is one S3
 object and the query is a brute-force cosine scan, mirroring the real service's
 create_vector_bucket / create_index / put_vectors / query_vectors. Unset
