@@ -1,9 +1,11 @@
 # The underwriting knowledge base
 
-> **In progress.** The local retrieval path is built and verified against all
-> three stores — pgvector, OpenSearch, and S3 Vectors — with grounded answers and
-> citations. The AWS cloud round (Aurora, Amazon OpenSearch Service, S3 Vectors)
-> and the retrieval interface are still to come.
+The local retrieval path runs against all three stores — pgvector, OpenSearch,
+and S3 Vectors — with grounded answers and citations. The underwriter interface
+is a FastAPI ask/recommend app (`app/`) that runs under uvicorn locally and,
+unchanged, in a container Lambda behind API Gateway on AWS. The cloud round
+provisions the OpenSearch Service domain (with Dashboards) and the app; Aurora
+and S3 Vectors stay local stand-ins.
 
 The knowledge base the underwriting agent stands on: policy documents, credit
 reports, and past dossier memos, embedded with Bedrock and stored for retrieval,
@@ -80,8 +82,10 @@ create_vector_bucket / create_index / put_vectors / query_vectors. Unset
 - **Local stand-ins:** Ollama (Bedrock), pgvector Postgres (Aurora), OpenSearch
   in a container, a from-source shim over S3Proxy (S3 Vectors)
 
-## Still to come
+## The underwriter app
 
-- the retrieval **interface** (open: a small Lambda serving HTML through API
-  Gateway to Bedrock, versus an OpenSearch-backed search UI)
-- `aws/template.yaml` and the cloud round (Aurora, OpenSearch Service, S3 Vectors)
+`app/main.py` is one FastAPI service: it serves the ask/recommend page with
+`app.frontend()` and exposes `/ask` and `/cases`, reusing the retrieval seam.
+`make app` runs it under uvicorn on http://localhost:8080 over the selected
+store; the same image (with the AWS Lambda Web Adapter, see `Dockerfile`) runs in
+a container Lambda behind API Gateway on AWS. See `aws/` for the cloud round.

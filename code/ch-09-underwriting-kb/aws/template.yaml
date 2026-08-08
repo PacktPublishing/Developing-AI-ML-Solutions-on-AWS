@@ -126,6 +126,10 @@ Resources:
           OPENSEARCH_USER: !Ref MasterUserName
           OPENSEARCH_PASSWORD: '{{resolve:secretsmanager:ch09-os-master}}'
           BEDROCK_REGION: !Ref AWS::Region
+
+          # Generate with Claude on Bedrock (the account's enabled text model);
+          # embeddings stay on Titan v2. The AppRole allows anthropic.* profiles.
+          TEXT_MODEL: global.anthropic.claude-haiku-4-5-20251001-v1:0
       Events:
         Root:
           Type: HttpApi

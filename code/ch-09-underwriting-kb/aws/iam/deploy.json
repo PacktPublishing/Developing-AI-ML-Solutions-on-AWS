@@ -75,6 +75,7 @@
       "Action": ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:InvokeFunction", "lambda:AddPermission", "lambda:RemovePermission", "lambda:TagResource", "lambda:ListTags", "lambda:GetPolicy"],
       "Resource": "arn:aws:lambda:us-east-1:*:function:ch09-*"
     },
+    {"Sid": "LambdaList", "Effect": "Allow", "Action": "lambda:ListFunctions", "Resource": "*"},
     {
       "Sid": "ApiGateway",
       "Effect": "Allow",
