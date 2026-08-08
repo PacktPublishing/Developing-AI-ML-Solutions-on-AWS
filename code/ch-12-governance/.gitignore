@@ -1,0 +1,13 @@
+# local dev environments and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# generated data + demo outputs (reproduce from the generator script)
+outputs/
+data/generated/
+
+# sam local build output
+.aws-sam/
