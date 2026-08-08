@@ -16,7 +16,6 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from retrieve import ask_result, cases_result
@@ -57,8 +56,10 @@ def healthz() -> dict:
     return {"ok": True, "store": os.environ.get("STORE", "pgvector")}
 
 
-# Mount the frontend last so /ask and /cases win; html=True serves index.html at /.
-app.mount("/", StaticFiles(directory=STATIC, html=True), name="ui")
+# Serve the frontend build: FastAPI checks the path operations above first and
+# falls back to these files, so /ask and /cases win and everything else (a React
+# build or this single page) is served with SPA fallback -- no extra glue.
+app.frontend("/", directory=str(STATIC))
 
 
 if __name__ == "__main__":
