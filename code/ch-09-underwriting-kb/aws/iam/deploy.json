@@ -1,0 +1,50 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudFormation",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/ch09-*/*"
+    },
+    {
+      "Sid": "CloudFormationRead",
+      "Effect": "Allow",
+      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "OpenSearchDomain",
+      "Effect": "Allow",
+      "Action": "es:*",
+      "Resource": [
+        "arn:aws:es:us-east-1:*:domain/ch09-kb",
+        "arn:aws:es:us-east-1:*:domain/ch09-kb/*"
+      ]
+    },
+    {
+      "Sid": "OpenSearchServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/opensearchservice.amazonaws.com/*",
+      "Condition": {"StringEquals": {"iam:AWSServiceName": "opensearchservice.amazonaws.com"}}
+    },
+    {
+      "Sid": "MasterSecret",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:GetRandomPassword", "secretsmanager:TagResource"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockEmbedAndGenerate",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/amazon.*",
+        "arn:aws:bedrock:*::foundation-model/anthropic.*",
+        "arn:aws:bedrock:*:*:inference-profile/*"
+      ]
+    },
+    {"Sid": "BedrockSubscription", "Effect": "Allow", "Action": "aws-marketplace:ViewSubscriptions", "Resource": "*"}
+  ]
+}

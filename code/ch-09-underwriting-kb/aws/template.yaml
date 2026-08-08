@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  The underwriting knowledge base on Amazon OpenSearch Service: a single-node
+  domain with the k-NN plugin and OpenSearch Dashboards as the search UI. The
+  memos are embedded with Amazon Bedrock and indexed with the same code that
+  runs locally; only the endpoint changes. Fine-grained access control gates the
+  domain with a master user, so the endpoint is public but authenticated. This is
+  the smallest domain that runs the chapter; delete it when the round is done.
+
+Parameters:
+  AllowedCidr:
+    Description: Your IP as x.x.x.x/32; the domain's access policy opens to this only
+    Type: String
+
+  MasterUserName:
+    Description: Fine-grained-access-control master user for Dashboards and indexing
+    Type: String
+    Default: kbadmin
+
+  EngineVersion:
+    Type: String
+    Default: OpenSearch_2.11
+
+Resources:
+  Kb:
+
+    # Keep the domain and its data on stack delete; the round is ephemeral.
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      DomainName: ch09-kb
+      EngineVersion: !Ref EngineVersion
+
+      # Smallest single node that carries the demo corpus; no dedicated master,
+      # no zone awareness. gp3 with the default 10 GiB is ample for 500 memos.
+      ClusterConfig:
+        InstanceType: t3.small.search
+        InstanceCount: 1
+        DedicatedMasterEnabled: false
+        ZoneAwarenessEnabled: false
+      EBSOptions:
+        EBSEnabled: true
+        VolumeType: gp3
+        VolumeSize: 10
+
+      # Fine-grained access control requires all three of the following.
+      EncryptionAtRestOptions:
+        Enabled: true
+      NodeToNodeEncryptionOptions:
+        Enabled: true
+      DomainEndpointOptions:
+        EnforceHTTPS: true
+      AdvancedSecurityOptions:
+        Enabled: true
+        InternalUserDatabaseEnabled: true
+        MasterUserOptions:
+          MasterUserName: !Ref MasterUserName
+          MasterUserPassword: '{{resolve:secretsmanager:ch09-os-master}}'
+
+      # The public endpoint opens to one address; fine-grained access control
+      # then authenticates every request against the master user above.
+      AccessPolicies:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: es:*
+            Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/ch09-kb/*
+            Condition:
+              IpAddress:
+                aws:SourceIp: !Ref AllowedCidr
+
+Outputs:
+  DomainEndpoint:
+    Value: !GetAtt Kb.DomainEndpoint
+
+  DashboardsURL:
+    Description: Open this, sign in with the master user, and search the memo index
+    Value: !Sub https://${Kb.DomainEndpoint}/_dashboards/
+
+  MasterUserName:
+    Value: !Ref MasterUserName
