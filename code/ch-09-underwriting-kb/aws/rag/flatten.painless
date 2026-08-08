@@ -1,0 +1,4 @@
+String t = (String)(params.output.message.content[0].text);
+t = t.replace("" + (char)10, " ").replace("" + (char)13, " ").replace("" + (char)9, " ");
+t = t.replace("\\", "\\\\").replace("\"", "\\\"");
+return "{\"name\":\"response\",\"dataAsMap\":{\"response\":\"" + t + "\"}}";
