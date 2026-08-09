@@ -1,7 +1,7 @@
 # The local rollout stack: applications hit the flag-routing gateway, which asks the
 # real AWS AppConfig agent (a sidecar, the same image ECS uses) for the challenger_rollout
 # variant and routes each one to the champion (chapter 2's WOE scorecard) or the challenger
-# (monotone XGBoost). Widening the rollout is a flag edit; nothing in the app restarts.
+# (monotone CatBoost). Widening the rollout is a flag edit; nothing in the app restarts.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -49,7 +49,7 @@ Diagram:
     Challenger:
       Type: AWS::Diagram::Resource
       Preset: "Docker"
-      Title: "challenger\ncredit-challenger (XGBoost)"
+      Title: "challenger\ncredit-challenger (CatBoost)"
 
   Links:
     - {Source: Applications, SourcePosition: E, Target: Gateway, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

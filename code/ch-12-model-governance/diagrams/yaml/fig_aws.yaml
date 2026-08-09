@@ -1,0 +1,73 @@
+# The AWS rollout and governance stack: applications hit the Fargate gateway, whose
+# AppConfig agent sidecar reads the challenger_rollout flag from AWS AppConfig and routes
+# each application to the champion (credit-scorecard, WOE + LR) or the challenger
+# (credit-challenger, CatBoost) SageMaker endpoint. Widening the rollout is an AppConfig
+# deployment; the running service and the endpoints are untouched. SageMaker Model Cards,
+# the Model Registry (champion Approved, challenger pending), and ML Lineage hold the
+# audit record for the two models.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Applications, Cloud]
+
+    Applications:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "applications\n(loanId + features)"
+
+    Cloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "AWS"
+      Children: [RolloutColumn, Endpoints, Governance]
+
+    RolloutColumn:
+      Type: AWS::Diagram::VerticalStack
+      Children: [AppConfig, Agent, Gateway]
+    AppConfig:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS AppConfig"
+      Title: "AWS AppConfig\nchallenger_rollout flag"
+    Agent:
+      Type: AWS::Diagram::Resource
+      Preset: "AppConfigAgent"
+      Title: "AppConfig agent (sidecar)\nevaluates the split"
+    Gateway:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "rollout gateway\nFastAPI, flag-routed"
+
+    Endpoints:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Champion, Challenger]
+    Champion:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker"
+      Title: "champion endpoint\ncredit-scorecard (WOE + LR)"
+    Challenger:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker"
+      Title: "challenger endpoint\ncredit-challenger (CatBoost)"
+
+    Governance:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker"
+      Title: "SageMaker governance\nModel Cards, Registry, Lineage"
+
+  Links:
+    - {Source: Applications, SourcePosition: E, Target: Gateway, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: AppConfig, SourcePosition: S, Target: Agent, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Agent, SourcePosition: S, Target: Gateway, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: E, Target: Champion, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: E, Target: Challenger, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Champion, SourcePosition: E, Target: Governance, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Challenger, SourcePosition: E, Target: Governance, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
