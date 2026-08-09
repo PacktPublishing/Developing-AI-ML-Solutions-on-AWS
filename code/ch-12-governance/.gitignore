@@ -11,3 +11,6 @@ data/generated/
 
 # sam local build output
 .aws-sam/
+
+# generated application batch
+data/applications.jsonl
