@@ -1,0 +1,23 @@
+artifact_path: /Users/deburky/Documents/Git/Developing-AI-ML-Solutions-on-AWS/code/ch-11-monitoring/mlruns/0/models/m-bb53ab140ab1488eb5863deb33698ba2/artifacts
+flavors:
+  python_function:
+    artifacts:
+      psi_detector:
+        path: artifacts/psi.json
+        uri: /var/folders/9z/mqb8801s7gx12kpdms91vg800000gn/T/tmpmzo0b2sy/psi.json
+    cloudpickle_version: 3.1.2
+    code: null
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.pyfunc.model
+    python_model: python_model.pkl
+    python_version: 3.12.13
+    streamable: false
+mlflow_version: 3.15.1
+model_id: m-bb53ab140ab1488eb5863deb33698ba2
+model_size_bytes: 31074
+model_uuid: m-bb53ab140ab1488eb5863deb33698ba2
+prompts: null
+run_id: afbf3d6efe4541ada39c8b651938c5a0
+utc_time_created: '2026-08-09 16:00:07.996659'

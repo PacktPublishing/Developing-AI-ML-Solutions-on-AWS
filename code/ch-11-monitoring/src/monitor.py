@@ -3,12 +3,14 @@
 # ///
 """The drift monitors: Population Stability Index and SHAP attribution drift.
 
-PSI compares a current distribution to the reference the model was trained on, per
-feature and on the score itself: < 0.1 stable, 0.1-0.25 moderate, > 0.25 major.
-The attribution monitor mirrors SageMaker Clarify's feature-attribution drift: it
-ranks features by mean absolute SHAP contribution and reports the NDCG between the
-reference ranking and the current one (1.0 = unchanged). run() returns the metrics
-and the violations a monitoring schedule would raise.
+PSI compares a current distribution to the reference the model was trained on: < 0.1
+stable, 0.1-0.25 moderate, > 0.25 major. Features are binned the ML way -- at the
+scorecard's own CatBoost split borders (see psi.py), so PSI measures drift across the
+boundaries the model actually uses -- while the score, which has no model borders, is
+binned into reference quantiles. The attribution monitor mirrors SageMaker Clarify's
+feature-attribution drift: it ranks features by mean absolute SHAP contribution and
+reports the NDCG between the reference ranking and the current one (1.0 = unchanged).
+run() returns the metrics and the violations a monitoring schedule would raise.
 
 Usage:
   uv run src/monitor.py --reference data/generated/reference.csv --current data/generated/current.csv
@@ -22,34 +24,9 @@ import numpy as np
 import pandas as pd
 from catboost import Pool
 from model import CATEGORICAL, FEATURES, NUMERIC, load, score
+from psi import PSI_MAJOR, PSIDetector
 
-PSI_MAJOR = 0.25
 NDCG_MIN = 0.90
-
-
-def _psi(ref_pct: np.ndarray, cur_pct: np.ndarray) -> float:
-    """Return the Population Stability Index between two binned distributions."""
-    eps = 1e-6
-    ref_pct = np.clip(ref_pct, eps, None)
-    cur_pct = np.clip(cur_pct, eps, None)
-    return float(np.sum((cur_pct - ref_pct) * np.log(cur_pct / ref_pct)))
-
-
-def numeric_psi(ref: pd.Series, cur: pd.Series, bins: int = 10) -> float:
-    """PSI for a numeric column, binned by the reference deciles."""
-    edges = np.unique(np.quantile(ref, np.linspace(0, 1, bins + 1)))
-    edges[0], edges[-1] = -np.inf, np.inf
-    ref_pct = np.histogram(ref, edges)[0] / len(ref)
-    cur_pct = np.histogram(cur, edges)[0] / len(cur)
-    return _psi(ref_pct, cur_pct)
-
-
-def categorical_psi(ref: pd.Series, cur: pd.Series) -> float:
-    """PSI for a categorical column, over the union of categories."""
-    cats = sorted(set(ref) | set(cur))
-    ref_pct = np.array([(ref == c).mean() for c in cats])
-    cur_pct = np.array([(cur == c).mean() for c in cats])
-    return _psi(ref_pct, cur_pct)
 
 
 def _attributions(model, df: pd.DataFrame) -> pd.Series:
@@ -81,32 +58,31 @@ def run(
     current_scores lets the caller pass the live scores from a Batch Transform job;
     when omitted the monitor scores the current batch itself.
     """
-    metrics: dict = {"feature_psi": {}}
-    violations = []
     if current_scores is None:
         current_scores = score(model, current)
+    metrics: dict = {"feature_psi": {}}
+    violations = []
 
-    for col in FEATURES:
-        psi = (
-            numeric_psi(reference[col], current[col])
-            if col in NUMERIC
-            else categorical_psi(reference[col], current[col])
-        )
-        metrics["feature_psi"][col] = round(psi, 3)
-        if psi > PSI_MAJOR:
+    # Feature PSI the ML way: bin each feature at the model's own split borders.
+    detector = PSIDetector.from_catboost(model, reference, NUMERIC, CATEGORICAL)
+    metrics["feature_psi"] = detector.psi(current)
+    for col, value in metrics["feature_psi"].items():
+        if value > PSI_MAJOR:
             violations.append(
                 {
                     "monitor": "data-quality",
                     "feature": col,
                     "metric": "psi",
-                    "value": round(psi, 3),
+                    "value": value,
                     "threshold": PSI_MAJOR,
                 }
             )
 
-    metrics["score_psi"] = round(
-        numeric_psi(score(model, reference), current_scores), 3
-    )
+    # Score PSI: the score has no model borders, so bin it into reference quantiles.
+    score_ref = pd.DataFrame({"score": score(model, reference)})
+    metrics["score_psi"] = PSIDetector.from_reference(score_ref, ["score"]).psi(
+        pd.DataFrame({"score": current_scores})
+    )["score"]
     if metrics["score_psi"] > PSI_MAJOR:
         violations.append(
             {

@@ -1,4 +1,4 @@
-.PHONY: data train monitor run lint diagrams clean
+.PHONY: data train monitor run lint test diagrams clean
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
@@ -31,6 +31,10 @@ run:
 
 lint:
 	uvx ruff check .
+
+# the PSIDetector unit tests: quantile vs model-border bins, and JSON round-trip
+test:
+	uv run --with pytest --with catboost --with pandas --with numpy pytest tests/ -q
 
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS icons fetched at render time, custom icons from shared assets/diagrams/).
 # Icon PNGs are re-rendered from SVG at ICON_HEIGHT (needs rsvg-convert); WIDTH sets output pixel width (0 = awsdac native).
