@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  ch-12 governance stack: the AWS AppConfig application, environment, and feature-flag
+  configuration that drives the champion/challenger rollout, plus the ECR repository for
+  the gateway image. The challenger_rollout flag carries the same split rule the local
+  agent evaluates; the AppConfig agent sidecar on the Fargate service reads it here. Flip
+  the rollout by updating RolloutPct and redeploying the stack (a new configuration
+  version and deployment); the running service is untouched.
+
+Parameters:
+  RolloutPct:
+    Description: percent of applications routed to the challenger
+    Type: Number
+    Default: 20
+    MinValue: 0
+    MaxValue: 100
+
+Resources:
+
+  # The gateway image. EmptyOnDelete lets the stack delete cleanly with images pushed.
+  GatewayRepo:
+    DeletionPolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch12-rollout-gateway
+      EmptyOnDelete: true
+
+  Application:
+    Type: AWS::AppConfig::Application
+    Properties:
+      Name: credit-governance
+
+  Environment:
+    Type: AWS::AppConfig::Environment
+    Properties:
+      ApplicationId: !Ref Application
+      Name: prod
+
+  Profile:
+    Type: AWS::AppConfig::ConfigurationProfile
+    Properties:
+      ApplicationId: !Ref Application
+      Name: rollout
+      LocationUri: hosted
+      Type: AWS.AppConfig.FeatureFlags
+
+  # The feature-flag document in the AWS.AppConfig.FeatureFlags schema. $loanId is an
+  # AppConfig context variable (no braces, so Sub leaves it alone); RolloutPct is injected.
+  ConfigVersion:
+    Type: AWS::AppConfig::HostedConfigurationVersion
+    Properties:
+      ApplicationId: !Ref Application
+      ConfigurationProfileId: !Ref Profile
+      ContentType: application/json
+
+      # A flag value that uses _variants must NOT carry a top-level "enabled" (that trips
+      # the StrictVariants check); enabled goes on each variant. challenger overrides the
+      # model for its split segment, champion is the complement (no override), default is
+      # the required catch-all (unreachable, since split and not-split are exhaustive).
+      Content: !Sub |
+        {
+          "version": "1",
+          "flags": {
+            "challenger_rollout": {
+              "name": "challenger_rollout",
+              "description": "Route a share of applications to the challenger model.",
+              "attributes": { "model": { "constraints": { "type": "string", "required": false } } }
+            }
+          },
+          "values": {
+            "challenger_rollout": {
+              "_variants": [
+                {
+                  "name": "challenger",
+                  "enabled": true,
+                  "rule": "(split by::$loanId pct::${RolloutPct} seed::\"rollout-2026\")",
+                  "attributeValues": { "model": "credit-challenger" }
+                },
+                {
+                  "name": "champion",
+                  "enabled": true,
+                  "rule": "(not (split by::$loanId pct::${RolloutPct} seed::\"rollout-2026\"))"
+                },
+                {
+                  "name": "default",
+                  "enabled": true
+                }
+              ]
+            }
+          }
+        }
+
+  # Immediate rollout: this is a routing flag, not a risky binary, so deploy all at once.
+  DeploymentStrategy:
+    Type: AWS::AppConfig::DeploymentStrategy
+    Properties:
+      Name: ch12-all-at-once
+      DeploymentDurationInMinutes: 0
+      GrowthFactor: 100
+      FinalBakeTimeInMinutes: 0
+      ReplicateTo: NONE
+
+  Deployment:
+    Type: AWS::AppConfig::Deployment
+    Properties:
+      ApplicationId: !Ref Application
+      EnvironmentId: !Ref Environment
+      ConfigurationProfileId: !Ref Profile
+      ConfigurationVersion: !Ref ConfigVersion
+      DeploymentStrategyId: !Ref DeploymentStrategy
+
+Outputs:
+  ApplicationId:
+    Description: the AppConfig application id (for the agent sidecar)
+    Value: !Ref Application
+
+  RepositoryUri:
+    Description: the ECR repository for the gateway image
+    Value: !GetAtt GatewayRepo.RepositoryUri
