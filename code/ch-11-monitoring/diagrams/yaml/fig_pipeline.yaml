@@ -23,8 +23,11 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Children: [ECR, Transform, Monitor, Sinks]
+      Children: [ScoreColumn, Monitor, Sinks]
 
+    ScoreColumn:
+      Type: AWS::Diagram::VerticalStack
+      Children: [ECR, Transform]
     ECR:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Elastic Container Registry (Amazon ECR)"
