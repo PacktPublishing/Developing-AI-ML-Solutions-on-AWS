@@ -51,23 +51,24 @@ Diagram:
       Children: [Champion, Challenger]
     Champion:
       Type: AWS::Diagram::Resource
-      Preset: "Amazon SageMaker"
+      Preset: "Amazon SageMaker AI"
       Title: "champion endpoint\ncredit-scorecard (WOE + LR)"
     Challenger:
       Type: AWS::Diagram::Resource
-      Preset: "Amazon SageMaker"
+      Preset: "Amazon SageMaker AI"
       Title: "challenger endpoint\ncredit-challenger (CatBoost)"
 
     Governance:
       Type: AWS::Diagram::Resource
-      Preset: "Amazon SageMaker"
+      Preset: "Amazon SageMaker AI"
       Title: "SageMaker governance\nModel Cards, Registry, Lineage"
 
+  # The gateway routes to each endpoint; the endpoint group as a whole is recorded in
+  # governance (one link from the stack, so no two lines cross).
   Links:
     - {Source: Applications, SourcePosition: E, Target: Gateway, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: AppConfig, SourcePosition: S, Target: Agent, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Agent, SourcePosition: S, Target: Gateway, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Gateway, SourcePosition: E, Target: Champion, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Gateway, SourcePosition: E, Target: Challenger, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Champion, SourcePosition: E, Target: Governance, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Challenger, SourcePosition: E, Target: Governance, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Endpoints, SourcePosition: E, Target: Governance, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
