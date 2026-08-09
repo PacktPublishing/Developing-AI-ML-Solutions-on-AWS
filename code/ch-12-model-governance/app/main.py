@@ -23,7 +23,7 @@ from fastapi import Depends, FastAPI
 from pydantic import BaseModel, ConfigDict
 
 from appconfig import get_appconfig
-from models import http_scorer
+from models import get_scorer
 from router import Router
 
 app = FastAPI(title="Credit rollout gateway")
@@ -34,7 +34,7 @@ def get_router() -> Router:
     """Build the router once: the flag client plus the model-scoring seam."""
     global _router
     if _router is None:
-        _router = Router(get_appconfig(), http_scorer())
+        _router = Router(get_appconfig(), get_scorer())
     return _router
 
 

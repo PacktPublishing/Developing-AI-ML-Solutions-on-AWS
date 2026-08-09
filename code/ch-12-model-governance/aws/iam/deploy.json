@@ -67,6 +67,12 @@
       "Resource": ["arn:aws:ecr:us-east-1:*:repository/ch12-*"]
     },
     {
+      "Sid": "CodeBuild",
+      "Effect": "Allow",
+      "Action": ["codebuild:CreateProject", "codebuild:UpdateProject", "codebuild:DeleteProject", "codebuild:StartBuild", "codebuild:BatchGetBuilds", "codebuild:BatchGetProjects"],
+      "Resource": "arn:aws:codebuild:us-east-1:*:project/ch12-*"
+    },
+    {
       "Sid": "EcrLogin",
       "Effect": "Allow",
       "Action": "ecr:GetAuthorizationToken",

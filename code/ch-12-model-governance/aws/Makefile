@@ -1,4 +1,4 @@
-.PHONY: iam deploy flip teardown
+.PHONY: iam image deploy flip teardown
 
 # The governance round on AWS: AppConfig drives the rollout, the AppConfig agent sidecar
 # on a Fargate gateway reads it, and SageMaker holds the model cards, registry, and
@@ -19,6 +19,27 @@ iam:
 		|| aws iam update-assume-role-policy --role-name ch12-user --policy-document '$(TRUST)'
 	aws iam put-role-policy --role-name ch12-user --policy-name deploy --policy-document file://iam/deploy.json
 	@echo "ch12-user ready: arn:aws:iam::$(ACCOUNT):role/ch12-user"
+
+# -------------------------------------------------------------------------------
+# image: build the two model images in the cloud (CodeBuild -> ECR), natively on amd64
+# -------------------------------------------------------------------------------
+# build.yaml creates the source bucket, the two ECR repos, and the CodeBuild project;
+# then zip chapter 2's scorecard + challenger contexts with buildspec.yml at the root,
+# upload, run the build, and poll to SUCCEEDED.
+BUILD_STACK := ch12-image-build
+image:
+	aws cloudformation deploy --template-file build.yaml --stack-name $(BUILD_STACK) --capabilities CAPABILITY_IAM
+	rm -f /tmp/ch12-src.zip
+	cd ../../ch-02-mlops/src && zip -qr /tmp/ch12-src.zip scorecard challenger -x '*__pycache__*'
+	zip -qj /tmp/ch12-src.zip buildspec.yml
+	@BUCKET=$$(aws cloudformation describe-stacks --stack-name $(BUILD_STACK) \
+			--query "Stacks[0].Outputs[?OutputKey=='SourceBucket'].OutputValue" --output text); \
+		aws s3 cp /tmp/ch12-src.zip s3://$$BUCKET/src.zip; \
+		ID=$$(aws codebuild start-build --project-name ch12-models-build --query 'build.id' --output text); \
+		echo "build $$ID"; \
+		while STATUS=$$(aws codebuild batch-get-builds --ids $$ID --query 'builds[0].buildStatus' --output text); \
+			[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
+			echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
 
 # -------------------------------------------------------------------------------
 # deploy: AppConfig (application, environment, feature-flag config) + the ECR repo

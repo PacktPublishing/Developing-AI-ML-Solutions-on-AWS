@@ -35,7 +35,9 @@ class Router:
         flag = self._appconfig.configuration({"loanId": str(loan["loanId"])})[
             ROLLOUT_FLAG
         ]
-        model = flag["model"]
+        # only the challenger variant overrides the model; champion is the default, so an
+        # absent model means champion (the AppConfig way: one variant sets the attribute).
+        model = flag.get("model", "credit-scorecard")
         pd = self._score(model, loan)
         return {
             "loanId": loan["loanId"],

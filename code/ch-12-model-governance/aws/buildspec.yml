@@ -1,0 +1,17 @@
+version: 0.2
+
+# Builds chapter 2's champion (scorecard) and challenger serving images natively on amd64
+# in CodeBuild and pushes both to ECR. The two source directories sit at the zip root
+# beside this file; ECR_REGISTRY and the two image URIs come from the CodeBuild project env.
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  build:
+    commands:
+      - docker build -t "$CHAMPION_URI" scorecard/
+      - docker build -t "$CHALLENGER_URI" challenger/
+  post_build:
+    commands:
+      - docker push "$CHAMPION_URI"
+      - docker push "$CHALLENGER_URI"

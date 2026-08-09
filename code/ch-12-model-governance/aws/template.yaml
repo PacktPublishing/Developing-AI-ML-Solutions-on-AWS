@@ -110,10 +110,105 @@ Resources:
       ConfigurationVersion: !Ref ConfigVersion
       DeploymentStrategyId: !Ref DeploymentStrategy
 
+  # The two models the gateway routes between: chapter 2's scorecard and challenger, each
+  # on its serving image behind a Serverless Inference endpoint. Deployed once and never
+  # touched; only the AppConfig flag moves, so a rollout is not a redeploy.
+  EndpointRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: serve
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:aws:s3:::sagemaker-${AWS::Region}-${AWS::AccountId}/ch12/*
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/ch12-*
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
+
+  ChampionModel:
+    Type: AWS::SageMaker::Model
+    Properties:
+      ExecutionRoleArn: !GetAtt EndpointRole.Arn
+      PrimaryContainer:
+        Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-champion:latest
+        ModelDataUrl: !Sub s3://sagemaker-${AWS::Region}-${AWS::AccountId}/ch12/champion/model.tar.gz
+        Mode: SingleModel
+
+  ChallengerModel:
+    Type: AWS::SageMaker::Model
+    Properties:
+      ExecutionRoleArn: !GetAtt EndpointRole.Arn
+      PrimaryContainer:
+        Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-challenger:latest
+        ModelDataUrl: !Sub s3://sagemaker-${AWS::Region}-${AWS::AccountId}/ch12/challenger/model.tar.gz
+        Mode: SingleModel
+
+  ChampionEndpointConfig:
+    Type: AWS::SageMaker::EndpointConfig
+    Properties:
+      ProductionVariants:
+        - VariantName: main
+          ModelName: !GetAtt ChampionModel.ModelName
+          ServerlessConfig:
+            MemorySizeInMB: 3072
+            MaxConcurrency: 2
+
+  ChallengerEndpointConfig:
+    Type: AWS::SageMaker::EndpointConfig
+    Properties:
+      ProductionVariants:
+        - VariantName: main
+          ModelName: !GetAtt ChallengerModel.ModelName
+          ServerlessConfig:
+            MemorySizeInMB: 3072
+            MaxConcurrency: 2
+
+  ChampionEndpoint:
+    Type: AWS::SageMaker::Endpoint
+    Properties:
+      EndpointName: ch12-champion
+      EndpointConfigName: !GetAtt ChampionEndpointConfig.EndpointConfigName
+
+  ChallengerEndpoint:
+    Type: AWS::SageMaker::Endpoint
+    Properties:
+      EndpointName: ch12-challenger
+      EndpointConfigName: !GetAtt ChallengerEndpointConfig.EndpointConfigName
+
 Outputs:
   ApplicationId:
     Description: the AppConfig application id (for the agent sidecar)
     Value: !Ref Application
+
+  ChampionEndpoint:
+    Description: the champion (credit-scorecard) endpoint
+    Value: !GetAtt ChampionEndpoint.EndpointName
+
+  ChallengerEndpoint:
+    Description: the challenger (credit-challenger) endpoint
+    Value: !GetAtt ChallengerEndpoint.EndpointName
 
   RepositoryUri:
     Description: the ECR repository for the gateway image
