@@ -1,18 +1,22 @@
-"""The feature-flag seam: AWS AppConfig on AWS, a local flag store from source.
+"""The feature-flag seam: the AWS AppConfig agent, or the from-source evaluator.
 
 get_appconfig() returns a client whose configuration(context) yields the evaluated
-feature flags for that request. On AWS it fetches the raw configuration through the
-AppConfig management API -- which keeps the _variants the rule engine needs -- and
-evaluates the variant rules in process, exactly as the AppConfig agent sidecar would;
-locally it reads the same feature-flag document from a file. Rule evaluation, including
-the FNV-1a split that buckets each request, is rule_evaluator.py, composed from source.
+feature flags for a request. The authoritative path is the real AWS AppConfig agent
+(AgentAppConfig): the same published agent image runs as a sidecar locally and on ECS,
+so the split buckets every loan identically in both worlds. AppConfig (with a flag
+store) is the from-source reference: it evaluates the variant rules in process with
+rule_evaluator.py, useful for the non-split logic and for running without Docker. Note
+that the reference evaluator's split is not bit-identical to the agent's, which is why
+the rollout decision runs through the agent.
 
-Env: APPCONFIG_LOCAL=1 -> local flag store; APPCONFIG_FLAGS -> the local file;
-     APPCONFIG_APP / APPCONFIG_PROFILE and AWS_REGION for the AWS path.
+Env: APPCONFIG_AGENT_URL -> query the agent (with APPCONFIG_APP / APPCONFIG_ENV /
+     APPCONFIG_PROFILE); APPCONFIG_LOCAL=1 -> the from-source evaluator over a local
+     file (APPCONFIG_FLAGS); otherwise the AppConfig management API.
 """
 
 import json
 import os
+import urllib.request
 from pathlib import Path
 
 from .rule_evaluator import evaluate_config
@@ -68,10 +72,10 @@ class AppConfigStore:
 
 
 class AppConfig:
-    """A flag source plus per-request rule evaluation."""
+    """The from-source reference: a flag store plus in-process rule evaluation."""
 
     def __init__(self, store) -> None:
-        """Wrap a flag store (local file or AppConfig)."""
+        """Wrap a flag store (local file or AppConfig management API)."""
         self._store = store
 
     def configuration(self, context: dict) -> dict:
@@ -79,14 +83,42 @@ class AppConfig:
         return evaluate_config(self._store.raw(), context)
 
 
-def get_appconfig() -> AppConfig:
-    """Return the feature-flag client: the local flag store, or real AppConfig."""
+class AgentAppConfig:
+    """The authoritative path: query the AWS AppConfig agent, which evaluates the rules."""
+
+    def __init__(
+        self, base_url: str, application: str, environment: str, profile: str
+    ) -> None:
+        """Build the agent's configuration URL for one application/environment/profile."""
+        self._url = (
+            f"{base_url.rstrip('/')}/applications/{application}"
+            f"/environments/{environment}/configurations/{profile}"
+        )
+
+    def configuration(self, context: dict) -> dict:
+        """Ask the agent for the evaluated flags, passing the context it buckets on."""
+        header = "&".join(f"{k}={v}" for k, v in context.items())
+        req = urllib.request.Request(self._url, headers={"Context": header})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+
+
+def get_appconfig():
+    """Return the feature-flag client: the agent, the local evaluator, or management API."""
+    agent = os.environ.get("APPCONFIG_AGENT_URL")
+    if agent:
+        return AgentAppConfig(
+            agent,
+            os.environ.get("APPCONFIG_APP", "credit-governance"),
+            os.environ.get("APPCONFIG_ENV", "local"),
+            os.environ.get("APPCONFIG_PROFILE", "rollout"),
+        )
     if os.environ.get("APPCONFIG_LOCAL") == "1":
         path = os.environ.get("APPCONFIG_FLAGS", "local/flags/feature-flags.json")
         return AppConfig(LocalFlagStore(path))
     return AppConfig(
         AppConfigStore(
             application=os.environ.get("APPCONFIG_APP", "credit-governance"),
-            profile=os.environ.get("APPCONFIG_PROFILE", "rollout-flags"),
+            profile=os.environ.get("APPCONFIG_PROFILE", "rollout"),
         )
     )

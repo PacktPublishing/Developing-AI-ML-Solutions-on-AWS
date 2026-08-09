@@ -14,3 +14,6 @@ data/generated/
 
 # generated application batch
 data/applications.jsonl
+
+# generated Ion config for the local agent (regenerated from the flag JSON)
+local/agent-configs/

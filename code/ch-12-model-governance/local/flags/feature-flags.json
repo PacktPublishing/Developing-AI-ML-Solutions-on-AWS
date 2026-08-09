@@ -7,7 +7,7 @@
       {
         "name": "challenger",
         "enabled": true,
-        "rule": "(split by:: $loanId pct::20 seed:: \"rollout-2026\")",
+        "rule": "(split by::$loanId pct::20 seed::\"rollout-2026\")",
         "attributeValues": {
           "model": "credit-challenger"
         }

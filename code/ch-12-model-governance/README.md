@@ -15,10 +15,12 @@ shipped without a redeploy.
   see what a model is, how it was built, and what it was trained on.
 - **Least-privilege IAM** for the security review.
 
-AppConfig runs locally from source: the rule evaluator (S-expression rules and the
-FNV-1a `split` bucketing) is byte-identical to the reverse-engineered AppConfig agent, so
-a loan buckets the same locally and under the real agent on AWS, so the rollout has true
-local/cloud parity.
+The rollout runs the **real AWS AppConfig agent**: the same published agent image is the
+sidecar locally (in local development mode, reading an Ion feature-flag file) and on ECS
+(fetching from AppConfig), so the `split` buckets every loan identically in both worlds by
+construction. The from-source rule evaluator in `src/appconfig/` is a reference for the
+non-split logic and for running without Docker; its `split` is close but not bit-identical
+to the agent's, which is why the rollout decision goes through the agent.
 
 ## Run it locally
 
@@ -26,19 +28,20 @@ Train chapter 2's two models first (`make train` and `make train-challenger` in
 `../ch-02-mlops`); the gateway routes to those serving images.
 
 ```
-make up                 # champion + challenger + the flag-routing gateway (:8080)
+make up                 # the AppConfig agent + champion + challenger + gateway (:8080)
 make apps               # a batch of applications (chapter 2's held-out set)
 make score              # route the batch; see the champion/challenger split
-make flip PCT=50        # widen the rollout with nothing restarted
+make flip PCT=50        # widen the rollout; the gateway and models never restart
 make score              # the split has shifted
 make govern             # write the model cards, registry, and lineage
 make down
 ```
 
-Verified end to end against the real models: 20% → champion 234 / challenger 66, flip
-50% → 158 / 142, flip 100% → all challenger, roll back 20% → 234 / 66 (deterministic per
-loan). The challenger genuinely beats the incumbent on the held-out set (AUC 0.8825 vs
-0.8625), which is why it ships behind a flag rather than all at once.
+Verified end to end against the real models, routed by the real agent: 20% gives champion
+238 / challenger 62, flip 50% gives 140 / 160, flip 100% gives all challenger, roll back
+20% gives 238 / 62 (deterministic per loan). The challenger beats the incumbent on the
+held-out set (AUC 0.8825 vs 0.8625), which is why it ships behind a flag rather than all
+at once.
 
 ## Layout
 

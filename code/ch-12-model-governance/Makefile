@@ -2,10 +2,11 @@
 
 COMPOSE := docker compose -f local/compose.yml
 
-# bring up the two chapter-2 models + the flag-routing gateway (champion, challenger, gateway)
+# bring up the AppConfig agent, the two chapter-2 models, and the flag-routing gateway
 up:
+	uv run etl/to_ion.py
 	$(COMPOSE) up -d --build --wait
-	@echo "gateway on :8080 -- champion + challenger behind the challenger_rollout flag"
+	@echo "gateway on :8080; champion + challenger behind the challenger_rollout flag (agent-evaluated)"
 
 # a batch of applications to route (reuses chapter 2's held-out set)
 apps:
@@ -15,9 +16,13 @@ apps:
 score:
 	uv run etl/score.py data/applications.jsonl
 
-# widen the rollout with no restart, e.g. make flip PCT=50
+# widen the rollout, e.g. make flip PCT=50. Locally the agent reads the Ion file once at
+# startup, so we nudge the sidecar to re-read it; the gateway and models never restart.
+# On AWS the agent polls the AppConfig service, so a deployed flag needs no nudge at all.
 flip:
 	uv run etl/flip.py $(PCT)
+	uv run etl/to_ion.py
+	$(COMPOSE) restart appconfig-agent
 
 # the auditor's record: model cards, the registry, and lineage from governance/models.json
 govern:

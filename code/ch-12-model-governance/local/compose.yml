@@ -1,9 +1,17 @@
-# The local rollout stack: the two chapter-2 models behind the flag-routing gateway.
-# champion (WOE scorecard) and challenger (monotone XGBoost) are chapter 2's own
-# serving images, each mounting its trained artifact; the gateway routes between them
-# by the challenger_rollout flag, read from the mounted flag store on every request --
-# so `make flip` widens the rollout with nothing restarted.
+# The local rollout stack: the two chapter-2 models behind the flag-routing gateway,
+# with the real AWS AppConfig agent as the flag source. champion (WOE scorecard) and
+# challenger (monotone XGBoost) are chapter 2's own serving images; the agent is the
+# published image in local development mode, reading the Ion feature-flag file so it
+# evaluates the split exactly as it does on ECS. The gateway asks the agent for the
+# variant per request, so `make flip` widens the rollout with nothing restarted.
 services:
+  appconfig-agent:
+    image: public.ecr.aws/aws-appconfig/aws-appconfig-agent:2.x
+    environment:
+      LOCAL_DEVELOPMENT_DIRECTORY: /configs
+    volumes:
+      - ./agent-configs:/configs:ro
+
   champion:
     image: ch02-scorecard:latest
     command: serve
@@ -21,14 +29,15 @@ services:
       context: ..
       dockerfile: Dockerfile
     environment:
-      APPCONFIG_LOCAL: "1"
-      APPCONFIG_FLAGS: /app/flags/feature-flags.json
+      APPCONFIG_AGENT_URL: http://appconfig-agent:2772
+      APPCONFIG_APP: credit-governance
+      APPCONFIG_ENV: local
+      APPCONFIG_PROFILE: rollout
       CHAMPION_URL: http://champion:8080/invocations
       CHALLENGER_URL: http://challenger:8080/invocations
-    volumes:
-      - ./flags:/app/flags:ro
     ports:
       - "8080:8080"
     depends_on:
       - champion
       - challenger
+      - appconfig-agent
