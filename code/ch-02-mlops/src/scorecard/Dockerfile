@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir \
     "boto3>=1.34"
 
 WORKDIR /opt/program
-COPY scorecard_model.py train.py serve.py mlflow_pyfunc.py entrypoint.sh ./
+COPY scorecard_model.py train.py serve.py entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
 # /opt/program on PATH so `serve`/`train` resolve; unbuffered logs stream to

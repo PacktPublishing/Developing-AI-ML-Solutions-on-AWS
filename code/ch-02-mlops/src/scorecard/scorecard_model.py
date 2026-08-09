@@ -1,6 +1,10 @@
-"""The scorecard model, shared by training and serving.
+"""The scorecard model: a scikit-learn WOE + logistic-regression pipeline.
 
-A Weight-of-Evidence logistic-regression scorecard: FastWoe encodes each feature to its WOE (numerics monotone tree-binned, categoricals target-encoded), then LogisticRegression scores the vector; the monotone binning carries the bank's business rule, so the incumbent satisfies it by construction. Pure numpy/sklearn/fastwoe (no mlflow, no web framework) so training and serving both import it and it packages cleanly into an MLflow pyfunc.
+FastWoe is a scikit-learn transformer (numerics monotone tree-binned, categoricals
+target-encoded), so the scorecard is a Pipeline([woe, lr]) and the monotone binning
+carries the bank's business rule by construction. The pipeline serialises natively:
+joblib for the serving container, mlflow.sklearn for the registry. ScorecardPredictor is
+a thin wrapper that selects the model's features and returns the probability of default.
 """
 
 from __future__ import annotations
@@ -16,12 +20,11 @@ SPEC_FILE = "feature_spec.json"
 
 
 class ScorecardPredictor:
-    """A fitted WOE + logistic-regression scorecard with a single scoring call."""
+    """A fitted WOE + logistic-regression pipeline with a single scoring call."""
 
-    def __init__(self, woe, lr, spec: dict) -> None:
-        """Hold the fitted WOE encoder, the logistic regression, and the feature spec."""
-        self.woe = woe
-        self.lr = lr
+    def __init__(self, pipeline, spec: dict) -> None:
+        """Hold the fitted scikit-learn pipeline and the feature spec."""
+        self.pipeline = pipeline
         self.spec = spec
         self.features = spec["numeric_features"] + spec["categorical_features"]
 
@@ -31,15 +34,13 @@ class ScorecardPredictor:
         Accepts a DataFrame or a list of dicts with the model's feature columns.
         """
         df = rows if isinstance(rows, pd.DataFrame) else pd.DataFrame(rows)
-        df = df[self.features]
-        woe = self.woe.transform(df)
-        return self.lr.predict_proba(woe)[:, 1].tolist()
+        return self.pipeline.predict_proba(df[self.features])[:, 1].tolist()
 
     def save(self, model_dir: str) -> None:
-        """Persist the model to a SageMaker model directory."""
+        """Persist the pipeline to a SageMaker model directory."""
         os.makedirs(model_dir, exist_ok=True)
         joblib.dump(
-            {"woe": self.woe, "lr": self.lr, "spec": self.spec},
+            {"pipeline": self.pipeline, "spec": self.spec},
             os.path.join(model_dir, ARTIFACT),
         )
         with open(os.path.join(model_dir, SPEC_FILE), "w") as fh:
@@ -47,6 +48,6 @@ class ScorecardPredictor:
 
     @classmethod
     def load(cls, model_dir: str) -> "ScorecardPredictor":
-        """Load a model previously written by save()."""
+        """Load a pipeline previously written by save()."""
         blob = joblib.load(os.path.join(model_dir, ARTIFACT))
-        return cls(blob["woe"], blob["lr"], blob["spec"])
+        return cls(blob["pipeline"], blob["spec"])

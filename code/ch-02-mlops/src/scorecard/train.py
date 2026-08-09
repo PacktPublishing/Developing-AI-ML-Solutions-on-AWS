@@ -58,6 +58,7 @@ def train() -> None:
     """Fit the WOE scorecard, evaluate it, log the run, and save the model."""
     from fastwoe import FastWoe
     from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
 
     hp = _hyperparameters()
     C = float(hp.get("C", 1.0))
@@ -72,13 +73,17 @@ def train() -> None:
     train_df = pd.read_csv(os.path.join(TRAIN, "train.csv"))
     X, y = train_df[features], train_df[target]
 
-    # The business rule: monotone WOE binning for the constrained numerics. Pass
-    # the whole dict (categoricals and unconstrained features are 0 = ignored).
+    # The scorecard is a scikit-learn pipeline: FastWoe (monotone WOE binning for the
+    # constrained numerics carries the business rule) into logistic regression.
     monotone = spec["monotone_constraints"] if monotonic else {}
-    woe = FastWoe(monotonic_cst=monotone or None)
-    Xw = woe.fit_transform(X, y)
-    lr = LogisticRegression(C=C, max_iter=max_iter).fit(Xw, y)
-    model = ScorecardPredictor(woe, lr, spec)
+    pipeline = Pipeline(
+        [
+            ("woe", FastWoe(monotonic_cst=monotone or None)),
+            ("lr", LogisticRegression(C=C, max_iter=max_iter)),
+        ]
+    )
+    pipeline.fit(X, y)
+    model = ScorecardPredictor(pipeline, spec)
 
     # Honest metrics on the held-out validation channel when present.
     metrics = {}
@@ -94,19 +99,21 @@ def train() -> None:
 
     # Weight-of-Evidence information value per feature, a scorecard deliverable.
     try:
-        iv = woe.get_iv_analysis()
+        iv = pipeline.named_steps["woe"].get_iv_analysis()
         iv.to_csv(os.path.join(MODEL, "iv_analysis.csv"), index=False)
     except Exception as exc:
         print(f"iv_analysis skipped: {exc}")
 
-    _log_to_mlflow(hp, {"C": C, "max_iter": max_iter, "monotonic": monotonic}, metrics)
+    _log_to_mlflow(
+        hp, {"C": C, "max_iter": max_iter, "monotonic": monotonic}, metrics, pipeline
+    )
     print(f"scorecard written to {MODEL}")
 
 
 # -------------------------------------------------------------------------------
 # Experiment tracking
 # -------------------------------------------------------------------------------
-def _log_to_mlflow(hp: dict, params: dict, metrics: dict) -> None:
+def _log_to_mlflow(hp: dict, params: dict, metrics: dict, pipeline) -> None:
     """Best-effort experiment tracking; skipped when no tracking server is set."""
     uri = os.environ.get("MLFLOW_TRACKING_URI")
     if not uri:
@@ -131,22 +138,12 @@ def _log_to_mlflow(hp: dict, params: dict, metrics: dict) -> None:
             mlflow.log_metrics(metrics)
         if os.path.exists(os.path.join(MODEL, "iv_analysis.csv")):
             mlflow.log_artifact(os.path.join(MODEL, "iv_analysis.csv"))
-        # Register the scorecard as a pyfunc model so SageMaker ModelBuilder can
-        # later deploy it straight from the registry.
-        from mlflow_pyfunc import ScorecardPyfunc
-
-        mlflow.pyfunc.log_model(
+        # The scorecard is a scikit-learn pipeline, so it logs with the native sklearn
+        # flavor -- no custom pyfunc -- and registers for promotion from the registry.
+        mlflow.sklearn.log_model(
+            sk_model=pipeline,
             name="model",
-            python_model=ScorecardPyfunc(),
-            artifacts={"model_dir": MODEL},
-            code_paths=["scorecard_model.py", "mlflow_pyfunc.py"],
-            pip_requirements=[
-                "fastwoe",
-                "scikit-learn",
-                "pandas",
-                "joblib",
-                "sagemaker",
-            ],
+            pip_requirements=["fastwoe", "scikit-learn", "pandas", "joblib"],
             registered_model_name=hp.get("registered_model_name", "credit-scorecard"),
         )
     print(f"logged run to {uri}")
