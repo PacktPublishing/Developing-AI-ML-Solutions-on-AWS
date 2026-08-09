@@ -1,4 +1,4 @@
-.PHONY: data train monitor run lint clean
+.PHONY: data train monitor run lint diagrams clean
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
@@ -31,6 +31,23 @@ run:
 
 lint:
 	uvx ruff check .
+
+# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS icons fetched at render time, custom icons from shared assets/diagrams/).
+# Icon PNGs are re-rendered from SVG at ICON_HEIGHT (needs rsvg-convert); WIDTH sets output pixel width (0 = awsdac native).
+AWSDAC_VERSION := v0.22.4
+AWSDAC := $(shell go env GOPATH)/bin/awsdac
+WIDTH ?= 0
+ICON_HEIGHT ?= 500
+diagrams:
+	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
+	@for s in ../../assets/diagrams/icons/*.svg; do \
+		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
+	done
+	@mkdir -p diagrams/png
+	@for f in diagrams/yaml/*.yaml; do \
+		echo "  $$f"; \
+		"$(AWSDAC)" -f "$$f" -o "diagrams/png/$$(basename $$f .yaml).png" --width $(WIDTH); \
+	done
 
 clean:
 	rm -rf runs-local outputs data/generated catboost_info

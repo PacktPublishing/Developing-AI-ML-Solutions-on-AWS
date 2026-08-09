@@ -1,0 +1,56 @@
+# The monitoring round on AWS as a SageMaker Pipeline: a Batch Transform step scores
+# the current batch through the scorecard's serving container, then a Processing step
+# computes PSI + SHAP feature-attribution drift, writes the Clarify-shaped artifacts to
+# S3, and publishes the metrics to CloudWatch, where the stack's alarms fire. AWS's
+# documented replacement for the closed SageMaker Clarify service.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Developer, AWSCloud]
+
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "pipeline.py\n(ch11-user)"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [ECR, Transform, Monitor, Sinks]
+
+    ECR:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Elastic Container Registry (Amazon ECR)"
+      Title: "ch11-scorecard\ntrain / serve / monitor image"
+    Transform:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "score-current\nBatch Transform"
+    Monitor:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "monitor-drift\nProcessing (PSI + SHAP)"
+    Sinks:
+      Type: AWS::Diagram::VerticalStack
+      Children: [CloudWatch, Artifacts]
+    CloudWatch:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon CloudWatch"
+      Title: "score-drift / attribution-drift\nalarms"
+    Artifacts:
+      Type: AWS::S3::Bucket
+      Title: "analysis.json\nconstraint_violations.json"
+
+  Links:
+    - {Source: Developer, SourcePosition: E, Target: Transform, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: ECR, SourcePosition: S, Target: Transform, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Transform, SourcePosition: E, Target: Monitor, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Monitor, SourcePosition: E, Target: CloudWatch, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Monitor, SourcePosition: E, Target: Artifacts, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
