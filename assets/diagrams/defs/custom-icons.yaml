@@ -50,3 +50,7 @@ Definitions:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "redshift-local.png"}
     Label: {Title: "redshift-local", Color: "rgba(0, 0, 0, 255)"}
+  AppConfigAgent:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "appconfig-agent.png"}
+    Label: {Title: "AWS AppConfig", Color: "rgba(0, 0, 0, 255)"}
