@@ -1,4 +1,4 @@
-.PHONY: up apps score flip down lint test diagrams
+.PHONY: up apps score flip govern down lint test diagrams
 
 COMPOSE := docker compose -f local/compose.yml
 
@@ -18,6 +18,10 @@ score:
 # widen the rollout with no restart, e.g. make flip PCT=50
 flip:
 	uv run etl/flip.py $(PCT)
+
+# the auditor's record: model cards, the registry, and lineage from governance/models.json
+govern:
+	uv run src/governance.py --models governance/models.json --out outputs/governance
 
 down:
 	$(COMPOSE) down
