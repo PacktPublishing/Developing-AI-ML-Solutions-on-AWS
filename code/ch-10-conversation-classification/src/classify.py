@@ -15,6 +15,7 @@ Usage (from the chapter root):
 import argparse
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -26,26 +27,57 @@ INSTRUCTION = (
     " one category from the list. Reply with only the category name, nothing else."
 )
 
+INSTRUCTION_PROBS = (
+    "You are a bank's conversation router. Read the conversation and give the"
+    " probability that it belongs to each category. Reply with only a JSON object"
+    " mapping every category to a probability in [0,1], summing to about 1."
+)
 
-def model_input(text: str, labels: list[str]) -> dict:
-    """Build the Converse request body that classifies one conversation."""
+
+def model_input(text: str, labels: list[str], distribution: bool = False) -> dict:
+    """Build the Converse request body: a single category, or a probability per category."""
+    instruction = INSTRUCTION_PROBS if distribution else INSTRUCTION
+    tail = "\n\nJSON:" if distribution else "\n\nCategory:"
     prompt = (
-        f"{INSTRUCTION}\n\nCategories:\n- "
+        f"{instruction}\n\nCategories:\n- "
         + "\n- ".join(labels)
-        + f"\n\nConversation:\n{text}\n\nCategory:"
+        + f"\n\nConversation:\n{text}{tail}"
     )
     return {
         "messages": [{"role": "user", "content": [{"text": prompt}]}],
-        "inferenceConfig": {"maxTokens": 32, "temperature": 0},
+        "inferenceConfig": {"maxTokens": 300 if distribution else 32, "temperature": 0},
     }
 
 
+def _parse_probs(text: str, labels: list[str]) -> dict[str, float]:
+    """Parse a JSON category->probability object, tolerating code fences; normalize over labels."""
+    text = re.sub(r"^```[\w-]*\s*|\s*```$", "", text.strip())
+    start, end = text.find("{"), text.rfind("}")
+    try:
+        raw = json.loads(text[start : end + 1]) if start >= 0 else {}
+    except json.JSONDecodeError:
+        raw = {}
+    lower = {label.lower(): label for label in labels}
+    probs = {label: 0.0 for label in labels}
+    for key, value in raw.items():
+        label = lower.get(str(key).lower())
+        if label is not None:
+            probs[label] = max(0.0, float(value))
+    total = sum(probs.values())
+    return {k: v / total for k, v in probs.items()} if total else probs
+
+
 def write_manifest(
-    rows: list[dict], labels: list[str], bucket: str, key: str, s3
+    rows: list[dict], labels: list[str], bucket: str, key: str, s3, distribution: bool
 ) -> str:
     """Write the {recordId, modelInput} JSONL manifest to S3; return its s3 URI."""
     lines = [
-        json.dumps({"recordId": r["id"], "modelInput": model_input(r["text"], labels)})
+        json.dumps(
+            {
+                "recordId": r["id"],
+                "modelInput": model_input(r["text"], labels, distribution),
+            }
+        )
         for r in rows
     ]
     s3.put_object(Bucket=bucket, Key=key, Body="\n".join(lines).encode("utf-8"))
@@ -53,15 +85,20 @@ def write_manifest(
 
 
 def collect(
-    bucket: str, out_prefix: str, job_arn: str, labels: list[str], s3
-) -> dict[str, str]:
-    """Read the .jsonl.out shards and map each answer to the nearest known label."""
+    bucket: str,
+    out_prefix: str,
+    job_arn: str,
+    labels: list[str],
+    s3,
+    distribution: bool,
+) -> dict[str, dict]:
+    """Read the .jsonl.out shards; return {recordId: {pred, probs}} per record."""
     job_id = job_arn.split("/")[-1]
     prefix = (
         f"{out_prefix.removeprefix('s3://').partition('/')[2].rstrip('/')}/{job_id}/"
     )
     lower = {label.lower(): label for label in labels}
-    preds: dict[str, str] = {}
+    preds: dict[str, dict] = {}
     for obj in s3.list_objects_v2(Bucket=bucket, Prefix=prefix).get("Contents", []):
         # only the record shards; Bedrock also writes a manifest.json.out summary
         if not obj["Key"].endswith(".jsonl.out"):
@@ -73,16 +110,27 @@ def collect(
             if not line.strip():
                 continue
             rec = json.loads(line)
-            said = answer_text(rec["modelOutput"]).lower()
-            match = next((orig for low, orig in lower.items() if low in said), None)
-            preds[rec["recordId"]] = match or said
+            said = answer_text(rec["modelOutput"])
+            if distribution:
+                probs = _parse_probs(said, labels)
+                pred = max(probs, key=lambda k: probs[k]) if any(probs.values()) else ""
+                preds[rec["recordId"]] = {"pred": pred, "probs": probs}
+            else:
+                match = next(
+                    (orig for low, orig in lower.items() if low in said.lower()), None
+                )
+                preds[rec["recordId"]] = {"pred": match or said.lower(), "probs": None}
     return preds
 
 
-def classify(rows: list[dict], labels: list[str], bucket: str) -> dict[str, str]:
-    """Run the whole batch flow and return {conversation id: predicted category}."""
+def classify(
+    rows: list[dict], labels: list[str], bucket: str, distribution: bool = False
+) -> dict[str, dict]:
+    """Run the whole batch flow and return {conversation id: {pred, probs}}."""
     s3 = s3_client()
-    in_uri = write_manifest(rows, labels, bucket, "input/manifest.jsonl", s3)
+    in_uri = write_manifest(
+        rows, labels, bucket, "input/manifest.jsonl", s3, distribution
+    )
     out_uri = f"s3://{bucket}/output/"
     bedrock = get_bedrock()
     # roleArn is required on AWS (the service role Bedrock assumes to reach S3);
@@ -105,7 +153,7 @@ def classify(rows: list[dict], labels: list[str], bucket: str) -> dict[str, str]
             print("job", status)
             break
         time.sleep(10)
-    return collect(bucket, out_uri, arn, labels, s3)
+    return collect(bucket, out_uri, arn, labels, s3, distribution)
 
 
 def main() -> None:
@@ -115,6 +163,9 @@ def main() -> None:
     p.add_argument("--bucket", default="ch10-batch")
     p.add_argument("--data", type=Path, default=Path("data/generated"))
     p.add_argument("--limit", type=int, default=0)
+    p.add_argument(
+        "--probs", action="store_true", help="ask for a probability per category"
+    )
     a = p.parse_args()
 
     rows = [
@@ -125,17 +176,16 @@ def main() -> None:
         rows = rows[: a.limit]
     labels = json.loads((a.data / f"{a.dataset}.labels.json").read_text())
 
-    preds = classify(rows, labels, a.bucket)
+    preds = classify(rows, labels, a.bucket, a.probs)
     out = a.data / f"{a.dataset}.predictions.jsonl"
     with out.open("w", encoding="utf-8") as f:
         for r in rows:
-            f.write(
-                json.dumps(
-                    {"id": r["id"], "label": r["label"], "pred": preds.get(r["id"], "")}
-                )
-                + "\n"
-            )
-    hits = sum(preds.get(r["id"]) == r["label"] for r in rows)
+            got = preds.get(r["id"], {"pred": "", "probs": None})
+            record = {"id": r["id"], "label": r["label"], "pred": got["pred"]}
+            if got.get("probs"):
+                record["probs"] = got["probs"]
+            f.write(json.dumps(record) + "\n")
+    hits = sum(preds.get(r["id"], {}).get("pred") == r["label"] for r in rows)
     print(f"{hits}/{len(rows)} correct -> {out}")
 
 
