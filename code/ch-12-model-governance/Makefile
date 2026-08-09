@@ -1,6 +1,6 @@
 .PHONY: up apps score flip govern down lint test diagrams
 
-COMPOSE := docker compose -f local/compose.yml
+COMPOSE := docker compose -f local/rollout-stack.yml
 
 # bring up the AppConfig agent, the two chapter-2 models, and the flag-routing gateway
 up:
