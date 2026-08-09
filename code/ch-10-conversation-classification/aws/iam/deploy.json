@@ -28,13 +28,15 @@
     {
       "Sid": "BedrockBatch",
       "Effect": "Allow",
-      "Action": ["bedrock:CreateModelInvocationJob", "bedrock:GetModelInvocationJob", "bedrock:ListModelInvocationJobs", "bedrock:StopModelInvocationJob"],
+      "Action": ["bedrock:CreateModelInvocationJob", "bedrock:GetModelInvocationJob", "bedrock:ListModelInvocationJobs", "bedrock:StopModelInvocationJob", "bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
       "Resource": [
-        "arn:aws:bedrock:us-east-1::foundation-model/*",
-        "arn:aws:bedrock:us-east-1:*:inference-profile/*",
+        "arn:aws:bedrock:*::foundation-model/*",
+        "arn:aws:bedrock:::foundation-model/*",
+        "arn:aws:bedrock:*:*:inference-profile/*",
         "arn:aws:bedrock:us-east-1:*:model-invocation-job/*"
       ]
     },
+    {"Sid": "BedrockListJobs", "Effect": "Allow", "Action": "bedrock:ListModelInvocationJobs", "Resource": "*"},
     {"Sid": "BedrockSubscription", "Effect": "Allow", "Action": "aws-marketplace:ViewSubscriptions", "Resource": "*"},
     {
       "Sid": "Sns",
