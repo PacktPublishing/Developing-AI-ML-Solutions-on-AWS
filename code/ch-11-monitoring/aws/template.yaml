@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  ch-11 monitoring stack: the ECR repository for the scorecard's train/monitor image,
+  and the CloudWatch alarms that watch drift. make image pushes the image here; make
+  monitor runs a SageMaker Processing job (AWS's documented replacement for the closed
+  Clarify service) that computes PSI and SHAP feature-attribution drift and publishes
+  the metrics to CloudWatch, where these alarms turn them into alerts: a major shift in
+  the score distribution (PSI > 0.25), and a fall in the feature-attribution ranking
+  agreement (NDCG < 0.90, the threshold Clarify itself used).
+
+Parameters:
+  Namespace:
+    Description: the CloudWatch namespace the monitoring job publishes to
+    Type: String
+    Default: ch11/monitoring
+
+Resources:
+
+  # The scorecard's train/monitor image. EmptyOnDelete lets the stack delete cleanly
+  # even with images pushed (make image), so teardown is one step.
+  ScorecardRepo:
+    DeletionPolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch11-scorecard
+      EmptyOnDelete: true
+
+  # Score drift: alert when the live score distribution shifts materially from the
+  # one the model was trained on. PSI > 0.25 is the standard "major shift" threshold.
+  ScoreDriftAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ch11-score-drift
+      AlarmDescription: Score PSI exceeded 0.25 (major shift in the score distribution)
+      Namespace: !Ref Namespace
+      MetricName: score_psi
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: "0.25"
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  # Feature-attribution drift: alert when the live attribution ranking diverges from
+  # the training ranking. Minimum over the period so a single breaching datapoint
+  # trips it; missing data is not a breach (no run yet is not an alert).
+  AttributionDriftAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ch11-attribution-drift
+      AlarmDescription: Clarify feature-attribution NDCG fell below 0.90 (ranking drift)
+      Namespace: !Ref Namespace
+      MetricName: feature_attribution_ndcg
+      Statistic: Minimum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: "0.90"
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  RepositoryUri:
+    Description: the ECR repository for the scorecard image
+    Value: !GetAtt ScorecardRepo.RepositoryUri
+
+  Alarms:
+    Description: the drift alarms the monitoring job feeds
+    Value: !Sub ${ScoreDriftAlarm}, ${AttributionDriftAlarm}

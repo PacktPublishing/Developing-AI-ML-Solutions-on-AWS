@@ -1,0 +1,82 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PassSageMakerExecutionRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/*AmazonSageMaker*"
+    },
+    {
+      "Sid": "DiscoverRoleAndBucket",
+      "Effect": "Allow",
+      "Action": ["iam:ListRoles", "s3:ListAllMyBuckets"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SageMaker",
+      "Effect": "Allow",
+      "Action": "sagemaker:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "MonitoringStack",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/ch11-*/*"
+    },
+    {
+      "Sid": "CloudFormationRead",
+      "Effect": "Allow",
+      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrRepository",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": ["arn:aws:ecr:us-east-1:*:repository/ch11-*"]
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ArtifactBuckets",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::ch11-*",
+        "arn:aws:s3:::ch11-*/*",
+        "arn:aws:s3:::sagemaker-us-east-1-*",
+        "arn:aws:s3:::sagemaker-us-east-1-*/*",
+        "arn:aws:s3:::amazon-sagemaker-*",
+        "arn:aws:s3:::amazon-sagemaker-*/*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchAlerting",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricData",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GetMetricStatistics"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": [
+        "arn:aws:logs:us-east-1:*:log-group:*ch11*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*"
+      ]
+    }
+  ]
+}

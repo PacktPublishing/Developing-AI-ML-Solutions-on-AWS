@@ -21,7 +21,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from catboost import Pool
-
 from model import CATEGORICAL, FEATURES, NUMERIC, load, score
 
 PSI_MAJOR = 0.25
@@ -71,10 +70,21 @@ def attribution_ndcg(ref_attr: pd.Series, cur_attr: pd.Series) -> float:
     return dcg / ideal if ideal else 1.0
 
 
-def run(model, reference: pd.DataFrame, current: pd.DataFrame) -> dict:
-    """Run every monitor and return metrics plus the violations to raise."""
+def run(
+    model,
+    reference: pd.DataFrame,
+    current: pd.DataFrame,
+    current_scores: pd.Series | None = None,
+) -> dict:
+    """Run every monitor and return metrics plus the violations to raise.
+
+    current_scores lets the caller pass the live scores from a Batch Transform job;
+    when omitted the monitor scores the current batch itself.
+    """
     metrics: dict = {"feature_psi": {}}
     violations = []
+    if current_scores is None:
+        current_scores = score(model, current)
 
     for col in FEATURES:
         psi = (
@@ -95,7 +105,7 @@ def run(model, reference: pd.DataFrame, current: pd.DataFrame) -> dict:
             )
 
     metrics["score_psi"] = round(
-        numeric_psi(score(model, reference), score(model, current)), 3
+        numeric_psi(score(model, reference), current_scores), 3
     )
     if metrics["score_psi"] > PSI_MAJOR:
         violations.append(
