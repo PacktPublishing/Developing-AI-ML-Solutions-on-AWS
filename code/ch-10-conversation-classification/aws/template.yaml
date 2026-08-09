@@ -40,11 +40,12 @@ Resources:
               ArnLike:
                 aws:SourceArn: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:model-invocation-job/*
       Policies:
-        - PolicyName: s3-batch-io
+        - PolicyName: batch-io-and-invoke
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Effect: Allow
+              - Sid: S3
+                Effect: Allow
                 Action:
                   - s3:GetObject
                   - s3:PutObject
@@ -52,6 +53,19 @@ Resources:
                 Resource:
                   - !GetAtt BatchBucket.Arn
                   - !Sub ${BatchBucket.Arn}/*
+
+              # The batch job invokes the model as this role, so it needs
+              # InvokeModel on the model (and the region-less ARN a global
+              # inference profile resolves to for the permission check).
+              - Sid: Invoke
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:aws:bedrock:*::foundation-model/*
+                  - arn:aws:bedrock:::foundation-model/*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
 
 Outputs:
   BatchBucket:
