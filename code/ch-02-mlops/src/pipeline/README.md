@@ -1,7 +1,7 @@
 # Champion/challenger pipeline (one script, local and cloud)
 
 The chapter's CEO question — "why this model, did you try others?" — as a SageMaker
-Pipeline: train the logistic scorecard and the monotone XGBoost challenger, select
+Pipeline: train the logistic scorecard and the monotone CatBoost challenger, select
 the winner by AUC, and export the winner's scores to S3.
 
 `pipeline.py` runs the **same DAG** in local Docker and on AWS. Only the session and
@@ -82,7 +82,7 @@ downloads both exports and proves it with `cmp` and the sha256 hashes.
 
 ## `step_image/`
 
-`Dockerfile` for the step runtime (sagemaker + scikit-learn + xgboost + pandas +
+`Dockerfile` for the step runtime (sagemaker + scikit-learn + catboost + pandas +
 numpy + joblib), built with **uv** (pip stalled 10+ minutes resolving sagemaker's
 dependency tree; uv finished in ~3 minutes). Build native arm64 for local mode; the
 `ch02-pipeline-step` ECR image is amd64 for the cloud run.

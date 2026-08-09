@@ -33,7 +33,7 @@ train:
 	rm -rf runs-local/model && mkdir -p runs-local/model
 	docker run --rm $(INPUT) -v $(PWD)/runs-local/model:/opt/ml/model ch02-scorecard:latest train
 
-# train the monotone XGBoost challenger
+# train the monotone CatBoost challenger
 train-challenger:
 	docker build -q -t ch02-challenger:latest src/challenger/
 	rm -rf runs-local/model-challenger && mkdir -p runs-local/model-challenger
@@ -107,13 +107,13 @@ amt:
 # the local-tuning suite: trial contract, local/cloud search-space parity, and a
 # two-trial TPE mini search, all offline, no Docker, no AWS
 test:
-	uv run --python 3.12 --with pytest --with syne-tune --with xgboost \
+	uv run --python 3.12 --with pytest --with syne-tune --with catboost \
 		--with scikit-learn --with pandas --with numpy pytest tests/ -q
 
 # assemble + build the Lambda container (model baked in), then run it via the RIE
 lambda-build:
 	cp src/challenger/challenger_model.py src/serving/lambda/challenger_model.py
-	mkdir -p src/serving/lambda/model && cp runs-local/model-challenger/challenger.ubj runs-local/model-challenger/feature_spec.json src/serving/lambda/model/
+	mkdir -p src/serving/lambda/model && cp runs-local/model-challenger/challenger.cbm runs-local/model-challenger/feature_spec.json src/serving/lambda/model/
 	docker build -q -t ch02-lambda:latest src/serving/lambda/
 
 lambda-local: lambda-build
@@ -125,7 +125,7 @@ lambda-local: lambda-build
 
 # assemble + build the Fargate image, then run it as a local ECS task (compose)
 fargate-build: train-challenger
-	mkdir -p src/serving/fargate/model && cp runs-local/model-challenger/challenger.ubj runs-local/model-challenger/feature_spec.json src/serving/fargate/model/
+	mkdir -p src/serving/fargate/model && cp runs-local/model-challenger/challenger.cbm runs-local/model-challenger/feature_spec.json src/serving/fargate/model/
 	docker build -q --build-arg BASE_IMAGE=ch02-challenger:latest -t ch02-fargate:latest src/serving/fargate/
 
 fargate-local: fargate-build

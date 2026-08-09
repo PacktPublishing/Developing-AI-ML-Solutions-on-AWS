@@ -11,7 +11,7 @@ on stdout (progress goes to stderr). template.yaml consumes that URL as ModelDat
 Env: MLFLOW_TRACKING_ARN, ARTIFACT_BUCKET (required)
      MLFLOW_MODEL_PATH (default: the latest registered credit-challenger version)
      REGISTERED_MODEL (default credit-challenger)
-     MODEL_FILES (default "challenger.ubj feature_spec.json")
+     MODEL_FILES (default "challenger.cbm feature_spec.json")
      ENDPOINT_NAME (default ch02-challenger-byoc; only names the S3 key)
 """
 
@@ -29,7 +29,7 @@ ARN = os.environ["MLFLOW_TRACKING_ARN"]
 BUCKET = os.environ["ARTIFACT_BUCKET"]
 REGISTERED_MODEL = os.environ.get("REGISTERED_MODEL", "credit-challenger")
 MODEL_PATH = os.environ.get("MLFLOW_MODEL_PATH")  # empty -> resolve latest below
-MODEL_FILES = os.environ.get("MODEL_FILES", "challenger.ubj feature_spec.json").split()
+MODEL_FILES = os.environ.get("MODEL_FILES", "challenger.cbm feature_spec.json").split()
 NAME = os.environ.get("ENDPOINT_NAME", "ch02-challenger-byoc")
 
 mlflow.set_tracking_uri(ARN)
