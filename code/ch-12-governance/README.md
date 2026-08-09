@@ -11,13 +11,13 @@ shipped without a redeploy.
   champion (chapter 2's WOE scorecard) or the challenger (its monotone XGBoost) by the
   `challenger_rollout` flag; the flag's `split` rule buckets each loan deterministically,
   so widening the rollout is a flag edit and no loan flips back.
-- **Model cards**, a **model registry**, and **lineage** — the record an auditor reads to
+- **Model cards**, a **model registry**, and **lineage**: the record an auditor reads to
   see what a model is, how it was built, and what it was trained on.
 - **Least-privilege IAM** for the security review.
 
 AppConfig runs locally from source: the rule evaluator (S-expression rules and the
 FNV-1a `split` bucketing) is byte-identical to the reverse-engineered AppConfig agent, so
-a loan buckets the same locally and under the real agent on AWS — the rollout has true
+a loan buckets the same locally and under the real agent on AWS, so the rollout has true
 local/cloud parity.
 
 ## Run it locally
@@ -42,16 +42,16 @@ loan). The challenger genuinely beats the incumbent on the held-out set (AUC 0.8
 
 ## Layout
 
-- `src/appconfig/`: the from-source AppConfig seam — the rule evaluator and the
-  `get_appconfig()` client (local flag store, or the AppConfig agent on AWS)
+- `src/appconfig/`: the from-source AppConfig seam (the rule evaluator and the
+  `get_appconfig()` client: local flag store, or the AppConfig agent on AWS)
 - `src/router.py`, `src/models.py`: the champion/challenger router over the shared
   `/invocations` contract
 - `app/main.py`: the FastAPI rollout gateway (uvicorn locally, a Fargate service on AWS)
 - `src/governance.py`, `governance/models.json`: the model card / registry / lineage
   generator and its inputs
 - `local/`: the compose stack and the feature-flag document
-- `aws/`: the AWS round (real AppConfig + the ECS agent, SageMaker Model Cards / Registry
-  / ML Lineage, scoped IAM) — next
+- `aws/`: the AWS round, next (real AppConfig + the ECS agent, SageMaker Model Cards /
+  Registry / ML Lineage, scoped IAM)
 - `diagrams/`: the local stack and its cloud mirror
 
 ## AWS services and local stand-ins
