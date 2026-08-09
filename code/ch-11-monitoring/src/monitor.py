@@ -133,7 +133,7 @@ def main() -> None:
         "--reference", type=Path, default=Path("data/generated/reference.csv")
     )
     p.add_argument("--current", type=Path, default=Path("data/generated/current.csv"))
-    p.add_argument("--model", type=Path, default=Path("data/generated/scorecard.cbm"))
+    p.add_argument("--model", type=Path, default=Path("runs-local/model/scorecard.cbm"))
     a = p.parse_args()
 
     report = run(load(a.model), pd.read_csv(a.reference), pd.read_csv(a.current))

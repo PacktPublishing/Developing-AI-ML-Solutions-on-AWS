@@ -12,5 +12,8 @@ catboost_info/
 outputs/
 data/generated/
 
+# SageMaker local-mode training channels + model output (rebuilt by `make data`/`make train`)
+runs-local/
+
 # sam local build output
 .aws-sam/

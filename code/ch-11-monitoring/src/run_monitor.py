@@ -66,7 +66,7 @@ def main() -> None:
         "--reference", type=Path, default=Path("data/generated/reference.csv")
     )
     p.add_argument("--current", type=Path, default=Path("data/generated/current.csv"))
-    p.add_argument("--model", type=Path, default=Path("data/generated/scorecard.cbm"))
+    p.add_argument("--model", type=Path, default=Path("runs-local/model/scorecard.cbm"))
     p.add_argument("--out", type=Path, default=Path("outputs/monitoring"))
     a = p.parse_args()
 
