@@ -1,4 +1,4 @@
-# The local rollout stack: applications hit the flag-routing gateway, which asks the
+# Option 1, the rollout stack: applications hit the flag-routing gateway, which asks the
 # real AWS AppConfig agent (a sidecar, the same image ECS uses) for the challenger_rollout
 # variant and routes each one to the champion (chapter 2's WOE scorecard) or the challenger
 # (monotone CatBoost). Widening the rollout is a flag edit; nothing in the app restarts.

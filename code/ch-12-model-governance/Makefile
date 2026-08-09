@@ -1,12 +1,34 @@
-.PHONY: up apps score flip govern down lint test diagrams
+.PHONY: up sm-local apps score flip govern down lint test diagrams
 
 COMPOSE := docker compose -f local/rollout-stack.yml
 
-# bring up the AppConfig agent, the two chapter-2 models, and the flag-routing gateway
+# Option 1, the rollout stack: the AppConfig agent, the two chapter-2 models, and the
+# flag-routing gateway, all on one compose network so `make flip` widens with nothing
+# restarted. This is the champion/challenger A/B end to end.
 up:
 	uv run etl/to_ion.py
 	$(COMPOSE) up -d --build --wait
 	@echo "gateway on :8080; champion + challenger behind the challenger_rollout flag (agent-evaluated)"
+
+# Option 2, SageMaker local mode: serve one model through the same ModelBuilder path the
+# cloud uses (Mode.LOCAL_CONTAINER) rather than the compose stack; swapping the Mode is the
+# only change to reach the serverless endpoint. Needs AWS creds, a SageMaker role (SM_ROLE),
+# and the model image in ECR (make -C aws deploy builds it). MODEL=champion|challenger.
+REGION ?= us-east-1
+# Lazy (=) so only the sm-local target resolves the account, not every make invocation.
+ACCOUNT = $(shell aws sts get-caller-identity --query Account --output text)
+ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
+SM_ROLE ?=
+MODEL ?= champion
+sm-local:
+	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn>"; exit 1; }
+	@case "$(MODEL)" in \
+		champion) MP=../ch-02-mlops/runs-local/model ;; \
+		challenger) MP=../ch-02-mlops/runs-local/model-challenger ;; \
+		*) echo "MODEL must be champion or challenger"; exit 1 ;; \
+	esac; \
+	MODEL_IMAGE=$(ECR)/ch12-$(MODEL):latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) MODEL_PATH=$$MP \
+	  uv run --no-project src/serve_local.py
 
 # a batch of applications to route (reuses chapter 2's held-out set)
 apps:
