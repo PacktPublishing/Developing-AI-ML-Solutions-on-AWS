@@ -17,3 +17,6 @@ runs-local/
 
 # sam local build output
 .aws-sam/
+
+# stray MLflow local runs (the pyfunc test writes ./mlruns)
+mlruns/
