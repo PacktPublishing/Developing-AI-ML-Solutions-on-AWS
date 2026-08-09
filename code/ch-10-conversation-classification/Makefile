@@ -1,4 +1,4 @@
-.PHONY: up prepare classify route eval down lint test
+.PHONY: up prepare classify route eval down lint test diagrams
 
 # src/ holds the shared seam (models.py, batch.py); put it on the path.
 export PYTHONPATH := $(CURDIR)/src
@@ -44,3 +44,20 @@ lint:
 
 test:
 	uv run --with pytest --with boto3 --with ollama pytest tests/ -q
+
+# Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS icons fetched at render time, custom icons from shared assets/diagrams/).
+# Icon PNGs are re-rendered from SVG at ICON_HEIGHT (needs rsvg-convert); WIDTH sets output pixel width (0 = awsdac native).
+AWSDAC_VERSION := v0.22.4
+AWSDAC := $(shell go env GOPATH)/bin/awsdac
+WIDTH ?= 0
+ICON_HEIGHT ?= 500
+diagrams:
+	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
+	@for s in ../../assets/diagrams/icons/*.svg; do \
+		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
+	done
+	@mkdir -p diagrams/png
+	@for f in diagrams/yaml/*.yaml; do \
+		echo "  $$f"; \
+		"$(AWSDAC)" -f "$$f" -o "diagrams/png/$$(basename $$f .yaml).png" --width $(WIDTH); \
+	done

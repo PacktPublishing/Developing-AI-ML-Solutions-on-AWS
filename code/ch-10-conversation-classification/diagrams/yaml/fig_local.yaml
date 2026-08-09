@@ -1,0 +1,53 @@
+# Local classification: the same submit/poll/collect flow the real Bedrock batch
+# service runs, from source. The batch shim reads the JSONL manifest from S3Proxy,
+# invokes the model seam over Ollama per record, writes .jsonl.out, and the SNS shim
+# fans each routed conversation out to a per-team file inbox.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Client, Local]
+
+    Client:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "classify.py\nroute.py"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local cloud (Docker, from-source shims)"
+      Children: [S3Proxy, BatchColumn, SNS]
+
+    S3Proxy:
+      Type: AWS::S3::Bucket
+      Title: "S3Proxy\nJSONL manifest + .jsonl.out"
+    BatchColumn:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Batch, Ollama]
+    Batch:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "batch shim\ncreate_model_invocation_job"
+    Ollama:
+      Type: AWS::Diagram::Resource
+      Preset: "Ollama"
+      Title: "Ollama\nmodel seam (Converse)"
+    SNS:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Notification Service (Amazon SNS)"
+      Title: "SNS shim\nten team inboxes"
+
+  Links:
+    - {Source: Client, SourcePosition: E, Target: S3Proxy, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: S3Proxy, SourcePosition: E, Target: Batch, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Batch, SourcePosition: S, Target: Ollama, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Batch, SourcePosition: E, Target: SNS, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
