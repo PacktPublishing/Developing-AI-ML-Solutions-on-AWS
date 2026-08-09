@@ -1,0 +1,23 @@
+name: ch10-batch
+
+services:
+  s3proxy:
+    # Local S3 for the batch manifests and outputs: the batch shim reads the JSONL
+    # shards and writes the .jsonl.out here, exactly as Bedrock batch uses real S3.
+    image: andrewgaul/s3proxy:latest
+    environment:
+      - S3PROXY_ENDPOINT=http://0.0.0.0:9000
+      - S3PROXY_AUTHORIZATION=aws-v2-or-v4
+      - S3PROXY_IDENTITY=local
+      - S3PROXY_CREDENTIAL=localsecret
+      - JCLOUDS_PROVIDER=filesystem
+      - JCLOUDS_FILESYSTEM_BASEDIR=/data
+    ports:
+      - "9000:9000"
+    healthcheck:
+      # S3Proxy answers an unauthenticated GET / with 403; curl without -f still
+      # exits 0 once the server responds, which is all readiness needs here.
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:9000 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
