@@ -1,4 +1,4 @@
-.PHONY: iam image image-bootstrap image-teardown mlflow-app mlflow-app-status mlflow-app-delete train amt \
+.PHONY: iam image image-bootstrap image-teardown mlflow-app mlflow-app-status train amt \
 	package deploy invoke teardown deploy-modelbuilder
 
 # Reproduce the chapter on real AWS with SDK v3. Account-specific values are
@@ -71,17 +71,20 @@ image:
 		echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
 
 # -------------------------------------------------------------------------------
-# mlflow app: the serverless tracking server's successor
+# mlflow app: the serverless MLflow App (the tracking server's scale-to-zero
+# successor), now a native CloudFormation resource (AWS::SageMaker::MlflowApp)
 # -------------------------------------------------------------------------------
+# First pass: deploy the stack with no model, so only the App (and its artifact bucket and
+# role) come up. Its Arn is the MLFLOW_TRACKING_URI training logs to; `make deploy` later
+# adds the endpoint to the same stack, and `make teardown` removes both.
 mlflow-app:
-	MLFLOW_APP_ARTIFACT_URI=s3://$(BUCKET)/ch02-mlflow SAGEMAKER_ROLE_ARN=$(ROLE) \
-		AWS_DEFAULT_REGION=$(REGION) sh mlflow_app.sh create
+	aws cloudformation deploy --template-file template.yaml --stack-name $(STACK) \
+		--capabilities CAPABILITY_IAM --parameter-overrides MlflowAppName=ch02-mlflow
+	@aws cloudformation describe-stacks --stack-name $(STACK) \
+		--query "Stacks[0].Outputs[?OutputKey=='MlflowAppArn'].OutputValue" --output text
 mlflow-app-status:
-	SAGEMAKER_ROLE_ARN=$(ROLE) MLFLOW_APP_ARTIFACT_URI=s3://$(BUCKET)/ch02-mlflow \
-		AWS_DEFAULT_REGION=$(REGION) sh mlflow_app.sh status
-mlflow-app-delete:
-	SAGEMAKER_ROLE_ARN=$(ROLE) MLFLOW_APP_ARTIFACT_URI=s3://$(BUCKET)/ch02-mlflow \
-		AWS_DEFAULT_REGION=$(REGION) sh mlflow_app.sh delete
+	@aws sagemaker describe-mlflow-app --region $(REGION) --arn "$(APP_ARN)" \
+		--query "{Name:Name,Status:Status,Arn:Arn}" --output table
 
 # -------------------------------------------------------------------------------
 # jobs: training and tuning (need training-instance quota)
@@ -122,7 +125,12 @@ invoke:
 		--body '{"annual_income":35800,"debt_to_income":5.9,"bureau_score":631,"credit_utilization":15.7,"employment_length_years":6.7,"loan_amount":55300,"age":72,"home_ownership":"OWN","loan_purpose":"debt_consolidation","employment_status":"self_employed"}' \
 		--cli-binary-format raw-in-base64-out /dev/stdout
 
+# teardown: empty the MLflow artifact bucket first (S3 will not delete a non-empty bucket,
+# so the stack delete would otherwise fail), then delete the stack (App + endpoint) and wait.
 teardown:
+	-@B=$$(aws cloudformation describe-stack-resources --stack-name $(STACK) \
+			--query "StackResources[?LogicalResourceId=='MlflowArtifactBucket'].PhysicalResourceId" --output text 2>/dev/null); \
+		if [ -n "$$B" ] && [ "$$B" != "None" ]; then echo "emptying $$B"; aws s3 rm s3://$$B --recursive; fi
 	aws cloudformation delete-stack --stack-name $(STACK)
 	aws cloudformation wait stack-delete-complete --stack-name $(STACK)
 	@echo "$(STACK) torn down"
