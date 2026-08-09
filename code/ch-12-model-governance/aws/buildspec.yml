@@ -1,17 +1,35 @@
 version: 0.2
 
-# Builds chapter 2's champion (scorecard) and challenger serving images natively on amd64
-# in CodeBuild and pushes both to ECR. The two source directories sit at the zip root
-# beside this file; ECR_REGISTRY and the two image URIs come from the CodeBuild project env.
+# A batch build: the three serving images build in parallel, one child build per image.
+# Each child gets its context directory and image tag from the build-list; ECR_REGISTRY
+# comes from the CodeBuild project. The contexts sit at the zip root beside this file
+# (scorecard/, challenger/, gateway/).
+batch:
+  fast-fail: false
+  build-list:
+    - identifier: champion
+      env:
+        variables:
+          CONTEXT: scorecard
+          IMAGE: "ch12-champion:latest"
+    - identifier: challenger
+      env:
+        variables:
+          CONTEXT: challenger
+          IMAGE: "ch12-challenger:latest"
+    - identifier: gateway
+      env:
+        variables:
+          CONTEXT: gateway
+          IMAGE: "ch12-rollout-gateway:latest"
+
 phases:
   pre_build:
     commands:
       - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
   build:
     commands:
-      - docker build -t "$CHAMPION_URI" scorecard/
-      - docker build -t "$CHALLENGER_URI" challenger/
+      - docker build -t "$ECR_REGISTRY/$IMAGE" "$CONTEXT/"
   post_build:
     commands:
-      - docker push "$CHAMPION_URI"
-      - docker push "$CHALLENGER_URI"
+      - docker push "$ECR_REGISTRY/$IMAGE"

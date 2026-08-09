@@ -15,12 +15,14 @@
       "categorical": ["home_ownership", "loan_purpose", "employment_status"]
     },
     "metrics": { "AUC": 0.8625, "Gini": 0.725, "KS": 0.5681 },
-    "metrics_source": "Held-out validation set, chapter 2 training run"
+    "metrics_source": "Held-out validation set, chapter 2 training run",
+    "ecr_repo": "ch12-champion",
+    "model_artifact": "ch12/champion-pl/model.tar.gz"
   },
   "credit-challenger": {
     "stage": "challenger",
-    "description": "Monotone gradient-boosted challenger for consumer credit. XGBoost with monotonic constraints so the model honours the same directional business rules as the incumbent scorecard, while capturing interactions the linear model cannot.",
-    "algorithm": "Monotone XGBoost",
+    "description": "Monotone gradient-boosted challenger for consumer credit. CatBoost with monotonic constraints on the numeric features, so the model honours the same directional business rules as the incumbent scorecard while capturing interactions the linear model cannot; its native categorical handling also tolerates category values unseen in training rather than failing on them.",
+    "algorithm": "Monotone CatBoost",
     "problem_type": "Binary classification (probability of default)",
     "owner": "Credit Risk Modeling",
     "risk_rating": "High",
@@ -32,7 +34,9 @@
       "numeric": ["age", "annual_income", "debt_to_income", "bureau_score", "credit_utilization", "employment_length_years", "loan_amount"],
       "categorical": ["home_ownership", "loan_purpose", "employment_status"]
     },
-    "metrics": { "AUC": 0.8825, "Gini": 0.7649, "KS": 0.6003 },
-    "metrics_source": "Held-out validation set, chapter 2 training run"
+    "metrics": { "AUC": 0.883, "Gini": 0.766, "KS": 0.6041 },
+    "metrics_source": "Held-out validation set, chapter 2 training run",
+    "ecr_repo": "ch12-challenger",
+    "model_artifact": "ch12/challenger-cb/model.tar.gz"
   }
 }
