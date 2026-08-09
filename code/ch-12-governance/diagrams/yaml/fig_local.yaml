@@ -1,0 +1,58 @@
+# The local rollout stack: applications hit the flag-routing gateway, which reads the
+# challenger_rollout flag from the from-source AppConfig store and routes each one to
+# the champion (chapter 2's WOE scorecard) or the challenger (monotone XGBoost). Widening
+# the rollout is a flag edit -- nothing restarts.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Applications, Local]
+
+    Applications:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "applications\n(loanId + features)"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local cloud (Docker)"
+      Children: [GatewayColumn, Models]
+
+    GatewayColumn:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Flags, Gateway]
+    Flags:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS AppConfig"
+      Title: "flag store (from source)\nchallenger_rollout split"
+    Gateway:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "rollout gateway\nFastAPI, flag-routed"
+
+    Models:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Champion, Challenger]
+    Champion:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "champion\ncredit-scorecard (WOE + LR)"
+    Challenger:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "challenger\ncredit-challenger (XGBoost)"
+
+  Links:
+    - {Source: Applications, SourcePosition: E, Target: Gateway, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Flags, SourcePosition: S, Target: Gateway, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: E, Target: Champion, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: E, Target: Challenger, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
