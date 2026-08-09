@@ -107,8 +107,11 @@ class PSIDetector:
         categorical: Sequence[str] = (),
     ) -> PSIDetector:
         """Bin each numeric feature at the model's own split borders (the tree path)."""
+        # get_borders() keys by the OVERALL feature index (categorical positions are
+        # simply absent), so feature_names_.index(f) aligns a name to its borders no
+        # matter where the categoricals sit -- verified against a mid-list categorical.
         names = list(model.feature_names_)
-        model_borders = model.get_borders()  # {feature_index: [thresholds]}
+        model_borders = model.get_borders()
         borders = {}
         for f in numeric:
             bs = model_borders.get(names.index(f), [])
