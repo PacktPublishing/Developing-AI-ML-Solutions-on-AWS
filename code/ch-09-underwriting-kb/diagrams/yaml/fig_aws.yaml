@@ -1,0 +1,51 @@
+# The retrieval round on AWS: the same FastAPI app runs unchanged as a container
+# Lambda behind API Gateway. It embeds and generates with Amazon Bedrock and retrieves
+# from an Amazon OpenSearch Service domain (with Dashboards). The one thing that moves
+# between worlds is the embeddings/generation seam and the store endpoint.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Underwriter, AWSCloud]
+
+    Underwriter:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "underwriter"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [ApiGateway, Lambda, Backends]
+
+    ApiGateway:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon API Gateway"
+      Title: "API Gateway\nask / recommend"
+    Lambda:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Lambda"
+      Title: "container Lambda\nFastAPI app"
+    Backends:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Bedrock, OpenSearch]
+    Bedrock:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "Bedrock\nembed + generate"
+    OpenSearch:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon OpenSearch Service"
+      Title: "OpenSearch Service\ndomain + Dashboards"
+
+  Links:
+    - {Source: Underwriter, SourcePosition: E, Target: ApiGateway, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: ApiGateway, SourcePosition: E, Target: Lambda, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Lambda, SourcePosition: E, Target: Bedrock, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Lambda, SourcePosition: E, Target: OpenSearch, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
