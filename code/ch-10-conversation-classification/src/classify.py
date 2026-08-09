@@ -14,6 +14,7 @@ Usage (from the chapter root):
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 
@@ -62,7 +63,8 @@ def collect(
     lower = {label.lower(): label for label in labels}
     preds: dict[str, str] = {}
     for obj in s3.list_objects_v2(Bucket=bucket, Prefix=prefix).get("Contents", []):
-        if not obj["Key"].endswith(".out"):
+        # only the record shards; Bedrock also writes a manifest.json.out summary
+        if not obj["Key"].endswith(".jsonl.out"):
             continue
         body = (
             s3.get_object(Bucket=bucket, Key=obj["Key"])["Body"].read().decode("utf-8")
@@ -83,9 +85,13 @@ def classify(rows: list[dict], labels: list[str], bucket: str) -> dict[str, str]
     in_uri = write_manifest(rows, labels, bucket, "input/manifest.jsonl", s3)
     out_uri = f"s3://{bucket}/output/"
     bedrock = get_bedrock()
+    # roleArn is required on AWS (the service role Bedrock assumes to reach S3);
+    # the local shim ignores it. BATCH_MODEL lets the cloud round pick a
+    # batch-capable model without changing the seam's default.
     job = bedrock.create_model_invocation_job(
         jobName=f"classify-{int(time.time())}",
-        modelId=TEXT_MODEL,
+        roleArn=os.environ.get("BEDROCK_BATCH_ROLE", ""),
+        modelId=os.environ.get("BATCH_MODEL", TEXT_MODEL),
         inputDataConfig={
             "s3InputDataConfig": {"s3Uri": in_uri, "s3InputFormat": "JSONL"}
         },
