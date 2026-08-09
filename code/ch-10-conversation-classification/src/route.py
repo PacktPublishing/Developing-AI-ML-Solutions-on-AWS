@@ -14,6 +14,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -44,7 +45,10 @@ def main() -> None:
     for label in labels:
         name = slug(label)
         arn = sns.create_topic(Name=f"ch10-{name}")["TopicArn"]
-        sns.subscribe(TopicArn=arn, Protocol="file", Endpoint=f"{name}-team")
+        # Locally the shim delivers to a file inbox per team; on AWS each team owns
+        # its own subscription (an SQS queue), so we only create topics and publish.
+        if os.environ.get("BEDROCK_LOCAL") == "1":
+            sns.subscribe(TopicArn=arn, Protocol="file", Endpoint=f"{name}-team")
         topics[label] = arn
 
     routed = Counter()
