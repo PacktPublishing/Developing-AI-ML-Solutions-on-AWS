@@ -1,13 +1,14 @@
 # /// script
 # dependencies = ["catboost", "pandas", "numpy", "boto3"]
 # ///
-"""A monitoring job over the drift monitors, emitting the SageMaker-shaped artifacts.
+"""The monitoring job over the drift monitors, emitting the SageMaker-shaped artifacts.
 
-This is the harness over monitor.py that a SageMaker Model Monitor + Clarify schedule
-runs on AWS. It writes the Clarify explainability report (analysis.json, with global
-mean-absolute SHAP values per feature and the expected value), the Model Monitor
-constraint_violations.json, then publishes each metric to CloudWatch and reads back
-which alarms are breached. The alarm thresholds are the drift thresholds from monitor.py.
+One entrypoint for both environments. Locally it runs on the generated batches,
+publishes to the CloudWatch shim, and bootstraps the alarms, because no stack exists
+to own them. As the SageMaker Processing step the pipeline passes the
+/opt/ml/processing paths as arguments (--scores carries the Batch Transform
+predictions) and the metrics go to real CloudWatch, where the stack's alarms watch
+the same names.
 
 Usage:
   MONITOR_LOCAL=1 uv run src/run_monitor.py
@@ -15,48 +16,29 @@ Usage:
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
 
-from cloudwatch import get_cloudwatch
-from model import FEATURES, load
-from monitor import NDCG_MIN, PSI_MAJOR, _attributions, run
-
-NAMESPACE = "ch11/monitoring"
-
-
-def analysis_json(model, df: pd.DataFrame) -> dict:
-    """Render Clarify's explainability report: global mean-abs SHAP per feature."""
-    attr = _attributions(model, df)
-    return {
-        "explanations": {
-            "kernel_shap": {
-                "default": {
-                    "global_shap_values": {
-                        f: round(float(attr[f]), 4) for f in FEATURES
-                    },
-                    "expected_value": round(
-                        float(model.predict_proba(df[FEATURES])[:, 1].mean()), 4
-                    ),
-                }
-            }
-        }
-    }
+from attribution import NDCG_MIN, analysis_json
+from cloudwatch import NAMESPACE, get_cloudwatch
+from model import load
+from monitor import constraint_violations, run
+from psi import PSI_MAJOR
 
 
-def constraint_violations(report: dict) -> dict:
-    """Render Model Monitor's constraint_violations.json from the monitor report."""
-    return {
-        "violations": [
-            {
-                "feature_name": v["feature"],
-                "constraint_check_type": v["monitor"],
-                "description": f"{v['metric']} {v['value']} breached threshold {v['threshold']}",
-            }
-            for v in report["violations"]
-        ]
-    }
+def transform_scores(
+    scores_dir: Path | None, current: pd.DataFrame
+) -> pd.Series | None:
+    """Read the Batch Transform predictions for the current batch, if the step ran."""
+    if scores_dir is None or not scores_dir.is_dir():
+        return None
+    out = sorted(f for f in scores_dir.iterdir() if f.name.endswith(".out"))
+    if not out:
+        return None
+    scores = pd.concat([pd.read_csv(f, header=None)[0] for f in out], ignore_index=True)
+    return pd.Series(scores.to_numpy(), index=current.index, name="score")
 
 
 def main() -> None:
@@ -67,12 +49,20 @@ def main() -> None:
     )
     p.add_argument("--current", type=Path, default=Path("data/generated/current.csv"))
     p.add_argument("--model", type=Path, default=Path("runs-local/model/scorecard.cbm"))
+    p.add_argument(
+        "--scores",
+        type=Path,
+        default=None,
+        help="directory of Batch Transform .out predictions for the current batch",
+    )
     p.add_argument("--out", type=Path, default=Path("outputs/monitoring"))
     a = p.parse_args()
 
     model = load(a.model)
     reference, current = pd.read_csv(a.reference), pd.read_csv(a.current)
-    report = run(model, reference, current)
+    report = run(
+        model, reference, current, current_scores=transform_scores(a.scores, current)
+    )
 
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "baseline_analysis.json").write_text(
@@ -86,27 +76,28 @@ def main() -> None:
     )
 
     cw = get_cloudwatch()
-    cw.put_metric_data(
-        Namespace=NAMESPACE,
-        MetricData=[
-            {"MetricName": "score_psi", "Value": report["metrics"]["score_psi"]}
-        ],
-    )
-    cw.put_metric_data(
-        Namespace=NAMESPACE,
-        MetricData=[
-            {
-                "MetricName": "attribution_ndcg",
-                "Value": report["metrics"]["attribution_ndcg"],
-            }
-        ],
-    )
-    for feature, psi in report["metrics"]["feature_psi"].items():
+    metrics = report["metrics"]
+    for name, value in [
+        ("score_psi", metrics["score_psi"]),
+        ("feature_attribution_ndcg", metrics["attribution_ndcg"]),
+        *((f"psi_{f}", v) for f, v in metrics["feature_psi"].items()),
+    ]:
         cw.put_metric_data(
-            Namespace=NAMESPACE,
-            MetricData=[{"MetricName": f"psi_{feature}", "Value": psi}],
+            Namespace=NAMESPACE, MetricData=[{"MetricName": name, "Value": value}]
         )
 
+    status = "CompletedWithViolations" if report["violations"] else "Completed"
+    print(
+        f"monitoring job: {status}  ({len(report['violations'])} violations) -> {a.out}"
+    )
+    print(
+        f"  score_psi={metrics['score_psi']}  attribution_ndcg={metrics['attribution_ndcg']}"
+    )
+
+    if os.environ.get("MONITOR_LOCAL") != "1":
+        return
+    # no stack owns the alarms locally, so the job bootstraps and evaluates them;
+    # on AWS template.yaml owns them and the job only publishes the metrics
     cw.put_metric_alarm(
         AlarmName="ch11-score-drift",
         Namespace=NAMESPACE,
@@ -117,11 +108,11 @@ def main() -> None:
     cw.put_metric_alarm(
         AlarmName="ch11-attribution-drift",
         Namespace=NAMESPACE,
-        MetricName="attribution_ndcg",
+        MetricName="feature_attribution_ndcg",
         Threshold=NDCG_MIN,
         ComparisonOperator="LessThanThreshold",
     )
-    for feature in report["metrics"]["feature_psi"]:
+    for feature in metrics["feature_psi"]:
         cw.put_metric_alarm(
             AlarmName=f"ch11-psi-{feature}",
             Namespace=NAMESPACE,
@@ -129,11 +120,6 @@ def main() -> None:
             Threshold=PSI_MAJOR,
             ComparisonOperator="GreaterThanThreshold",
         )
-
-    status = "CompletedWithViolations" if report["violations"] else "Completed"
-    print(
-        f"monitoring job: {status}  ({len(report['violations'])} violations) -> {a.out}"
-    )
     alarms = [
         al for al in cw.describe_alarms()["MetricAlarms"] if al["StateValue"] == "ALARM"
     ]

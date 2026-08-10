@@ -1,6 +1,6 @@
 #!/bin/sh
 # One image answers all three: SageMaker runs it as `... train` or `... serve` (Batch
-# Transform), and the Processing job overrides the entrypoint to run sm_monitor.py.
+# Transform), and the Processing job overrides the entrypoint to run run_monitor.py.
 # Anything else is passed through (handy for a shell).
 set -e
 if [ "$1" = "serve" ]; then

@@ -10,10 +10,11 @@ Two steps, wired the way the book has wired SageMaker all along:
 
 The Transform step scores the current batch through the scorecard's serving container
 -- the realistic way you score a production batch, and the way Model Monitor captures
-predictions. The Processing step runs sm_monitor.py: it reads those live scores, the
-reference and current batches, and the model, computes PSI + SHAP feature-attribution
-drift, writes the Clarify-shaped artifacts, and publishes the metrics to CloudWatch,
-where the stack's alarms turn them into alerts. SageMaker Clarify is closed to new
+predictions. The Processing step runs run_monitor.py, the chapter's one monitoring
+entrypoint, handing it the /opt/ml/processing paths as arguments: it reads those live
+scores, the reference and current batches, and the model, computes PSI + SHAP
+feature-attribution drift, writes the Clarify-shaped artifacts, and publishes the
+metrics to CloudWatch, where the stack's alarms turn them into alerts. SageMaker Clarify is closed to new
 accounts; this is AWS's documented replacement -- the same SHAP, run as a Processing
 step you own.
 
@@ -51,7 +52,7 @@ INSTANCE = os.environ.get("INSTANCE_TYPE", "ml.m5.large")
 PREFIX = "ch11/pipeline"
 MODEL_NAME = "ch11-scorecard-transform"
 HERE = Path(__file__).resolve().parent
-SM_MONITOR = str(HERE.parent / "src" / "sm_monitor.py")
+MONITOR = str(HERE.parent / "src" / "run_monitor.py")
 
 # The scorecard's feature contract (the transform input is features only, no label).
 NUMERIC = [
@@ -165,7 +166,19 @@ def main() -> None:
     monitor_step = ProcessingStep(
         name="monitor-drift",
         step_args=monitor.run(
-            code=SM_MONITOR,
+            code=MONITOR,
+            arguments=[
+                "--reference",
+                "/opt/ml/processing/input/reference/reference.csv",
+                "--current",
+                "/opt/ml/processing/input/current/current.csv",
+                "--model",
+                "/opt/ml/processing/input/model/scorecard.cbm",
+                "--scores",
+                "/opt/ml/processing/input/scores",
+                "--out",
+                "/opt/ml/processing/output",
+            ],
             inputs=[
                 _input("reference", staged["reference"]),
                 _input("current", staged["current"]),

@@ -14,18 +14,24 @@ PSIDetector fits the reference proportions over a set of bins and scores the PSI
 later batch against them. Build it two ways: from_reference bins each feature into
 reference quantiles (the scorecard / linear-model path), from_catboost bins each
 numeric feature at the model's own split borders (the tree path). It serialises to a
-transparent JSON artifact and logs to MLflow as a pyfunc model.
+transparent JSON artifact, and log_detector wraps that artifact as an MLflow pyfunc
+model so the drift baseline carries the same lineage, versioning, and registry as
+the model it watches. MLflow is imported inside log_detector only, so the monitor
+image and the Processing job never need it.
 
 Usage:
-  from psi import PSIDetector
+  from psi import PSIDetector, log_detector
   det = PSIDetector.from_catboost(model, reference, NUMERIC, CATEGORICAL)
   det.psi(current)                 # {feature: psi}
   det.save("psi.json"); PSIDetector.load("psi.json")
+  with mlflow.start_run():
+      log_detector(det)            # -> registered pyfunc model
 """
 
 from __future__ import annotations
 
 import json
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -185,3 +191,35 @@ class PSIDetector:
     def load(cls, path: str | Path) -> PSIDetector:
         """Load a detector from a JSON artifact."""
         return cls.from_dict(json.loads(Path(path).read_text()))
+
+
+# -- MLflow ---------------------------------------------------------------------
+ARTIFACT_KEY = "psi_detector"
+
+
+def log_detector(detector: PSIDetector, artifact_path: str = "psi_detector"):
+    """Log a fitted detector as a pyfunc model under the active MLflow run.
+
+    The pyfunc's predict() takes a batch and returns one row of per-feature PSI.
+    """
+    import mlflow  # deferred: only the MLflow path needs it
+
+    class PSIModel(mlflow.pyfunc.PythonModel):
+        """A pyfunc that scores a batch's PSI against the saved detector."""
+
+        def load_context(self, context) -> None:
+            """Load the detector from its JSON artifact."""
+            self.detector = PSIDetector.load(context.artifacts[ARTIFACT_KEY])
+
+        def predict(self, context, model_input: pd.DataFrame) -> pd.DataFrame:
+            """Return one row of per-feature PSI for the input batch."""
+            return pd.DataFrame([self.detector.psi(model_input)])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        artifact = Path(tmp) / "psi.json"
+        detector.save(artifact)
+        return mlflow.pyfunc.log_model(
+            artifact_path=artifact_path,
+            python_model=PSIModel(),
+            artifacts={ARTIFACT_KEY: str(artifact)},
+        )

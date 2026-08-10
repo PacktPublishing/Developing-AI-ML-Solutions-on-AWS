@@ -14,6 +14,8 @@ import os
 
 import boto3
 
+NAMESPACE = "ch11/monitoring"
+
 _OPS = {
     "GreaterThanThreshold": lambda v, t: v > t,
     "GreaterThanOrEqualToThreshold": lambda v, t: v >= t,

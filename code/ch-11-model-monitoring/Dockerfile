@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir \
     "gunicorn>=21.2"
 
 WORKDIR /opt/program
-COPY src/model.py src/train.py src/serve.py src/psi.py src/monitor.py \
-    src/cloudwatch.py src/run_monitor.py src/sm_monitor.py entrypoint.sh ./
+COPY src/model.py src/train.py src/serve.py src/psi.py src/attribution.py \
+    src/monitor.py src/cloudwatch.py src/run_monitor.py entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
 # /opt/program on PATH so `train` resolves; unbuffered logs stream to CloudWatch

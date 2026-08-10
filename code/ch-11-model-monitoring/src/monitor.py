@@ -7,9 +7,9 @@ PSI compares a current distribution to the reference the model was trained on: <
 stable, 0.1-0.25 moderate, > 0.25 major. Features are binned the ML way -- at the
 scorecard's own CatBoost split borders (see psi.py), so PSI measures drift across the
 boundaries the model actually uses -- while the score, which has no model borders, is
-binned into reference quantiles. The attribution monitor mirrors SageMaker Clarify's
-feature-attribution drift: it ranks features by mean absolute SHAP contribution and
-reports the NDCG between the reference ranking and the current one (1.0 = unchanged).
+binned into reference quantiles. The attribution monitor (attribution.py) mirrors
+SageMaker Clarify's feature-attribution drift: NDCG between the reference SHAP
+ranking and the current one (1.0 = unchanged).
 run() returns the metrics and the violations a monitoring schedule would raise.
 
 Usage:
@@ -20,31 +20,10 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-from catboost import Pool
-from model import CATEGORICAL, FEATURES, NUMERIC, load, score
+from attribution import NDCG_MIN, attribution_ndcg, attributions
+from model import CATEGORICAL, NUMERIC, load, score
 from psi import PSI_MAJOR, PSIDetector
-
-NDCG_MIN = 0.90
-
-
-def _attributions(model, df: pd.DataFrame) -> pd.Series:
-    """Mean absolute SHAP contribution per feature (CatBoost native SHAP)."""
-    shap = model.get_feature_importance(
-        Pool(df[FEATURES], cat_features=CATEGORICAL), type="ShapValues"
-    )
-    return pd.Series(np.abs(shap[:, :-1]).mean(axis=0), index=FEATURES)
-
-
-def attribution_ndcg(ref_attr: pd.Series, cur_attr: pd.Series) -> float:
-    """NDCG of the current feature-attribution ranking against the reference ranking."""
-    order = ref_attr.sort_values(ascending=False).index
-    gains = cur_attr[order].to_numpy()
-    discount = 1 / np.log2(np.arange(2, len(gains) + 2))
-    dcg = float(np.sum(gains * discount))
-    ideal = float(np.sum(np.sort(gains)[::-1] * discount))
-    return dcg / ideal if ideal else 1.0
 
 
 def run(
@@ -95,7 +74,7 @@ def run(
         )
 
     ndcg = attribution_ndcg(
-        _attributions(model, reference), _attributions(model, current)
+        attributions(model, reference), attributions(model, current)
     )
     metrics["attribution_ndcg"] = round(ndcg, 3)
     if ndcg < NDCG_MIN:
@@ -110,6 +89,20 @@ def run(
         )
 
     return {"metrics": metrics, "violations": violations}
+
+
+def constraint_violations(report: dict) -> dict:
+    """Render Model Monitor's constraint_violations.json from the monitor report."""
+    return {
+        "violations": [
+            {
+                "feature_name": v["feature"],
+                "constraint_check_type": v["monitor"],
+                "description": f"{v['metric']} {v['value']} breached threshold {v['threshold']}",
+            }
+            for v in report["violations"]
+        ]
+    }
 
 
 def main() -> None:
