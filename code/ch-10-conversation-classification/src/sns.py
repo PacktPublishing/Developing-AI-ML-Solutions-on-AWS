@@ -13,6 +13,8 @@ classified conversation lands in that team's queue exactly as a real subscriber
 
 import json
 import os
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
@@ -45,21 +47,29 @@ class LocalSNS:
     def publish(
         self, TopicArn: str, Message: str, Subject: str | None = None, **_
     ) -> dict:
-        """Fan the message out to every subscriber (here, appended to a file inbox)."""
+        """Fan the message out to every subscriber (here, appended to a file inbox).
+
+        Each delivered line is the SNS notification envelope a real subscriber
+        would receive, minus the signature fields (nothing signs locally).
+        """
+        message_id = str(uuid.uuid4())
+        timestamp = (
+            datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        )
+        notification = {
+            "Type": "Notification",
+            "MessageId": message_id,
+            "TopicArn": TopicArn,
+            "Message": Message,
+            "Timestamp": timestamp,
+        }
+        if Subject is not None:
+            notification["Subject"] = Subject
         for sub in self._subs.get(TopicArn, []):
             path = self._inbox / f"{sub['endpoint']}.jsonl"
             with path.open("a", encoding="utf-8") as f:
-                f.write(
-                    json.dumps(
-                        {
-                            "topic": TopicArn.split(":")[-1],
-                            "subject": Subject,
-                            "message": Message,
-                        }
-                    )
-                    + "\n"
-                )
-        return {"MessageId": "local"}
+                f.write(json.dumps(notification) + "\n")
+        return {"MessageId": message_id}
 
 
 def get_sns():

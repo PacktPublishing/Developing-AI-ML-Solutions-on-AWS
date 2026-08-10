@@ -17,6 +17,7 @@ import threading
 import uuid
 
 import boto3
+from botocore.exceptions import ClientError
 
 from models import get_runtime
 
@@ -69,8 +70,24 @@ class LocalBedrockBatch:
         return {"jobArn": arn}
 
     def get_model_invocation_job(self, jobIdentifier, **_) -> dict:
-        """Return the current job details, including status."""
-        return self._jobs[jobIdentifier]
+        """Return the current job details by ARN or bare job id, including status."""
+        job = self._jobs.get(jobIdentifier) or next(
+            (j for arn, j in self._jobs.items() if arn.split("/")[-1] == jobIdentifier),
+            None,
+        )
+        if job is None:
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "ResourceNotFoundException",
+                        "Message": "The specified resource Amazon Resource Name"
+                        " (ARN) was not found. Check the Amazon Resource Name"
+                        " (ARN) and try your request again.",
+                    }
+                },
+                "GetModelInvocationJob",
+            )
+        return job
 
     def _run(self, arn: str) -> None:
         """Read the input shards, invoke the model per record, write .jsonl.out."""

@@ -56,9 +56,20 @@ class LocalBedrockRuntime:
             model=OLLAMA_TEXT_MODEL, messages=chat, options=options, think=False
         )
         text = resp["message"]["content"]
+        tokens_in = resp.get("prompt_eval_count") or 0
+        tokens_out = resp.get("eval_count") or 0
         return {
             "output": {"message": {"role": "assistant", "content": [{"text": text}]}},
-            "stopReason": "end_turn",
+            "stopReason": (
+                "max_tokens" if resp.get("done_reason") == "length" else "end_turn"
+            ),
+            "usage": {
+                "inputTokens": tokens_in,
+                "outputTokens": tokens_out,
+                "totalTokens": tokens_in + tokens_out,
+            },
+            # Ollama reports total_duration in nanoseconds
+            "metrics": {"latencyMs": (resp.get("total_duration") or 0) // 1_000_000},
         }
 
 

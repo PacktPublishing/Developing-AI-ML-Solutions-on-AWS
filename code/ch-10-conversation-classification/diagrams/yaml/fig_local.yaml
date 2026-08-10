@@ -24,7 +24,7 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Title: "Local cloud (Docker, from-source shims)"
+      Title: "Local cloud (Docker Compose)"
       Children: [S3Proxy, BatchColumn, SNS]
 
     S3Proxy:
