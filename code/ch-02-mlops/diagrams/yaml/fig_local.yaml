@@ -15,7 +15,7 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Title: "Local cloud (Docker)"
+      Title: "Local cloud (Docker Compose)"
       Children: [Container, MLflow, S3]
     Container:
       Type: AWS::Diagram::Resource
