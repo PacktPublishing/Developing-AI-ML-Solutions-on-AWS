@@ -18,7 +18,7 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Title: "Local (Docker + Ollama)"
+      Title: "Local (Docker Compose + Ollama)"
       Children: [Agent, Tools]
     Agent:
       Type: AWS::Diagram::Resource

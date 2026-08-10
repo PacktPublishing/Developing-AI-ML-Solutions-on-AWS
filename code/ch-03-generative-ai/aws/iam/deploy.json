@@ -39,64 +39,6 @@
       "Resource": "arn:aws:s3:::aws-sam-cli-managed-default*"
     },
     {
-      "Sid": "VpcNetworking",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:CreateVpc",
-        "ec2:DeleteVpc",
-        "ec2:DescribeVpcs",
-        "ec2:ModifyVpcAttribute",
-        "ec2:CreateSubnet",
-        "ec2:DeleteSubnet",
-        "ec2:DescribeSubnets",
-        "ec2:CreateSecurityGroup",
-        "ec2:DeleteSecurityGroup",
-        "ec2:DescribeSecurityGroups",
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:RevokeSecurityGroupIngress",
-        "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:RevokeSecurityGroupEgress",
-        "ec2:CreateVpcEndpoint",
-        "ec2:DeleteVpcEndpoints",
-        "ec2:DescribeVpcEndpoints",
-        "ec2:DescribeAvailabilityZones",
-        "ec2:DescribeRouteTables",
-        "ec2:CreateTags",
-        "ec2:DeleteTags",
-        "ec2:DescribeNetworkInterfaces"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "RdsInstance",
-      "Effect": "Allow",
-      "Action": [
-        "rds:CreateDBSubnetGroup",
-        "rds:DeleteDBSubnetGroup",
-        "rds:DescribeDBSubnetGroups",
-        "rds:CreateDBInstance",
-        "rds:DeleteDBInstance",
-        "rds:DescribeDBInstances",
-        "rds:ModifyDBInstance",
-        "rds:AddTagsToResource",
-        "rds:ListTagsForResource"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "DbCredentials",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:CreateSecret",
-        "secretsmanager:DeleteSecret",
-        "secretsmanager:DescribeSecret",
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:GetRandomPassword",
-        "secretsmanager:TagResource"
-      ],
-      "Resource": "*"
-    },
-    {
       "Sid": "LambdaFunction",
       "Effect": "Allow",
       "Action": [
