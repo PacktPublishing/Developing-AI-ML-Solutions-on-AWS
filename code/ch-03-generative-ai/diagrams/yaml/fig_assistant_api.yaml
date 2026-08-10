@@ -33,8 +33,9 @@ Diagram:
       Preset: "LambdaCoin"
       Title: "Lambda\nfunction URL"
     Database:
-      Type: AWS::RDS::DBInstance
-      Title: "RDS Postgres\npgvector"
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Aurora"
+      Title: "Aurora Serverless\npgvector"
 
     Services:
       Type: AWS::Diagram::VerticalStack

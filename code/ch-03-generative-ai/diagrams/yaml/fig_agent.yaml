@@ -30,8 +30,9 @@ Diagram:
       Preset: "Amazon Bedrock"
       Title: "Bedrock\nQwen3"
     Retrieve:
-      Type: AWS::RDS::DBInstance
-      Title: "RDS pgvector\nlookup_sector"
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Aurora"
+      Title: "Aurora pgvector\nlookup_sector"
     Route:
       Type: AWS::Diagram::Resource
       Preset: "LambdaCoin"

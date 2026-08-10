@@ -1,4 +1,4 @@
-# Local mode: the same Strands agent with Ollama for Bedrock and a pgvector container for RDS; BEDROCK_LOCAL=1 runs it offline.
+# Local mode: the same Strands agent with Ollama for Bedrock and a pgvector container for Aurora; BEDROCK_LOCAL=1 runs it offline.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -34,7 +34,7 @@ Diagram:
     Vectors:
       Type: AWS::Diagram::Resource
       Preset: "Postgres"
-      Title: "pgvector :5544\n(RDS Postgres)"
+      Title: "pgvector :5544\n(Aurora Serverless)"
   Links:
     - {Source: User, SourcePosition: E, Target: Agent, TargetPosition: W, TargetArrowHead: {Type: Open}}
     - {Source: Agent, SourcePosition: E, Target: Ollama, TargetPosition: W, TargetArrowHead: {Type: Open}}
