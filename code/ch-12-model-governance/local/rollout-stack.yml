@@ -1,6 +1,6 @@
 # The local rollout stack: the two chapter-2 models behind the flag-routing gateway,
 # with the real AWS AppConfig agent as the flag source. champion (WOE scorecard) and
-# challenger (monotone XGBoost) are chapter 2's own serving images; the agent is the
+# challenger (monotone CatBoost) are chapter 2's own serving images; the agent is the
 # published image in local development mode, reading the Ion feature-flag file so it
 # evaluates the split exactly as it does on ECS. The gateway asks the agent for the
 # variant per request, so `make flip` widens the rollout with nothing restarted.

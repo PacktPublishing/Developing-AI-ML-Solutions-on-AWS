@@ -44,7 +44,12 @@ Diagram:
     Gateway:
       Type: AWS::Diagram::Resource
       Preset: "AWS Fargate"
-      Title: "rollout gateway\nFastAPI, flag-routed"
+      Title: "rollout gateway\nflag-routed"
+      Children: [GatewayApp]
+    GatewayApp:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "FastAPI"
 
     Endpoints:
       Type: AWS::Diagram::VerticalStack

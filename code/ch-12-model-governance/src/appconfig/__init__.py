@@ -1,21 +1,5 @@
-"""AppConfig feature flags: the seam and the from-source rule evaluator."""
+"""AppConfig feature flags: the agent client."""
 
-from .client import (
-    AgentAppConfig,
-    AppConfig,
-    AppConfigStore,
-    LocalFlagStore,
-    get_appconfig,
-)
-from .rule_evaluator import evaluate_config, evaluate_rule, extract_attributes
+from .client import AgentAppConfig, get_appconfig
 
-__all__ = [
-    "AgentAppConfig",
-    "AppConfig",
-    "AppConfigStore",
-    "LocalFlagStore",
-    "get_appconfig",
-    "evaluate_config",
-    "evaluate_rule",
-    "extract_attributes",
-]
+__all__ = ["AgentAppConfig", "get_appconfig"]

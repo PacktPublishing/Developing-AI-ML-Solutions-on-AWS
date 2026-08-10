@@ -8,7 +8,7 @@ shipped without a redeploy.
 
 - A new model shipped with **champion/challenger rollout**, flipped through **AppConfig
   feature flags** with no redeploy. A FastAPI gateway routes each application to the
-  champion (chapter 2's WOE scorecard) or the challenger (its monotone XGBoost) by the
+  champion (chapter 2's WOE scorecard) or the challenger (its monotone CatBoost) by the
   `challenger_rollout` flag; the flag's `split` rule buckets each loan deterministically,
   so widening the rollout is a flag edit and no loan flips back.
 - **Model cards**, a **model registry**, and **lineage**: the record an auditor reads to
@@ -18,9 +18,8 @@ shipped without a redeploy.
 The rollout runs the **real AWS AppConfig agent**: the same published agent image is the
 sidecar locally (in local development mode, reading an Ion feature-flag file) and on ECS
 (fetching from AppConfig), so the `split` buckets every loan identically in both worlds by
-construction. The from-source rule evaluator in `src/appconfig/` is a reference for the
-non-split logic and for running without Docker; its `split` is close but not bit-identical
-to the agent's, which is why the rollout decision goes through the agent.
+construction. The gateway talks to the agent through the thin HTTP client in
+`src/appconfig/`; all rule evaluation, including the `split`, happens inside the agent.
 
 ## Run it locally
 
@@ -57,8 +56,8 @@ make sm-local MODEL=challenger SM_ROLE=<sagemaker exec role arn>
 
 ## Layout
 
-- `src/appconfig/`: the from-source AppConfig seam (the rule evaluator and the
-  `get_appconfig()` client: local flag store, or the AppConfig agent on AWS)
+- `src/appconfig/`: the `get_appconfig()` client for the AppConfig agent's HTTP
+  configuration endpoint (the agent evaluates the rules)
 - `src/router.py`, `src/models.py`: the champion/challenger router over the shared
   `/invocations` contract
 - `app/main.py`: the FastAPI rollout gateway (uvicorn locally, a Fargate service on AWS)
@@ -75,4 +74,5 @@ make sm-local MODEL=challenger SM_ROLE=<sagemaker exec role arn>
 
 - **AWS services:** AWS AppConfig (+ the ECS/Fargate agent sidecar), Amazon SageMaker
   Model Cards, SageMaker Model Registry, SageMaker ML Lineage, AWS Fargate, AWS IAM
-- **Local stand-ins:** the AppConfig flag store + rule evaluator composed from source
+- **Local stand-ins:** the real AppConfig agent image in local development mode, over
+  the Ion flag file `etl/to_ion.py` renders

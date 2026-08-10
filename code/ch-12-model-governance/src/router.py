@@ -7,13 +7,16 @@ lands the same way. Widening the rollout is a flag edit -- bump the challenger
 variant's pct in AppConfig -- with no redeploy and no loan flipping back.
 
 Usage:
-  APPCONFIG_LOCAL=1 CHAMPION_URL=... CHALLENGER_URL=... uv run src/router.py applications.jsonl
+  APPCONFIG_AGENT_URL=http://localhost:2772 CHAMPION_URL=... CHALLENGER_URL=... \
+    uv run src/router.py applications.jsonl
 """
 
 import argparse
 import json
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol
 
 from appconfig import get_appconfig
 from models import http_scorer
@@ -21,11 +24,21 @@ from models import http_scorer
 ROLLOUT_FLAG = "challenger_rollout"
 REFER_THRESHOLD = 0.5
 
+ScoreFn = Callable[[str, dict], float]
+
+
+class FlagClient(Protocol):
+    """What the router needs from a feature-flag client."""
+
+    def configuration(self, context: dict) -> dict:
+        """Return the evaluated flags for a request context."""
+        ...
+
 
 class Router:
     """Route an application to the champion or challenger the rollout flag picks."""
 
-    def __init__(self, appconfig, score) -> None:
+    def __init__(self, appconfig: FlagClient, score: ScoreFn) -> None:
         """Take a feature-flag client and a score(model_name, loan) callable."""
         self._appconfig = appconfig
         self._score = score

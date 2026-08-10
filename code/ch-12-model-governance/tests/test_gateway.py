@@ -1,27 +1,24 @@
 """The FastAPI rollout gateway: flag-routed scoring over HTTP."""
 
-from pathlib import Path
-
 from fastapi.testclient import TestClient
-
-from appconfig import AppConfig, LocalFlagStore
 from main import app, get_router
 from router import Router
 
-FLAGS = Path("local/flags/feature-flags.json")
+
+def _score(model_name, loan):
+    """Stub scorer: a referable pd from the challenger, an approvable one from the champion."""
+    return 0.8 if model_name == "credit-challenger" else 0.1
 
 
-def _client(score):
-    """Return a TestClient whose router uses the local flags and a stub scorer."""
-    app.dependency_overrides[get_router] = lambda: Router(
-        AppConfig(LocalFlagStore(FLAGS)), score
-    )
+def _client(stub_flags, score):
+    """Return a TestClient whose router uses the stub flags and a stub scorer."""
+    app.dependency_overrides[get_router] = lambda: Router(stub_flags, score)
     return TestClient(app)
 
 
-def test_score_routes_by_the_flag_and_decides():
+def test_score_routes_by_the_flag_and_decides(stub_flags):
     """POST /score returns the serving variant, its model, and the decision."""
-    client = _client(lambda m, loan: 0.8 if m == "credit-challenger" else 0.1)
+    client = _client(stub_flags, _score)
     seen = set()
     for i in range(200):
         body = client.post(

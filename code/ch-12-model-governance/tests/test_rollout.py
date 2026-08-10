@@ -1,63 +1,55 @@
-"""The rollout: deterministic split, monotone widening, and router assignment."""
+"""The rollout: the agent's deterministic split, monotone widening, and router assignment."""
 
-import copy
-import json
-from pathlib import Path
-
-from appconfig import AppConfig, LocalFlagStore, evaluate_config
+from appconfig import AgentAppConfig
 from router import Router
 
-FLAGS = Path("local/flags/feature-flags.json")
+LOANS = [f"L{i:06d}" for i in range(2000)]
 
 
-def _variant(loan_id: str, cfg: dict) -> str:
-    """Return the rollout variant a loan id resolves to."""
-    return evaluate_config(cfg, {"loanId": loan_id})["challenger_rollout"]["_variant"]
+def _variants(agent_url: str, profile: str) -> dict[str, str]:
+    """Ask the agent for every loan's variant under one rollout profile."""
+    client = AgentAppConfig(agent_url, "credit-governance", "local", profile)
+    return {
+        x: client.configuration({"loanId": x})["challenger_rollout"]["_variant"]
+        for x in LOANS
+    }
 
 
-def _with_pct(cfg: dict, pct: int) -> dict:
-    """Return a copy of the config with the challenger split widened to pct."""
-    out = copy.deepcopy(cfg)
-    out["challenger_rollout"]["_variants"][0]["rule"] = (
-        f'(split by:: $loanId pct::{pct} seed:: "rollout-2026")'
-    )
-    return out
-
-
-def test_split_share_matches_the_flag():
+def test_split_share_matches_the_flag(agent_url):
     """About pct% of loans route to the challenger."""
-    cfg = json.loads(FLAGS.read_text())
-    loans = [f"L{i:06d}" for i in range(4000)]
-    share = sum(_variant(x, cfg) == "challenger" for x in loans) / len(loans)
+    got = _variants(agent_url, "rollout")
+    share = sum(v == "challenger" for v in got.values()) / len(LOANS)
     assert 0.17 < share < 0.23  # ~20%
 
 
-def test_assignment_is_deterministic():
+def test_assignment_is_deterministic(agent_url):
     """A loan id always resolves to the same variant."""
-    cfg = json.loads(FLAGS.read_text())
-    assert len({_variant("L000042", cfg) for _ in range(10)}) == 1
+    client = AgentAppConfig(agent_url, "credit-governance", "local", "rollout")
+    seen = {
+        client.configuration({"loanId": "L000042"})["challenger_rollout"]["_variant"]
+        for _ in range(10)
+    }
+    assert len(seen) == 1
 
 
-def test_widening_never_flips_a_loan_back():
+def test_widening_never_flips_a_loan_back(agent_url):
     """Bumping pct only adds loans to the challenger cohort; none leave it."""
-    cfg = json.loads(FLAGS.read_text())
-    loans = [f"L{i:06d}" for i in range(4000)]
-    in20 = {x for x in loans if _variant(x, cfg) == "challenger"}
-    in50 = {x for x in loans if _variant(x, _with_pct(cfg, 50)) == "challenger"}
+    in20 = {x for x, v in _variants(agent_url, "rollout").items() if v == "challenger"}
+    in50 = {
+        x for x, v in _variants(agent_url, "rollout50").items() if v == "challenger"
+    }
     assert in20 < in50  # strictly grows, and the 20% cohort stays in
-    assert in20 <= in50
 
 
-def test_router_scores_with_the_picked_model():
+def test_router_scores_with_the_picked_model(stub_flags):
     """The router routes each loan to the model the flag picks and decides on its pd."""
-    appconfig = AppConfig(LocalFlagStore(FLAGS))
     calls = []
 
     def score(model_name, loan):
         calls.append((loan["loanId"], model_name))
         return 0.8 if model_name == "credit-challenger" else 0.1
 
-    router = Router(appconfig, score)
+    router = Router(stub_flags, score)
     out = [router.route({"loanId": f"L{i:06d}"}) for i in range(200)]
 
     # every routed model matches the loan's variant, and the pd drives the decision

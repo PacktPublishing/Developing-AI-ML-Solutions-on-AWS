@@ -24,7 +24,7 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Title: "Local cloud (Docker)"
+      Title: "Local cloud (Docker Compose)"
       Children: [GatewayColumn, Models]
 
     GatewayColumn:
@@ -37,7 +37,12 @@ Diagram:
     Gateway:
       Type: AWS::Diagram::Resource
       Preset: "AWS Fargate"
-      Title: "rollout gateway\nFastAPI, flag-routed"
+      Title: "rollout gateway\nflag-routed"
+      Children: [GatewayApp]
+    GatewayApp:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "FastAPI"
 
     Models:
       Type: AWS::Diagram::VerticalStack
