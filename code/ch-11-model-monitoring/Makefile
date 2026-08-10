@@ -1,8 +1,12 @@
-.PHONY: data train monitor run lint test diagrams clean
+.PHONY: data train monitor run up down lint test diagrams clean
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
 export AWS_DEFAULT_REGION ?= us-east-1
+
+# The local S3 (S3Proxy) that stands in for the artifact bucket; make run uploads to it.
+COMPOSE := docker compose -f local/monitoring-stack.yml
+S3_LOCAL := aws --endpoint-url http://localhost:9000
 
 IMAGE := ch11-scorecard:latest
 # The /opt/ml training channels: the reference batch is the channel the scorecard trains on.
@@ -25,9 +29,23 @@ train:
 monitor:
 	PYTHONPATH=src uv run src/monitor.py --model runs-local/model/scorecard.cbm
 
-# the monitoring job: SageMaker-shaped artifacts plus CloudWatch metrics and alarms (local shim)
+# up/down: the local artifact store (S3Proxy). Bring it up before make run to land the
+# monitoring artifacts in a real S3 bucket locally, as the Processing step does on AWS.
+up:
+	$(COMPOSE) up -d
+	@echo "local S3 (S3Proxy) on :9000, bucket s3://ch11-monitoring"
+down:
+	$(COMPOSE) down -v
+
+# the monitoring job: SageMaker-shaped artifacts plus CloudWatch metrics and alarms (local
+# shim). When the local S3 store is up (make up), upload the artifacts to it, standing in
+# for SageMaker uploading /opt/ml/processing/output to S3.
 run:
 	MONITOR_LOCAL=1 PYTHONPATH=src uv run src/run_monitor.py --model runs-local/model/scorecard.cbm
+	@if $(S3_LOCAL) s3 ls s3://ch11-monitoring >/dev/null 2>&1; then \
+		$(S3_LOCAL) s3 sync outputs/monitoring s3://ch11-monitoring/monitoring; \
+		echo "artifacts uploaded to s3://ch11-monitoring/monitoring (local S3)"; \
+	fi
 
 lint:
 	uvx ruff check .
