@@ -155,6 +155,11 @@ def _log_to_mlflow(hp: dict, params: dict, metrics: dict, cb_model) -> None:
             pip_requirements=["catboost", "scikit-learn", "pandas"],
             registered_model_name=hp.get("registered_model_name", "credit-challenger"),
         )
+        # Attach the raw serving files as run artifacts too: the native flavor does not
+        # carry challenger.cbm or feature_spec.json, and package_model.py builds the BYOC
+        # model.tar.gz for the endpoint from the registered version's run.
+        mlflow.log_artifact(os.path.join(MODEL, "challenger.cbm"))
+        mlflow.log_artifact(os.path.join(MODEL, "feature_spec.json"))
     print(f"logged run to {uri}")
 
 

@@ -154,6 +154,11 @@ def _log_to_mlflow(hp: dict, params: dict, metrics: dict, pipeline) -> None:
             pip_requirements=["fastwoe", "scikit-learn", "pandas", "joblib"],
             registered_model_name=hp.get("registered_model_name", "credit-scorecard"),
         )
+        # Attach the raw serving files as run artifacts too (same as the challenger): the
+        # native flavor does not carry scorecard.joblib or feature_spec.json, and
+        # package_model.py builds the BYOC model.tar.gz from the registered version's run.
+        mlflow.log_artifact(os.path.join(MODEL, "scorecard.joblib"))
+        mlflow.log_artifact(os.path.join(MODEL, "feature_spec.json"))
     print(f"logged run to {uri}")
 
 

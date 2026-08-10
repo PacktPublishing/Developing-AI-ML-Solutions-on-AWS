@@ -33,18 +33,28 @@ MODEL_FILES = os.environ.get("MODEL_FILES", "challenger.cbm feature_spec.json").
 NAME = os.environ.get("ENDPOINT_NAME", "ch02-challenger-byoc")
 
 mlflow.set_tracking_uri(ARN)
+client = MlflowClient()
 
-# Resolve the version to package: default to the highest registered version rather than a brittle fixed number (override MLFLOW_MODEL_PATH to pin one).
-if not MODEL_PATH:
-    versions = MlflowClient().search_model_versions(f"name='{REGISTERED_MODEL}'")
+# Resolve the registered version to package, then download its SOURCE RUN's artifacts: the
+# run carries the raw serving files (MODEL_FILES) that train.py logs alongside the native
+# MLflow flavor, since that flavor does not itself bundle challenger.cbm / feature_spec.json.
+# Default to the highest registered version (override MLFLOW_MODEL_PATH=models:/NAME/VER).
+if MODEL_PATH:
+    name, version = MODEL_PATH.replace("models:/", "").split("/")[:2]
+    mv = client.get_model_version(name, version)
+else:
+    versions = client.search_model_versions(f"name='{REGISTERED_MODEL}'")
     if not versions:
         raise SystemExit(f"no registered versions of {REGISTERED_MODEL}")
-    latest = max(int(v.version) for v in versions)
-    MODEL_PATH = f"models:/{REGISTERED_MODEL}/{latest}"
-    print("resolved latest registered version:", MODEL_PATH, file=sys.stderr)
+    mv = max(versions, key=lambda v: int(v.version))
+    print(
+        "resolved latest registered version:",
+        f"models:/{REGISTERED_MODEL}/{mv.version}",
+        file=sys.stderr,
+    )
 
-local_dir = mlflow.artifacts.download_artifacts(MODEL_PATH)
-print("downloaded", MODEL_PATH, "->", local_dir, file=sys.stderr)
+local_dir = mlflow.artifacts.download_artifacts(run_id=mv.run_id)
+print("downloaded run", mv.run_id, "->", local_dir, file=sys.stderr)
 
 # Repack just the files the BYOC container serves, at the tar root (SageMaker unpacks model.tar.gz into /opt/ml/model).
 tar_path = "/tmp/byoc-model.tar.gz"
