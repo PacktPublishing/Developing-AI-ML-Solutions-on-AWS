@@ -4,7 +4,9 @@
 # production the same contract is often met with the built-in
 # sagemaker-scikit-learn image plus a requirements.txt; this is the transparent
 # equivalent.
-FROM python:3.12-slim
+# AWS's mirror of the Docker official image, so CodeBuild is not throttled by Docker Hub's
+# anonymous pull rate limit (429) the way it is pulling from docker.io.
+FROM public.ecr.aws/docker/library/python:3.12-slim
 
 RUN pip install --no-cache-dir \
     "fastwoe==0.1.8" \

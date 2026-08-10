@@ -2,7 +2,9 @@
 # model. Same shape as the scorecard image (one image trains and serves, so the
 # runtime that produced the model is the one behind the endpoint) -- only the
 # library changes, catboost in place of fastwoe.
-FROM python:3.12-slim
+# AWS's mirror of the Docker official image, so CodeBuild is not throttled by Docker Hub's
+# anonymous pull rate limit (429) the way it is pulling from docker.io.
+FROM public.ecr.aws/docker/library/python:3.12-slim
 
 RUN pip install --no-cache-dir \
     "catboost>=1.2" \

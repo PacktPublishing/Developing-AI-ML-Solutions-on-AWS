@@ -60,7 +60,14 @@ def main() -> None:
         import mlflow
 
         mlflow.set_tracking_uri(uri)
-        mlflow.set_experiment(os.environ.get("MLFLOW_EXPERIMENT", "credit-challenger"))
+        # The serverless MLflow App 404s get-by-name for a missing experiment, so create it
+        # first (ignoring "already exists") rather than letting set_experiment error on it.
+        experiment = os.environ.get("MLFLOW_EXPERIMENT", "credit-challenger")
+        try:
+            mlflow.create_experiment(experiment)
+        except mlflow.exceptions.MlflowException:
+            pass  # already exists
+        mlflow.set_experiment(experiment)
         with mlflow.start_run():
             mlflow.set_tag("role", "challenger")
             mlflow.set_tag("tuner", "syne-tune")

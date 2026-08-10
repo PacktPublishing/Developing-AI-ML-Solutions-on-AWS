@@ -121,14 +121,20 @@ def _log_to_mlflow(hp: dict, params: dict, metrics: dict, pipeline) -> None:
         return
     import mlflow
 
-    # Serverless MLflow writes artifacts straight to S3, so the experiment must be created with an S3 artifact_location the first time; set_experiment selects it if it already exists.
+    # Create the experiment before selecting it. The serverless MLflow App returns a bare
+    # 404 from get-by-name for a missing experiment (which set_experiment surfaces as an
+    # error rather than "create it"), so create it explicitly and ignore "already exists".
+    # Locally (sqlite), the App manages no artifact store, so set an S3 artifact_location;
+    # on the App (MLFLOW_ARTIFACT_ROOT unset) it manages its own.
     experiment = hp.get("mlflow_experiment", "credit-scorecard")
-    # Local (sqlite) mode has no server to assign an artifact location, so set one on S3 explicitly; the serverless MLflow App manages its own, so MLFLOW_ARTIFACT_ROOT stays unset there.
     artifact_root = os.environ.get("MLFLOW_ARTIFACT_ROOT")
-    if artifact_root and mlflow.get_experiment_by_name(experiment) is None:
-        mlflow.create_experiment(
-            experiment, artifact_location=f"{artifact_root}/{experiment}"
-        )
+    create_kwargs = (
+        {"artifact_location": f"{artifact_root}/{experiment}"} if artifact_root else {}
+    )
+    try:
+        mlflow.create_experiment(experiment, **create_kwargs)
+    except mlflow.exceptions.MlflowException:
+        pass  # already exists
     mlflow.set_experiment(experiment)
     with mlflow.start_run(run_name=hp.get("run_name", "scorecard")):
         mlflow.set_tag("model_family", "woe-logistic-regression")
