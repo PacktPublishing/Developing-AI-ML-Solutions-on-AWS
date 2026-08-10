@@ -55,6 +55,34 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
+  # The sagemaker-mlflow client uploads run artifacts (iv_analysis.csv, the model) to the
+  # store using the caller's own credentials, i.e. the SageMaker training/execution role,
+  # whose AmazonSageMakerFullAccess only covers *sagemaker* buckets, not this one. Grant
+  # that role access here rather than touching the account's managed execution role. Scoped
+  # to SageMaker execution roles by principal ARN; not public, so BlockPublicPolicy allows it.
+  MlflowArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MlflowArtifactBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: SageMakerExecutionRoleArtifacts
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+            Resource:
+              - !GetAtt MlflowArtifactBucket.Arn
+              - !Sub ${MlflowArtifactBucket.Arn}/*
+            Condition:
+              StringLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/service-role/AmazonSageMaker-ExecutionRole-*
+
   # The App assumes this role to write artifacts and register models in the registry.
   MlflowAppRole:
     Type: AWS::IAM::Role
