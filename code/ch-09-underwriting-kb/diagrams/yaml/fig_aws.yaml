@@ -6,6 +6,8 @@ Diagram:
   DefinitionFiles:
     - Type: LocalFile
       LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
 
   Resources:
     Canvas:
@@ -31,7 +33,12 @@ Diagram:
     Lambda:
       Type: AWS::Diagram::Resource
       Preset: "AWS Lambda"
-      Title: "container Lambda\nFastAPI app"
+      Title: "container Lambda\nWeb Adapter"
+      Children: [LambdaApp]
+    LambdaApp:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "FastAPI app"
     Backends:
       Type: AWS::Diagram::VerticalStack
       Children: [Bedrock, OpenSearch]

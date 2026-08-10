@@ -38,20 +38,34 @@ class CasesBody(BaseModel):
     k: int = 5
 
 
+class Source(BaseModel):
+    """One cited loan."""
+
+    loan_id: int
+    borrower: str
+
+
+class Answer(BaseModel):
+    """A grounded answer plus the loans it cites."""
+
+    answer: str
+    sources: list[Source]
+
+
 @app.post("/ask")
-def ask(body: AskBody) -> dict:
+def ask(body: AskBody) -> Answer:
     """Answer a question, grounded in the nearest memos, with citations."""
-    return ask_result(body.query, body.k)
+    return Answer(**ask_result(body.query, body.k))
 
 
 @app.post("/cases")
-def cases(body: CasesBody) -> dict:
+def cases(body: CasesBody) -> Answer:
     """Assemble the most similar prior cases into a draft recommendation."""
-    return cases_result(body.deal, body.k)
+    return Answer(**cases_result(body.deal, body.k))
 
 
 @app.get("/healthz")
-def healthz() -> dict:
+def healthz() -> dict[str, bool | str]:
     """Report which store the app is serving, for a quick liveness check."""
     return {"ok": True, "store": os.environ.get("STORE", "pgvector")}
 

@@ -1,7 +1,7 @@
 # Local retrieval: the FastAPI ask/recommend app embeds the question and the memos
 # with Ollama (the local Bedrock stand-in), retrieves the nearest chunks from the
-# vector store, and grounds the answer in them with citations. The store is pgvector
-# by default; STORE=opensearch or s3vectors swaps it, the retrieval code unchanged.
+# vector store, and grounds the answer in them with citations. OpenSearch mirrors
+# the AWS domain; STORE=pgvector | s3vectors swaps it, the retrieval code unchanged.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -24,12 +24,12 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Title: "Local cloud (Docker)"
+      Title: "Local cloud (Docker Compose)"
       Children: [App, Backends]
 
     App:
       Type: AWS::Diagram::Resource
-      Preset: "Docker"
+      Preset: "FastAPI"
       Title: "FastAPI app\nask / recommend (uvicorn)"
     Backends:
       Type: AWS::Diagram::VerticalStack
@@ -40,8 +40,8 @@ Diagram:
       Title: "Ollama\nembed + generate"
     Store:
       Type: AWS::Diagram::Resource
-      Preset: "Postgres"
-      Title: "pgvector\n(OpenSearch | S3 Vectors)"
+      Preset: "OpenSearch"
+      Title: "OpenSearch\n(pgvector | S3 Vectors)"
 
   Links:
     - {Source: Underwriter, SourcePosition: E, Target: App, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
