@@ -13,7 +13,10 @@ CHALLENGER_IMAGE := $(REGISTRY)/ch02-challenger:latest
 # the SageMaker default bucket, an execution role, and the MLflow App ARN
 BUCKET ?= $(shell aws s3api list-buckets --query "Buckets[?starts_with(Name,'amazon-sagemaker-$(ACCOUNT)')].Name | [0]" --output text)
 ROLE ?= $(shell aws iam list-roles --query "Roles[?contains(RoleName,'AmazonSageMaker-ExecutionRole')].Arn | [0]" --output text)
-APP_ARN ?= $(shell aws sagemaker list-mlflow-apps --region $(REGION) --query "Summaries[?Name=='ch02-mlflow'].Arn | [0]" --output text)
+# Read the live App's ARN from the stack output. list-mlflow-apps also returns deleted apps
+# of the same name, so picking [0] from that list can grab a stale, deleted app (whose ARN
+# the tracking client rejects with "Unable to serve requests due to the current App status").
+APP_ARN ?= $(shell aws cloudformation describe-stacks --stack-name ch02-serving --region $(REGION) --query "Stacks[0].Outputs[?OutputKey=='MlflowAppArn'].OutputValue" --output text 2>/dev/null)
 
 # empty by default: the deploy scripts resolve the latest registered version.
 # Pin one to override, e.g. make deploy-byoc MODEL_PATH=models:/credit-challenger/2

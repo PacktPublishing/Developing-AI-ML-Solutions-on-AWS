@@ -146,9 +146,11 @@ def _log_to_mlflow(hp: dict, params: dict, metrics: dict, pipeline) -> None:
             mlflow.log_artifact(os.path.join(MODEL, "iv_analysis.csv"))
         # The scorecard is a scikit-learn pipeline, so it logs with the native sklearn
         # flavor -- no custom pyfunc -- and registers for promotion from the registry.
+        # cloudpickle, not the default skops: skops refuses custom classes like FastWoe.
         mlflow.sklearn.log_model(
             sk_model=pipeline,
             name="model",
+            serialization_format="cloudpickle",
             pip_requirements=["fastwoe", "scikit-learn", "pandas", "joblib"],
             registered_model_name=hp.get("registered_model_name", "credit-scorecard"),
         )
