@@ -1,4 +1,4 @@
-.PHONY: iam lint ecr-login push-models endpoints endpoints-teardown deploy deploy-ecs deploy-eks image scale-up scale-down decide decide-ecs decide-eks teardown teardown-ecs teardown-eks
+.PHONY: iam lint ecr-login push-models endpoints endpoints-teardown deploy deploy-ecs deploy-eks image scale-up scale-down decide decide-ecs decide-eks round teardown teardown-ecs teardown-eks
 
 # single-region chapter: the EKS config and gateway manifest hardcode us-east-1, so don't override this for COMPUTE=eks.
 REGION := us-east-1
@@ -87,6 +87,14 @@ endpoints-teardown: $(MODELS:%=teardown-endpoint-%)
 deploy: deploy-$(COMPUTE)
 decide: decide-$(COMPUTE)
 teardown: endpoints-teardown teardown-$(COMPUTE)
+
+# the whole AWS round in one command (run make iam once first, as the account admin): the
+# compute stack and gateway, the two serverless SageMaker endpoints, then a decision. Pass
+# SM_ROLE=<exec role> (make iam prints it). make teardown when done.
+round:
+	$(MAKE) deploy
+	$(MAKE) endpoints
+	$(MAKE) decide
 
 # ECS: the SAM stack builds the Fargate runtime behind the ALB (deploy, build, scale to 1).
 deploy-ecs:
