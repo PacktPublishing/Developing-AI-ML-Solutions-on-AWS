@@ -1,6 +1,13 @@
 COMPOSE := docker compose -f local/batch-stack.yml
 
-.PHONY: up seed run pipeline events schedule query down clean lint diagrams
+.PHONY: up seed run pipeline all events schedule query down clean lint diagrams
+
+# the whole local flow in one command: the warehouse and local S3, the seed, and the batch
+# pipeline in SageMaker local mode. make down when done.
+all:
+	$(MAKE) up
+	$(MAKE) seed
+	$(MAKE) pipeline
 
 # The local stack sees dummy credentials (below); real-AWS targets shed them so
 # boto3 falls through to the profile chain. Run those through $(REAL_AWS).
@@ -32,12 +39,19 @@ events:
 schedule:
 	uv run src/steps/schedule.py
 
-# the same run as a SageMaker Pipeline: local Docker executor, real control plane. Needs make up + seed and BATCH_BUCKET + SAGEMAKER_ROLE_ARN.
+# the same run as a local SageMaker Pipeline: every step (including the ModelTrainer
+# training step) runs as a local container through the SDK's local control plane, staging to
+# the local S3 (S3Proxy). Fully local -- no real AWS: the host does the S3 I/O
+# (AWS_ENDPOINT_URL_S3), and pipeline.py skips the SDK's IAM role check in local mode. Needs
+# make up + seed first.
+BATCH_BUCKET ?= portfolio
 pipeline:
 	docker build -q -t ch05-step:local src/pipeline/step_image/
-	PIPELINE_MODE=local STEP_IMAGE=ch05-step:local \
+	AWS_ENDPOINT_URL_S3=http://localhost:9000 \
+		PIPELINE_MODE=local STEP_IMAGE=ch05-step:local BATCH_BUCKET=$(BATCH_BUCKET) \
+		SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
 		WAREHOUSE_DSN=postgresql://analyst:analyst@host.docker.internal:5439/portfolio?sslmode=require \
-		$(REAL_AWS) uv run src/pipeline/pipeline.py
+		uv run src/pipeline/pipeline.py
 
 query:
 	$(COMPOSE) exec warehouse psql -h 127.0.0.1 -p 5433 -U analyst -d portfolio \

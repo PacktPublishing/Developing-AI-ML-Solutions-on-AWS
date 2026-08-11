@@ -1,4 +1,12 @@
-.PHONY: iam lint deploy seed image pipeline run-now teardown
+.PHONY: iam lint deploy seed image pipeline run-now round teardown
+
+# the whole AWS round in one command (run make iam once first, as the account admin): the
+# warehouse stack, the seed, the step image via CodeBuild, and the pipeline. make teardown when done.
+round:
+	$(MAKE) deploy
+	$(MAKE) seed
+	$(MAKE) image
+	$(MAKE) pipeline
 
 REGION ?= us-east-1
 STACK := ch05-batch-limits
