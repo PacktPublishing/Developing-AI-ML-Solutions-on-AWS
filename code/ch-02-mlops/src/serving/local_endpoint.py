@@ -4,10 +4,10 @@
 # ///
 """Serve the BYOC container as a SageMaker LOCAL endpoint (Mode.LOCAL_CONTAINER).
 
-The SDK counterpart to `make serve`: the same custom container run through SDK v3 ModelBuilder's local mode, with the trained artifact at /opt/ml/model; swapping to Mode.SAGEMAKER_ENDPOINT deploys the identical image serverless. Needs real AWS credentials and a SageMaker role even locally (MODEL_IMAGE an ECR uri, MODEL_PATH the artifact dir); on an ARM Mac the amd64 image runs under emulation, so first /ping is slow.
+The same custom container run through SDK v3 ModelBuilder's local mode, with the trained artifact at /opt/ml/model; swapping to Mode.SAGEMAKER_ENDPOINT deploys the identical image serverless. Fully local: local_stubs skips the SDK's account, role, and image-pull calls, so no real AWS (MODEL_IMAGE a local tag, MODEL_PATH the artifact dir); on an ARM Mac the amd64 image runs under emulation, so first /ping is slow.
 
 Usage:
-  MODEL_IMAGE=<ecr-uri> SAGEMAKER_ROLE_ARN=<role> MODEL_PATH=runs-local/model \
+  MODEL_IMAGE=<local-tag> SAGEMAKER_ROLE_ARN=<any-arn> MODEL_PATH=runs-local/model \
     uv run src/serving/local_endpoint.py
 """
 
@@ -16,10 +16,14 @@ import os
 import shutil
 import tempfile
 
+from local_stubs import use_local_stubs
 from sagemaker.serve.builder.schema_builder import SchemaBuilder
 from sagemaker.serve.mode.function_pointers import Mode
 from sagemaker.serve.model_builder import ModelBuilder
 from sagemaker.serve.utils.types import ModelServer
+
+# local mode has no AWS account: skip the SDK's account, role, and image-pull calls
+use_local_stubs()
 
 IMAGE = os.environ["MODEL_IMAGE"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]

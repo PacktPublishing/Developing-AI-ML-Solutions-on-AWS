@@ -1,5 +1,19 @@
 .PHONY: iam image image-bootstrap image-teardown mlflow-app mlflow-app-status train amt \
-	package deploy invoke teardown deploy-modelbuilder
+	package deploy invoke round teardown deploy-modelbuilder
+
+# the whole AWS round in one command (run make iam once first, as the account admin): both
+# images via CodeBuild, the MLflow App, training + AMT (which register the models), then the
+# challenger endpoint. make teardown (serving) + make image-teardown REPO=... when done.
+round:
+	$(MAKE) image-bootstrap REPO=ch02-scorecard
+	$(MAKE) image REPO=ch02-scorecard
+	$(MAKE) image-bootstrap REPO=ch02-challenger
+	$(MAKE) image REPO=ch02-challenger
+	$(MAKE) mlflow-app
+	$(MAKE) train
+	$(MAKE) amt
+	$(MAKE) deploy
+	$(MAKE) invoke
 
 # Reproduce the chapter on real AWS with SDK v3. Account-specific values are
 # derived where possible; override any of them on the command line, e.g.
