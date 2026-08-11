@@ -1,4 +1,11 @@
-.PHONY: iam deploy image pipeline teardown
+.PHONY: iam deploy image pipeline round teardown
+
+# the whole AWS round in one command (run make iam once first, as the account admin): the
+# stack, the image built by CodeBuild, then the monitoring pipeline. make teardown when done.
+round:
+	$(MAKE) deploy
+	$(MAKE) image
+	$(MAKE) pipeline
 
 # Reproduce ch-11's monitoring on real AWS as a SageMaker Pipeline: Batch Transform
 # (score the current batch) -> Processing (PSI + SHAP feature-attribution drift, AWS's
@@ -32,17 +39,28 @@ iam:
 # deploy: the ECR repo + the feature-attribution-drift alarm (before make image)
 # -------------------------------------------------------------------------------
 deploy:
-	aws cloudformation deploy --template-file template.yaml --stack-name $(STACK)
+	aws cloudformation deploy --template-file template.yaml --stack-name $(STACK) \
+		--capabilities CAPABILITY_NAMED_IAM
 	@echo "stack $(STACK) ready"
 
 # -------------------------------------------------------------------------------
-# image: build the train/serve/monitor image for linux/amd64 and push to ECR
+# image: build the train/serve/monitor image in-account with CodeBuild and push to ECR
 # -------------------------------------------------------------------------------
+# Stage the build context (Dockerfile, src/, entrypoint.sh) at the zip root beside the
+# buildspec, upload it to the stack's SourceBucket, start the build, and poll to SUCCEEDED.
 image:
-	aws ecr get-login-password --region $(REGION) | docker login --username AWS --password-stdin $(REGISTRY)
-	docker buildx build --platform linux/amd64 --provenance=false \
-		--output type=image,name=$(IMAGE),oci-mediatypes=false,push=true \
-		-f ../Dockerfile ..
+	rm -rf /tmp/ch11-build && mkdir -p /tmp/ch11-build
+	cp -R ../Dockerfile ../entrypoint.sh ../src /tmp/ch11-build/
+	cp buildspec.yml /tmp/ch11-build/
+	rm -f /tmp/ch11-src.zip && cd /tmp/ch11-build && zip -qr /tmp/ch11-src.zip . -x '*__pycache__*'
+	@BUCKET=$$(aws cloudformation describe-stacks --stack-name $(STACK) \
+			--query "Stacks[0].Outputs[?OutputKey=='SourceBucket'].OutputValue" --output text); \
+		aws s3 cp /tmp/ch11-src.zip s3://$$BUCKET/src.zip; \
+		ID=$$(aws codebuild start-build --project-name ch11-scorecard-build --query 'build.id' --output text); \
+		echo "build $$ID"; \
+		while STATUS=$$(aws codebuild batch-get-builds --ids $$ID --query 'builds[0].buildStatus' --output text); \
+			[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
+			echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
 	@echo "pushed $(IMAGE)"
 
 # -------------------------------------------------------------------------------
@@ -53,13 +71,17 @@ image:
 pipeline:
 	@aws s3api head-bucket --bucket $(BUCKET) 2>/dev/null \
 		|| aws s3 mb s3://$(BUCKET) --region $(REGION)
-	IMAGE_URI=$(IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
+	PIPELINE_MODE=aws IMAGE_URI=$(IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
 		AWS_DEFAULT_REGION=$(REGION) uv run pipeline.py
 
 teardown:
 	-aws s3 rm s3://$(BUCKET)/ch11 --recursive
 	-aws sagemaker delete-model --model-name ch11-scorecard-transform 2>/dev/null
 	-aws sagemaker delete-pipeline --pipeline-name ch11-monitoring 2>/dev/null
+	-@BUCKET=$$(aws cloudformation describe-stacks --stack-name $(STACK) \
+			--query "Stacks[0].Outputs[?OutputKey=='SourceBucket'].OutputValue" --output text 2>/dev/null); \
+		if [ -n "$$BUCKET" ] && [ "$$BUCKET" != "None" ]; then \
+			echo "emptying $$BUCKET"; aws s3 rm s3://$$BUCKET --recursive; fi
 	aws cloudformation delete-stack --stack-name $(STACK)
 	aws cloudformation wait stack-delete-complete --stack-name $(STACK)
 	@echo "$(STACK) torn down"

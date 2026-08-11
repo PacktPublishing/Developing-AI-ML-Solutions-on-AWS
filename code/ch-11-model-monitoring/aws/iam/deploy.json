@@ -77,6 +77,36 @@
         "arn:aws:logs:us-east-1:*:log-group:*ch11*",
         "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*"
       ]
+    },
+    {
+      "Sid": "CodeBuildProject",
+      "Effect": "Allow",
+      "Action": [
+        "codebuild:CreateProject",
+        "codebuild:UpdateProject",
+        "codebuild:DeleteProject",
+        "codebuild:BatchGetProjects",
+        "codebuild:StartBuild",
+        "codebuild:BatchGetBuilds"
+      ],
+      "Resource": "arn:aws:codebuild:us-east-1:*:project/ch11-*"
+    },
+    {
+      "Sid": "ImageBuildRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:PassRole",
+        "iam:TagRole",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies"
+      ],
+      "Resource": "arn:aws:iam::*:role/ch11-image-build"
     }
   ]
 }

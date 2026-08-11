@@ -1,29 +1,40 @@
-.PHONY: data train monitor run up down lint test diagrams clean
+.PHONY: data train monitor run pipeline all up down lint test diagrams clean
+
+# the whole local flow in one command: synthesize the batches, train the scorecard in
+# SageMaker local mode, bring up the local S3, run the monitor, and the pipeline. make down when done.
+all:
+	$(MAKE) data
+	$(MAKE) train
+	$(MAKE) up
+	$(MAKE) run
+	$(MAKE) pipeline
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
 export AWS_DEFAULT_REGION ?= us-east-1
 
-# The local S3 (S3Proxy) that stands in for the artifact bucket; make run uploads to it.
+# The local S3 (S3Proxy) that stands in for the artifact bucket; make run and make
+# pipeline both stage to it, so the local pipeline needs no real AWS at all.
 COMPOSE := docker compose -f local/monitoring-stack.yml
-S3_LOCAL := aws --endpoint-url http://localhost:9000
+S3_ENDPOINT := http://localhost:9000
+S3_LOCAL := aws --endpoint-url $(S3_ENDPOINT)
 
 IMAGE := ch11-scorecard:latest
-# The /opt/ml training channels: the reference batch is the channel the scorecard trains on.
-INPUT := -v $(PWD)/runs-local/input:/opt/ml/input:ro -v $(PWD)/runs-local/output:/opt/ml/output
 
 # synthesize the reference and current (drifted) batches, then lay out the training channel
+# (the reference batch is the channel the scorecard trains on)
 data:
 	uv run etl/make_batches.py
-	mkdir -p runs-local/input/data/reference runs-local/input/config runs-local/output
+	mkdir -p runs-local/input/data/reference
 	cp data/generated/reference.csv runs-local/input/data/reference/
-	printf '{"iterations":"300","depth":"5","learning_rate":"0.1"}' > runs-local/input/config/hyperparameters.json
 
-# train the scorecard in SageMaker local mode: the /opt/ml contract image, run as a container
+# train the scorecard in SageMaker local mode: the SDK's ModelTrainer (Mode.LOCAL_CONTAINER)
+# runs the same image the pipeline and the AWS jobs use, on the /opt/ml contract, as a local
+# container rather than a bare docker run. Produces runs-local/model/scorecard.cbm.
 train:
 	docker build -q -t $(IMAGE) .
-	rm -rf runs-local/model && mkdir -p runs-local/model
-	docker run --rm $(INPUT) -v $(PWD)/runs-local/model:/opt/ml/model $(IMAGE) train
+	rm -rf runs-local/model
+	uv run src/train_local.py
 
 # the drift monitors: PSI on scores and features, SHAP attribution NDCG
 monitor:
@@ -46,6 +57,20 @@ run:
 		$(S3_LOCAL) s3 sync outputs/monitoring s3://ch11-monitoring/monitoring; \
 		echo "artifacts uploaded to s3://ch11-monitoring/monitoring (local S3)"; \
 	fi
+
+# the same run as a local SageMaker Pipeline: the Transform and Processing containers
+# run here (instance_type=local, the SDK's local control plane). In local mode the host
+# does the S3 staging, so pointing boto3 at S3Proxy (AWS_ENDPOINT_URL_S3) keeps it fully
+# local -- no real AWS. Needs make up + make data + make train first.
+ARTIFACT_BUCKET ?= ch11-monitoring
+pipeline:
+	docker build -q -t $(IMAGE) .
+	@$(S3_LOCAL) s3 ls s3://$(ARTIFACT_BUCKET) >/dev/null 2>&1 \
+		|| { echo "start the local S3 first: make up"; exit 1; }
+	AWS_ENDPOINT_URL_S3=$(S3_ENDPOINT) PIPELINE_MODE=local IMAGE_URI=$(IMAGE) \
+		SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
+		ARTIFACT_BUCKET=$(ARTIFACT_BUCKET) DATA_DIR=data/generated MODEL_DIR=runs-local/model \
+		uv run aws/pipeline.py
 
 lint:
 	uvx ruff check .
