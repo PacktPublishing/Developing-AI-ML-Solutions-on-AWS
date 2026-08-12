@@ -1,4 +1,15 @@
-.PHONY: iam deploy image serve flip score down teardown
+.PHONY: iam deploy image serve flip score govern round down teardown
+
+# the whole AWS round in one command (run make iam once first, as the account admin): the
+# stack (AppConfig + the CodeBuild images + two SageMaker endpoints + the Fargate gateway),
+# a batch of applications, the champion/challenger split through the running gateway, and
+# the governance records (model cards, registry, lineage) uploaded to SageMaker. make
+# teardown when done.
+round:
+	$(MAKE) deploy
+	$(MAKE) -C .. apps
+	$(MAKE) score
+	$(MAKE) govern
 
 # The governance round on AWS, one stack end to end: a CodeBuild batch build produces the
 # three images, AppConfig drives the rollout, the AppConfig agent sidecar on a Fargate
@@ -81,6 +92,11 @@ score:
 		echo "gateway http://$$IP:8080"; \
 		head -$(SAMPLE) ../data/applications.jsonl > /tmp/ch12-sample.jsonl; \
 		GATEWAY_URL=http://$$IP:8080/score uv run ../etl/score.py /tmp/ch12-sample.jsonl
+
+# govern: upload each model's card, registry entry, and lineage to SageMaker governance
+# (idempotent; reruns update in place).
+govern:
+	cd .. && uv run src/governance.py --upload --region $(REGION)
 
 # down: park the gateway at 0. The stack stays up but costs nothing at rest.
 down:

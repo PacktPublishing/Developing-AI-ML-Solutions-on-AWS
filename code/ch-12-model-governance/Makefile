@@ -1,6 +1,15 @@
-.PHONY: up sm-local apps score flip govern down lint test diagrams
+.PHONY: up sm-local apps score flip govern all down lint test diagrams
 
 COMPOSE := docker compose -f local/rollout-stack.yml
+
+# the whole local flow in one command: the rollout stack (AppConfig agent + both models +
+# gateway), a batch of applications, the champion/challenger split, and the auditor's
+# governance record. make down when done.
+all:
+	$(MAKE) up
+	$(MAKE) apps
+	$(MAKE) score
+	$(MAKE) govern
 
 # Option 1, the rollout stack: the AppConfig agent, the two chapter-2 models, and the
 # flag-routing gateway, all on one compose network so `make flip` widens with nothing

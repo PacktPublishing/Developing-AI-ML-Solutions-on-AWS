@@ -10,19 +10,19 @@ services:
     environment:
       LOCAL_DEVELOPMENT_DIRECTORY: /configs
     volumes:
-      - ./agent-configs:/configs:ro
+      - ./agent-configs:/configs
 
   champion:
     image: ch02-scorecard:latest
     command: serve
     volumes:
-      - ../../ch-02-mlops/runs-local/model:/opt/ml/model:ro
+      - ../../ch-02-mlops/runs-local/model:/opt/ml/model
 
   challenger:
     image: ch02-challenger:latest
     command: serve
     volumes:
-      - ../../ch-02-mlops/runs-local/model-challenger:/opt/ml/model:ro
+      - ../../ch-02-mlops/runs-local/model-challenger:/opt/ml/model
 
   gateway:
     build:
