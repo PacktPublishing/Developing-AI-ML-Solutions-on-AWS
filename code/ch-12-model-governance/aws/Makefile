@@ -104,12 +104,15 @@ down:
 	@echo "gateway parked at 0"
 
 # teardown: empty the source bucket first (S3 will not delete a non-empty bucket, so the
-# stack delete would otherwise fail), then delete the stack and wait for it to finish.
+# stack delete would otherwise fail), turn off AppConfig deletion protection (it blocks
+# deleting a profile or environment used within the last hour, which the score step just
+# did), then delete the stack and wait for it to finish.
 teardown:
 	-@BUCKET=$$(aws cloudformation describe-stacks --stack-name $(STACK) \
 			--query "Stacks[0].Outputs[?OutputKey=='SourceBucket'].OutputValue" --output text 2>/dev/null); \
 		if [ -n "$$BUCKET" ] && [ "$$BUCKET" != "None" ]; then \
 			echo "emptying $$BUCKET"; aws s3 rm s3://$$BUCKET --recursive; fi
+	-aws appconfig update-account-settings --deletion-protection Enabled=false >/dev/null
 	aws cloudformation delete-stack --stack-name $(STACK)
 	aws cloudformation wait stack-delete-complete --stack-name $(STACK)
 	@echo "$(STACK) torn down"
