@@ -1,4 +1,12 @@
-.PHONY: up gen seed ask cases app down lint test diagrams
+.PHONY: up gen seed ask cases app all down lint test diagrams
+
+# the whole local flow in one command: the vector store, the synthetic corpus, the embeddings,
+# and a case-retrieval query. make down when done.
+all:
+	$(MAKE) up
+	$(MAKE) gen
+	$(MAKE) seed
+	$(MAKE) cases
 
 # The scripts under src/ and etl/ import the shared seam (models.py, stores.py)
 # as top-level modules, so src/ is on the path.

@@ -1,4 +1,16 @@
-.PHONY: iam secret build-setup source image deploy gen seed url ask cases teardown
+.PHONY: iam secret build-setup source image deploy gen seed url ask cases round teardown
+
+# the whole AWS round in one command (run make iam once first, as the account admin): the app
+# image via CodeBuild, the OpenSearch domain and app, then seed the corpus and run a query.
+# make teardown when done.
+round:
+	$(MAKE) build-setup
+	$(MAKE) source
+	$(MAKE) image
+	$(MAKE) deploy
+	$(MAKE) gen
+	$(MAKE) seed
+	$(MAKE) cases
 
 REGION := us-east-1
 STACK := ch09-underwriting-kb

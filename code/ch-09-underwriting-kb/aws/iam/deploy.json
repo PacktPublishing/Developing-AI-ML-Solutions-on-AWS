@@ -57,6 +57,7 @@
       "Resource": [
         "arn:aws:bedrock:*::foundation-model/amazon.*",
         "arn:aws:bedrock:*::foundation-model/anthropic.*",
+        "arn:aws:bedrock:*::foundation-model/qwen.*",
         "arn:aws:bedrock:*:*:inference-profile/*"
       ]
     },
