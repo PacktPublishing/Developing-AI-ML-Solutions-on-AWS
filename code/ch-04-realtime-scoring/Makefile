@@ -39,12 +39,14 @@ log:
 		--table-name decision_log --select COUNT --query Count
 
 # Option 2, SageMaker local mode: the same ModelBuilder code as the cloud, Mode.LOCAL_CONTAINER,
-# fully local. It builds the BYOC image here and skips the SDK's account and role checks (see
-# deploy.py _use_local_stubs), so no real AWS. MODEL=scorecard|challenger.
+# the container on this machine. The image is built locally (not in ECR), and ModelBuilder
+# always pulls the serving image, so this runs in the no-account mode (SM_OFFLINE=1): the SDK's
+# account, role, and image-pull calls are stubbed (src/sagemaker_offline.py). The credentialed
+# counterpart is the cloud endpoint (make -C aws deploy). MODEL=scorecard|challenger.
 MODEL ?= scorecard
 sm-local:
 	docker build -q -t ch04-$(MODEL)-model src/models/$(MODEL)
-	MODE=local MODEL_IMAGE=ch04-$(MODEL)-model:latest \
+	SM_OFFLINE=1 MODE=local MODEL_IMAGE=ch04-$(MODEL)-model:latest \
 		SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
 		uv run --no-project src/deploy.py
 

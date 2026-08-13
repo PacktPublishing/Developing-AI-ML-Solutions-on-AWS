@@ -7,13 +7,15 @@
 MODE=local runs the image as a SageMaker local endpoint (Mode.LOCAL_CONTAINER); MODE=cloud puts it behind a serverless endpoint. Same image either way.
 
 Usage:
-  MODE=local MODEL_IMAGE=<local-tag> SAGEMAKER_ROLE_ARN=<any-arn> uv run src/deploy.py
+  SM_OFFLINE=1 MODE=local MODEL_IMAGE=<local-tag> SAGEMAKER_ROLE_ARN=<any-arn> uv run src/deploy.py
   MODE=cloud MODEL_IMAGE=<ecr-uri> SAGEMAKER_ROLE_ARN=<role> \
     ENDPOINT_NAME=ch04-scorecard uv run src/deploy.py
 
-Local mode needs no real AWS: it runs a locally built image and skips the SDK's account and
-role checks (see _use_local_stubs). Cloud mode needs credentials, a SageMaker execution role,
-and MODEL_IMAGE as an ECR uri (linux/amd64, Docker v2 manifest).
+Local mode runs a locally built image (not in ECR), and ModelBuilder pulls the serving image,
+so it runs with SM_OFFLINE=1: it lazily stubs the SDK's account, role, and image-pull calls
+(see sagemaker_offline), needing no account. The credentialed counterpart is MODE=cloud, which
+needs credentials, a SageMaker execution role, and MODEL_IMAGE as an ECR uri (linux/amd64,
+Docker v2 manifest).
 """
 
 import json
@@ -36,32 +38,6 @@ sample = {
 }
 
 
-def _use_local_stubs() -> None:
-    """Neutralize the SDK calls that assume a real AWS account, for local testing.
-
-    In Mode.LOCAL_CONTAINER the container runs on this machine, so there is no STS or IAM to
-    reach and the image is the one built here, not pulled from ECR. Skip the execution-role
-    validation (the way a notebook without iam:SimulatePrincipalPolicy does), the default S3
-    bucket lookup, and the image pull, so the same code runs with no real credentials. Local
-    testing only; deploy_cloud is untouched.
-    """
-    from sagemaker.core.helper.session_helper import Session
-    from sagemaker.serve import model_builder
-    from sagemaker.serve.mode import local_container_mode
-
-    model_builder.resolve_and_validate_role = lambda provided_role=None, **_: (
-        provided_role
-    )
-    Session.default_bucket = lambda self: "local"
-
-    def _use_local_image(self, image):
-        # the image is built locally; connect to Docker but do not pull it from a registry
-        self.client = local_container_mode._get_docker_client()
-        self.client.ping()
-
-    local_container_mode.LocalContainerMode._pull_image = _use_local_image
-
-
 def deploy_local() -> None:
     """Run the container locally as a SageMaker local endpoint (Mode.LOCAL_CONTAINER)."""
     from sagemaker.serve.builder.schema_builder import SchemaBuilder
@@ -69,7 +45,12 @@ def deploy_local() -> None:
     from sagemaker.serve.model_builder import ModelBuilder
     from sagemaker.serve.utils.types import ModelServer
 
-    _use_local_stubs()
+    # Offline only: with no account there is no STS/IAM to reach, so lazily stub the SDK's
+    # account, role, and image-pull calls. The native path leaves the SDK untouched.
+    if os.environ.get("SM_OFFLINE") == "1":
+        from sagemaker_offline import use_local_stubs
+
+        use_local_stubs()
     builder = ModelBuilder(
         image_uri=IMAGE,
         model_server=ModelServer.MMS,  # the generic serve/ping/invocations runner
