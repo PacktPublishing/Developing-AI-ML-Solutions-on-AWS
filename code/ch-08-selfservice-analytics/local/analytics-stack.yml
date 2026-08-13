@@ -1,17 +1,17 @@
 name: ch08-analytics-local
 
-# The local stack, one file, three modes:
+# The local stack, one file, three modes (each is a make target; see the Makefile):
 #
-#   make local          Claude Code with standard Claude auth (sign in with
-#                       /login, or export ANTHROPIC_API_KEY first): the fast
-#                       local mode, no AWS account touched
+#   make local          fully offline: Claude Code drives gpt-oss:20b on the
+#                       host through Ollama's Anthropic-compatible API
+#                       (BEDROCK_LOCAL=1, chapter 3's flag); no account, no
+#                       cloud call. Prerequisite: ollama pull gpt-oss:20b
 #   make local-bedrock  Claude Code on real Bedrock; credentials arrive
 #                       through the ecs-local-endpoints sidecar at
 #                       169.254.170.2, the task-metadata path the task role
 #                       fills on Fargate (set AWS_PROFILE first)
-#   make local-ollama   fully offline on Ollama's Anthropic-compatible API
-#                       (BEDROCK_LOCAL=1, chapter 3's flag); expect
-#                       laptop-model speed and judgment
+#   make local-claude   your own Claude account (sign in with /login, or
+#                       export ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN first)
 #
 #   browser -> assistant (ttyd + Claude Code) -> Ollama | Bedrock
 #                |  boto3.client("redshift-data")

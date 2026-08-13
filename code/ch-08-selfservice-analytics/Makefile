@@ -1,6 +1,11 @@
 COMPOSE := docker compose -f local/analytics-stack.yml
 
-.PHONY: llm local local-stop lint
+.PHONY: llm local local-bedrock local-claude all local-stop lint
+
+# the one-command local flow: bring the whole stack up fully offline (Ollama-backed
+# gpt-oss:20b, no account), then open http://localhost:7681 and ask a question. make
+# local-stop when done. local-bedrock / local-claude swap the model backend.
+all: local
 
 # Local means local: Claude Code drives gpt-oss:20b on the host through Ollama's Anthropic-compatible API. No account, no login, no cloud call.
 # Prerequisite: ollama pull gpt-oss:20b
