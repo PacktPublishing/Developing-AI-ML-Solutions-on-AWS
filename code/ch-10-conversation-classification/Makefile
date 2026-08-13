@@ -1,4 +1,13 @@
-.PHONY: up prepare classify route eval down lint test diagrams
+.PHONY: up prepare classify route eval all down lint test diagrams
+
+# the whole local flow in one command: the local S3, the datasets, the batch classification
+# (local Ollama), the routing, and the evaluation. make down when done.
+all:
+	$(MAKE) up
+	$(MAKE) prepare
+	$(MAKE) classify
+	$(MAKE) route
+	$(MAKE) eval
 
 # src/ holds the shared seam (models.py, batch.py); put it on the path.
 export PYTHONPATH := $(CURDIR)/src

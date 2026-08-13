@@ -1,9 +1,21 @@
-.PHONY: iam deploy classify route eval teardown
+.PHONY: iam deploy classify route eval round teardown
+
+# the whole AWS round in one command (run make iam once first, as the account admin): the
+# stack, the batch classification (Bedrock), routing, and the evaluation. make teardown when done.
+round:
+	$(MAKE) deploy
+	$(MAKE) classify
+	$(MAKE) route
+	$(MAKE) eval
 
 REGION := us-east-1
 STACK := ch10-conversation-classification
-# A batch-capable Claude on Bedrock; override if the account has a different one enabled.
-BATCH_MODEL ?= anthropic.claude-3-haiku-20240307-v1:0
+# The batch model, addressed by its cross-region inference profile. Nova Lite by default:
+# its batch pool picks jobs up in minutes, where the in-demand Claude profiles can sit in
+# the queue for hours. The manifest is Converse-shaped, so any batch-capable model works
+# unchanged -- override BATCH_MODEL with a Claude or other profile if its batch capacity is
+# responsive. List them with: aws bedrock list-inference-profiles.
+BATCH_MODEL ?= us.amazon.nova-lite-v1:0
 DATASET ?= conversations
 
 output = $(shell aws cloudformation describe-stacks --region $(REGION) \
