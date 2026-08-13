@@ -1,4 +1,15 @@
-.PHONY: iam secret source deploy image seed provision scale-up scale-down teardown
+.PHONY: iam secret source deploy image seed provision scale-up scale-down round teardown
+
+# the whole AWS round in one command (run make iam once first, as the account admin): the
+# stack, the container image, the warehouse seed, the security model (read-only accounts +
+# engine-side masking), and the service scaled up for a session. Open the task's public IP
+# on :7681 to ask. make scale-down (park at 0) or teardown when done.
+round:
+	$(MAKE) deploy
+	$(MAKE) image
+	$(MAKE) seed
+	$(MAKE) provision
+	$(MAKE) scale-up
 
 REGION := us-east-1
 STACK := ch08-selfservice-analytics

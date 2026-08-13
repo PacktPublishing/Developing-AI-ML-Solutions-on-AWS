@@ -4,7 +4,7 @@
 # SVG sources live beside the PNGs; `make diagrams` re-renders the PNGs awsdac
 # consumes. Presets:
 #   - Strands / LambdaCoin: the agent mark and the classic AWS Lambda coin.
-#   - MinIO, MLflow, Ollama, Postgres, Iceberg, Trino: local-stack tools (SVG).
+#   - MinIO, MLflow, Ollama, Postgres, Iceberg, Trino, FastAPI, OpenSearch: local-stack tools (SVG).
 Definitions:
   CustomIcons:
     Type: Directory
@@ -42,6 +42,14 @@ Definitions:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "iceberg.png"}
     Label: {Title: "Apache Iceberg", Color: "rgba(0, 0, 0, 255)"}
+  FastAPI:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "fastapi.png"}
+    Label: {Title: "FastAPI", Color: "rgba(0, 0, 0, 255)"}
+  OpenSearch:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "opensearch.png"}
+    Label: {Title: "OpenSearch", Color: "rgba(0, 0, 0, 255)"}
   Trino:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "trino.png"}
@@ -50,3 +58,7 @@ Definitions:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "redshift-local.png"}
     Label: {Title: "redshift-local", Color: "rgba(0, 0, 0, 255)"}
+  AppConfigAgent:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "appconfig-agent.png"}
+    Label: {Title: "AWS AppConfig", Color: "rgba(0, 0, 0, 255)"}

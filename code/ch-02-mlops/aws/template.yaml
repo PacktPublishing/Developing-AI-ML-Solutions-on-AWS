@@ -1,29 +1,117 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
 Description: |
-  ch-02 serving stack: the registered challenger model on its BYOC image, behind
-  a SageMaker Serverless Inference endpoint (3072 MB, the chapter's quota). Build
-  the image and package the model to S3 first (make image, make package); this
-  stack takes ImageUri + ModelDataUrl and creates the model, endpoint config, and
-  endpoint. The MLflow App that registers the model stays in mlflow_app.sh because
-  AWS::SageMaker::MlflowApp is not yet a CloudFormation resource type.
+  ch-02 stack, one template for the chapter's AWS side: the serverless MLflow App that
+  tracks training and registers models, and the registered challenger behind a SageMaker
+  Serverless Inference endpoint. Deploy in two passes. First with no ModelDataUrl: only the
+  MLflow App (and its artifact bucket and role) come up, and its Arn is the MLFLOW_TRACKING_URI
+  training logs to. Train, then package the registered model and deploy again with ImageUri +
+  ModelDataUrl: the endpoint is added (it is gated on ModelDataUrl, so the first pass skips it).
 
 Parameters:
-  ImageUri:
-    Description: the BYOC serving image in ECR (make image pushes it)
+  MlflowAppName:
+    Description: the serverless MLflow App name
     Type: String
+    Default: ch02-mlflow
+
+  ImageUri:
+    Description: the BYOC serving image in ECR (make image pushes it); empty on the first pass
+    Type: String
+    Default: ""
 
   ModelDataUrl:
-    Description: s3:// URL of the packaged model.tar.gz (make package uploads it)
+    Description: s3:// URL of the packaged model.tar.gz; empty on the first pass (no endpoint yet)
     Type: String
+    Default: ""
 
   EndpointName:
     Description: the endpoint the chapter's client invokes
     Type: String
     Default: ch02-challenger-byoc
 
+Conditions:
+
+  # The endpoint is added only once a packaged model exists, so the first pass (empty
+  # ModelDataUrl) brings up just the MLflow App.
+  HasModel: !Not
+    - !Equals
+      - !Ref ModelDataUrl
+      - ""
+
 Resources:
 
+  # ---------------------------------------------------------------------------
+  # The serverless MLflow App: tracks training runs and auto-registers models.
+  # Its Arn is the MLFLOW_TRACKING_URI clients log to.
+  # ---------------------------------------------------------------------------
+  # The sagemaker-mlflow client uploads run artifacts (iv_analysis.csv, the model) to the
+  # store with the caller's own credentials, i.e. the SageMaker execution role, whose
+  # AmazonSageMakerFullAccess grants S3 only on buckets whose name contains "sagemaker".
+  # The name must satisfy both sides: it contains "sagemaker" so the execution role can
+  # write, and starts with "ch02-" so this chapter's scoped deploy identity can create it
+  # (the same reason the shared amazon-sagemaker-* bucket worked) -- no extra bucket policy.
+  MlflowArtifactBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ch02-sagemaker-mlflow-${AWS::AccountId}-${AWS::Region}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # The App assumes this role to write artifacts and register models in the registry.
+  MlflowAppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: mlflow-app
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt MlflowArtifactBucket.Arn
+                  - !Sub ${MlflowArtifactBucket.Arn}/*
+
+              # Auto model registration writes to the Model Registry.
+              - Effect: Allow
+                Action:
+                  - sagemaker:CreateModelPackageGroup
+                  - sagemaker:CreateModelPackage
+                  - sagemaker:UpdateModelPackage
+                  - sagemaker:DescribeModelPackage
+                  - sagemaker:DescribeModelPackageGroup
+                  - sagemaker:ListModelPackages
+                  - sagemaker:AddTags
+                Resource: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:model-package*/*
+
+  MlflowApp:
+    Type: AWS::SageMaker::MlflowApp
+    Properties:
+      Name: !Ref MlflowAppName
+      ArtifactStoreUri: !Sub s3://${MlflowArtifactBucket}/${MlflowAppName}
+      RoleArn: !GetAtt MlflowAppRole.Arn
+      ModelRegistrationMode: AutoModelRegistrationEnabled
+
+  # ---------------------------------------------------------------------------
+  # The serving endpoint (second pass, HasModel): the registered challenger on
+  # its BYOC image behind a Serverless Inference endpoint (3072 MB, the quota).
+  # ---------------------------------------------------------------------------
   # The endpoint's execution role: pull the serving image, read the model
   # tarball, write logs. Nothing else.
   EndpointRole:
@@ -59,6 +147,7 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
+    Condition: HasModel
 
   # The BYOC image plus the packaged artifact, unpacked at /opt/ml/model. No
   # explicit name so an update replaces it cleanly instead of colliding.
@@ -70,6 +159,7 @@ Resources:
         Image: !Ref ImageUri
         ModelDataUrl: !Ref ModelDataUrl
         Mode: SingleModel
+    Condition: HasModel
 
   EndpointConfig:
     Type: AWS::SageMaker::EndpointConfig
@@ -80,14 +170,21 @@ Resources:
           ServerlessConfig:
             MemorySizeInMB: 3072
             MaxConcurrency: 2
+    Condition: HasModel
 
   Endpoint:
     Type: AWS::SageMaker::Endpoint
     Properties:
       EndpointName: !Ref EndpointName
       EndpointConfigName: !GetAtt EndpointConfig.EndpointConfigName
+    Condition: HasModel
 
 Outputs:
+  MlflowAppArn:
+    Description: the MLflow App Arn (the MLFLOW_TRACKING_URI training logs to)
+    Value: !GetAtt MlflowApp.Arn
+
   EndpointName:
     Description: the serverless endpoint the client invokes
     Value: !Ref EndpointName
+    Condition: HasModel

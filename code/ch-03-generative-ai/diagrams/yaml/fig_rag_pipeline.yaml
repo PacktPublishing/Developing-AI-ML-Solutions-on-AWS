@@ -21,8 +21,9 @@ Diagram:
       Preset: "Amazon Bedrock"
       Title: "Bedrock\nTitan embeddings"
     Vectors:
-      Type: AWS::RDS::DBInstance
-      Title: "RDS Postgres\npgvector"
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Aurora"
+      Title: "Aurora Serverless\npgvector"
     Generate:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Bedrock"

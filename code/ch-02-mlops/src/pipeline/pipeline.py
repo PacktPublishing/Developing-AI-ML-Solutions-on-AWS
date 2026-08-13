@@ -60,7 +60,10 @@ class LocalPipelineSession(_MlopsLocalPipelineSession, PipelineSession):
 
 
 if MODE == "local":
-    sess = LocalPipelineSession()
+    # default_bucket set explicitly (the S3Proxy bucket) so staging the step code never
+    # resolves sagemaker-<region>-<account> through STS, which the dummy creds fail. With
+    # AWS_ENDPOINT_URL_S3 pointing boto3 at S3Proxy, the run needs no real AWS at all.
+    sess = LocalPipelineSession(default_bucket=BUCKET)
     instance_type = "local"
 else:
     sess = PipelineSession()

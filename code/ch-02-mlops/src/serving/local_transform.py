@@ -4,10 +4,10 @@
 # ///
 """Batch-score a file with a SageMaker Batch Transform job in LOCAL mode.
 
-The managed counterpart of `make batch`: a real SageMaker Transform job on the same BYOC container in local mode (instance_type="local"), the SDK bringing the container up via docker-compose and writing a .out file exactly as a cloud job would (swap instance_type and point at S3 for the cloud). The whole CSV goes as one payload (split_type=None); local mode still resolves the account and validates the role, so real credentials and a SageMaker role are needed.
+A real SageMaker Transform job on the same BYOC container in local mode (instance_type="local"), the SDK bringing the container up via docker-compose and writing a .out file exactly as a cloud job would (swap instance_type and point at S3 for the cloud). The whole CSV goes as one payload (split_type=None). The image is built locally (not in ECR), so this runs with SM_OFFLINE=1: it lazily stubs the SDK's account and role checks (see sagemaker_offline), needing no account. The credentialed counterpart is a cloud Transform job.
 
-Env: MODEL_IMAGE (ecr uri), SAGEMAKER_ROLE_ARN, MODEL_PATH (artifact dir),
-     INPUT (default data/split/test.csv).
+Env: MODEL_IMAGE (local tag), SAGEMAKER_ROLE_ARN (any arn), MODEL_PATH (artifact dir),
+     INPUT (default data/split/test.csv), SM_OFFLINE=1 to run with no account.
 """
 
 import glob
@@ -22,6 +22,13 @@ from sagemaker.core.transformer import Transformer
 # local mode reads sagemaker.serve.model_builder lazily (core/local/image.py); load
 # the submodule up front so the attribute exists when the transform job starts.
 importlib.import_module("sagemaker.serve.model_builder")
+
+# Offline only: with no account there is no STS or IAM to reach, so lazily stub the SDK's
+# account and role checks. The native path leaves the SDK untouched.
+if os.environ.get("SM_OFFLINE") == "1":
+    from sagemaker_offline import use_local_stubs
+
+    use_local_stubs()
 
 IMAGE = os.environ["MODEL_IMAGE"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]

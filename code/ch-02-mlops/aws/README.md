@@ -27,8 +27,8 @@ line. Override any value on the command line (e.g. `make train ROLE=...`).
 
 ```
 aws/
-  Makefile          one target per step (make mlflow-app / train / amt / deploy-byoc ...)
-  mlflow_app.sh     create / describe / delete the serverless MLflow App
+  Makefile          one target per step (make mlflow-app / train / amt / deploy ...)
+  template.yaml     the chapter's stack: the MLflow App, and the endpoint (gated on a model)
   image/            build the container in the cloud
     buildspec.yml       the CodeBuild build
     github-actions.yml  example CI that triggers it on push
@@ -56,9 +56,9 @@ roles) is created interactively the first time; the serving options `batch`,
   endpoints (max 3072 MB memory on the default quota) and Lambda both run as-is,
   which is why the chapter serves models the serverless / BYOC way.
 - A **Fargate** service bills continuously (no scale-to-zero); stop tasks when done.
-- Tear down: delete endpoints and endpoint-configs and models when finished;
-  `aws lambda delete-function`; stop Fargate tasks / delete the cluster; the
-  serverless MLflow App is free at rest but can be deleted with `mlflow_app.sh delete`.
+- Tear down: `make teardown` deletes the stack (the endpoint and the MLflow App, after
+  emptying its artifact bucket); `aws lambda delete-function`; stop Fargate tasks / delete
+  the cluster. The serverless MLflow App is free at rest, so it can also be left running.
 
 ## IAM
 

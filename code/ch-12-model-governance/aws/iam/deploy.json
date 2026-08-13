@@ -1,0 +1,110 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AppConfig",
+      "Effect": "Allow",
+      "Action": "appconfig:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "GovernanceStack",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/ch12-*/*"
+    },
+    {
+      "Sid": "CloudFormationRead",
+      "Effect": "Allow",
+      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary", "cloudformation:ValidateTemplate"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageChapterRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
+        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies", "iam:PassRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/ch12-*"
+    },
+    {
+      "Sid": "PassSageMakerExecutionRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/*AmazonSageMaker*"
+    },
+    {
+      "Sid": "DiscoverRoleAndBucket",
+      "Effect": "Allow",
+      "Action": ["iam:ListRoles", "s3:ListAllMyBuckets"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SageMakerGovernance",
+      "Effect": "Allow",
+      "Action": "sagemaker:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Fargate",
+      "Effect": "Allow",
+      "Action": "ecs:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "FargateNetworking",
+      "Effect": "Allow",
+      "Action": "ec2:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcsServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": { "StringEquals": { "iam:AWSServiceName": "ecs.amazonaws.com" } }
+    },
+    {
+      "Sid": "EcrRepository",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": ["arn:aws:ecr:us-east-1:*:repository/ch12-*"]
+    },
+    {
+      "Sid": "CodeBuild",
+      "Effect": "Allow",
+      "Action": ["codebuild:CreateProject", "codebuild:UpdateProject", "codebuild:DeleteProject", "codebuild:StartBuild", "codebuild:StartBuildBatch", "codebuild:BatchGetBuilds", "codebuild:BatchGetBuildBatches", "codebuild:BatchGetProjects"],
+      "Resource": "arn:aws:codebuild:us-east-1:*:project/ch12-*"
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ArtifactBuckets",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::ch12-*",
+        "arn:aws:s3:::ch12-*/*",
+        "arn:aws:s3:::sagemaker-us-east-1-*",
+        "arn:aws:s3:::sagemaker-us-east-1-*/*"
+      ]
+    },
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": [
+        "arn:aws:logs:us-east-1:*:log-group:*ch12*",
+        "arn:aws:logs:us-east-1:*:log-group:/ecs/ch12*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*"
+      ]
+    }
+  ]
+}

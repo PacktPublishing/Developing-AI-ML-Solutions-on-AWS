@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  ch-11 monitoring stack: the ECR repository for the scorecard's train/monitor image, a
+  CodeBuild project that builds it in-account, and the CloudWatch alarms that watch drift.
+  make image uploads the build context and CodeBuild pushes to ECR; make monitor runs a
+  SageMaker Processing job (AWS's documented replacement for the closed
+  Clarify service) that computes PSI and SHAP feature-attribution drift and publishes
+  the metrics to CloudWatch, where these alarms turn them into alerts: a major shift in
+  the score distribution (PSI > 0.25), and a fall in the feature-attribution ranking
+  agreement (NDCG < 0.90, the threshold Clarify itself used).
+
+Parameters:
+  Namespace:
+    Description: the CloudWatch namespace the monitoring job publishes to
+    Type: String
+    Default: ch11/monitoring
+
+Resources:
+
+  # The scorecard's train/monitor image. EmptyOnDelete lets the stack delete cleanly
+  # even with images pushed (make image), so teardown is one step.
+  ScorecardRepo:
+    DeletionPolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch11-scorecard
+      EmptyOnDelete: true
+
+  # make image uploads the build context here and CodeBuild reads it; the image is built
+  # in-account and pushed to ECR, never from the developer's machine.
+  SourceBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ch11-image-build
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !GetAtt ScorecardRepo.Arn
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${SourceBucket.Arn}/*
+
+  # One image, so a plain build (ch-12's is a batch because it has three). ECR_REGISTRY
+  # and IMAGE come from here; the Dockerfile, src/, and entrypoint.sh sit at the zip root.
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: ch11-scorecard-build
+      ServiceRole: !GetAtt BuildRole.Arn
+      Source:
+        Type: S3
+        Location: !Sub ${SourceBucket}/src.zip
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_LARGE
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REGISTRY
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+          - Name: IMAGE
+            Value: ch11-scorecard:latest
+
+  # Score drift: alert when the live score distribution shifts materially from the
+  # one the model was trained on. PSI > 0.25 is the standard "major shift" threshold.
+  ScoreDriftAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ch11-score-drift
+      AlarmDescription: Score PSI exceeded 0.25 (major shift in the score distribution)
+      Namespace: !Ref Namespace
+      MetricName: score_psi
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: "0.25"
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  # Feature-attribution drift: alert when the live attribution ranking diverges from
+  # the training ranking. Minimum over the period so a single breaching datapoint
+  # trips it; missing data is not a breach (no run yet is not an alert).
+  AttributionDriftAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ch11-attribution-drift
+      AlarmDescription: Clarify feature-attribution NDCG fell below 0.90 (ranking drift)
+      Namespace: !Ref Namespace
+      MetricName: feature_attribution_ndcg
+      Statistic: Minimum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: "0.90"
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  RepositoryUri:
+    Description: the ECR repository for the scorecard image
+    Value: !GetAtt ScorecardRepo.RepositoryUri
+
+  SourceBucket:
+    Description: the bucket make image uploads the build context to for CodeBuild
+    Value: !Ref SourceBucket
+
+  Alarms:
+    Description: the drift alarms the monitoring job feeds
+    Value: !Sub ${ScoreDriftAlarm}, ${AttributionDriftAlarm}

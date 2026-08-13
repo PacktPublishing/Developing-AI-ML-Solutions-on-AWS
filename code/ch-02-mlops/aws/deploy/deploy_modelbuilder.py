@@ -64,7 +64,7 @@ builder = ModelBuilder(
     ),
     role_arn=ROLE,
     model_metadata={"MLFLOW_MODEL_PATH": MODEL_PATH, "MLFLOW_TRACKING_ARN": ARN},
-    # A custom pyfunc (fastwoe / xgboost) isn't a native MLflow flavor, so skip ModelBuilder's auto dependency detection and hand it the requirements.
+    # The registered model is a native MLflow flavor (mlflow.sklearn for the scorecard pipeline, mlflow.catboost for the challenger); hand ModelBuilder the runtime requirements rather than relying on auto-detection.
     dependencies={
         "auto": False,
         "requirements": os.path.join(HERE, "mb-requirements.txt"),

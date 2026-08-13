@@ -31,7 +31,7 @@ services:
         for i in $$(seq 1 30); do
           aws --endpoint-url http://s3:9000 s3 ls >/dev/null 2>&1 && break; sleep 2;
         done;
-        for b in mlflow-artifacts ml-data ml-models; do
+        for b in mlflow-artifacts ml-data ml-models ch02-pipeline; do
           aws --endpoint-url http://s3:9000 s3 mb s3://$$b 2>/dev/null || true;
         done;
         echo "buckets ready"

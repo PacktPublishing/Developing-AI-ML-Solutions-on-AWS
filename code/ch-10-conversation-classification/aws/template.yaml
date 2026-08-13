@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  Conversation classification on Amazon Bedrock batch inference: an S3 bucket for
+  the JSONL manifests and .jsonl.out results, and the service role Bedrock assumes
+  to read the input and write the output. The classifier submits a
+  CreateModelInvocationJob against this bucket and role; routing publishes each
+  result to an SNS topic per team (topics are created at run time, one per
+  category). Nothing runs at rest -- batch bills per token, roughly half on-demand.
+
+Resources:
+  BatchBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ch10-batch-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Bedrock assumes this role to read the input manifests and write the outputs.
+  # The SourceAccount / SourceArn conditions scope it to this account's batch jobs.
+  BatchServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ch10-batch-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:model-invocation-job/*
+      Policies:
+        - PolicyName: batch-io-and-invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: S3
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt BatchBucket.Arn
+                  - !Sub ${BatchBucket.Arn}/*
+
+              # The batch job invokes the model as this role, so it needs
+              # InvokeModel on the model (and the region-less ARN a global
+              # inference profile resolves to for the permission check).
+              - Sid: Invoke
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:aws:bedrock:*::foundation-model/*
+                  - arn:aws:bedrock:::foundation-model/*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+
+Outputs:
+  BatchBucket:
+    Value: !Ref BatchBucket
+
+  BatchServiceRoleArn:
+    Value: !GetAtt BatchServiceRole.Arn

@@ -1,4 +1,9 @@
-.PHONY: up seed guardrail ask decide serve down lint test diagrams
+.PHONY: up seed guardrail ask decide serve all down lint test diagrams
+
+# the local bootstrap in one command: the vector store and the synthetic underwriting corpus.
+# Then ask a question (make ask Q=...), decide a deal (make decide DEAL=...), or serve the
+# agent. make down when done.
+all: up seed
 
 # The element scripts live under src/ but import the shared seam (models.py,
 # stores.py) as top-level modules, so src/ is on the path.

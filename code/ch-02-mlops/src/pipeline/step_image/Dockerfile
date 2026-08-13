@@ -15,7 +15,7 @@ ENV UV_SYSTEM_PYTHON=1 UV_NO_CACHE=1
 RUN uv pip install --system \
     "sagemaker>=3,<4" \
     "scikit-learn>=1.3" \
-    "xgboost>=2.0" \
+    "catboost>=1.2" \
     "pandas>=2.0" \
     "numpy>=1.26" \
     "joblib>=1.3"

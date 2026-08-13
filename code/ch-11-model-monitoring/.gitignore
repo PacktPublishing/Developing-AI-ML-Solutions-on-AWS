@@ -1,0 +1,22 @@
+# local dev environments and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# CatBoost training scratch, dropped wherever a trainer runs
+catboost_info/
+
+# generated data + demo outputs (reproduce from the generator script)
+outputs/
+data/generated/
+
+# SageMaker local-mode training channels + model output (rebuilt by `make data`/`make train`)
+runs-local/
+
+# sam local build output
+.aws-sam/
+
+# stray MLflow local runs (the pyfunc test writes ./mlruns)
+mlruns/

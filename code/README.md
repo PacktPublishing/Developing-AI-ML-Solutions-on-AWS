@@ -78,6 +78,90 @@ alerts an SNS topic on failure.
 - **Local stand-ins:** redshift-local (Redshift), S3Proxy (S3), step container
   (Docker Compose)
 
+## Chapter 06 — Streaming fraud
+
+Real-time fraud scoring on a transaction stream: records land on Kinesis, a
+scoring function flags them, results are archived through Firehose and logged to
+DynamoDB, with the credit warehouse alongside for enrichment.
+
+![Streaming fraud](ch-06-streaming-fraud/diagrams/png/fig_streaming.png)
+
+- **AWS services:** Amazon Kinesis Data Streams, Amazon Data Firehose, AWS Lambda,
+  Amazon DynamoDB, Amazon Redshift Serverless, Amazon S3, AWS CodeBuild, Amazon ECR
+- **Local stand-ins:** kinesis-local (Kinesis), a from-source Firehose, DynamoDB
+  Local, S3Proxy (S3), redshift-local (Redshift)
+
+## Chapter 07 — Vision RAG
+
+KYC face verification as vector search: a face embedder turns an ID and a selfie
+into vectors, pgvector finds the nearest enrolled identity, and the match is
+verified against the claimed subject — the whole loop behind an HTTP API.
+
+![Serverless KYC](ch-07-vision-rag/diagrams/png/fig_serverless_kyc.png)
+
+- **AWS services:** Amazon RDS for PostgreSQL + pgvector, AWS Lambda, Amazon API
+  Gateway (HTTP API), Amazon S3, AWS CodeBuild, Amazon ECR
+- **Local stand-ins:** pgvector Postgres (RDS); the face embedder/explainer run
+  directly
+
+## Chapter 08 — Self-service analytics
+
+Analysts ask questions in plain English; Claude Code on Bedrock writes read-only
+SQL, runs it through the Redshift Data API under a scoped task role, and answers
+with a table, a summary, and the tables it touched — the terminal in the browser.
+
+![The analytics assistant](ch-08-selfservice-analytics/diagrams/png/fig_assistant.png)
+
+- **AWS services:** Amazon Bedrock, Amazon Redshift Serverless (Data API), Amazon
+  ECS Fargate, Amazon ECR, AWS CodeBuild, Amazon CloudWatch Logs
+- **Local stand-ins:** redshift-local + a from-source Data API shim (Redshift),
+  Docker Compose (Fargate), Ollama / vllm-metal (Bedrock)
+
+## Chapter 09 — Underwriting knowledge base
+
+*Scaffold in progress.* Policy documents, credit reports, and synthetic dossier
+memos embedded with Bedrock and stored in Aurora pgvector and S3 Vectors,
+answered with citations, with an agent that assembles similar past cases into a
+recommendation the underwriter signs off on.
+
+- **AWS services:** Amazon Bedrock (embeddings, Converse), Amazon Aurora
+  PostgreSQL + pgvector, Amazon S3 Vectors, Amazon OpenSearch Service, AWS Lambda,
+  Amazon API Gateway
+- **Local stand-ins:** Ollama (Bedrock), pgvector Postgres (Aurora), OpenSearch in
+  a container
+
+## Chapter 10 — Conversation classification
+
+*Scaffold in progress.* A Strands and Bedrock agent files each customer
+conversation into a category with zero-shot classification and routes it through
+SNS, batched over a JSONL manifest, with a labeled set keeping accuracy honest.
+
+- **AWS services:** Amazon Bedrock (batch inference, Converse), Amazon SNS, Amazon S3
+- **Local stand-ins:** Ollama (Bedrock), an SNS shim composed from source, a local
+  batch-inference runner
+
+## Chapter 11 — Monitoring
+
+*Scaffold in progress.* Online PSI monitoring of scores and features, SHAP-based
+drift in a CatBoost scorecard's feature contributions, SageMaker Model Monitor
+and Clarify for data and concept drift, and CloudWatch alerting.
+
+- **AWS services:** Amazon SageMaker Model Monitor, SageMaker Clarify, Amazon
+  CloudWatch
+- **Local stand-ins:** SageMaker Monitor/Clarify and CloudWatch shims composed from
+  source; SHAP + CatBoost run directly
+
+## Chapter 12 — Governance
+
+*Scaffold in progress.* Model cards, the model registry, and lineage for
+auditors; least-privilege IAM; and a new model shipped with champion/challenger
+rollout and an A/B test, flipped through AppConfig feature flags with no redeploy.
+
+- **AWS services:** Amazon SageMaker Model Cards, SageMaker Model Registry,
+  SageMaker ML Lineage, AWS AppConfig, AWS IAM
+- **Local stand-ins:** an AppConfig flag store + rule evaluator composed from
+  source (ION-format configuration)
+
 ---
 
 ## Per-chapter deploy identities

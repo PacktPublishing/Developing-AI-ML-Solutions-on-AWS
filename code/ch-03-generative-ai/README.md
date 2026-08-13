@@ -17,7 +17,7 @@ The chapter builds it in four moves, one per topic:
 - the whole loop runs locally first, with the same code that runs on AWS
 
 The vector store is a real engine in Docker, no mocks: Postgres with pgvector. On
-AWS this is Amazon RDS for PostgreSQL with the same extension, and the retrieval
+AWS this is Aurora PostgreSQL Serverless (express configuration) with the same extension, and the retrieval
 SQL does not change.
 
 Amazon Bedrock is the one cloud dependency. The code always calls the
@@ -47,7 +47,7 @@ make decide DEAL="VoltStack, a battery storage integrator, seeks a 12 million US
 ## Local vs AWS
 
 The code never changes between local and AWS. The vector store moves with the
-`PG*` variables: the local container or an RDS endpoint. The models move with
+`PG*` variables: the local container, or the Aurora endpoint (a short-lived IAM token on AWS). The models move with
 `BEDROCK_LOCAL`: unset it for Bedrock, set it for Ollama.
 
 To run fully offline, install Ollama and pull the two models:
@@ -60,7 +60,7 @@ BEDROCK_LOCAL=1 make seed ask decide
 
 `mxbai-embed-large` returns 1024-dimensional vectors, the same width as Titan
 Text Embeddings v2, so the vector store schema is identical either way. The
-`aws/` folder deploys the assistant on real AWS, RDS for PostgreSQL and a Lambda.
+`aws/` folder deploys the assistant on real AWS: Aurora PostgreSQL Serverless (express configuration) and a Lambda.
 
 ## Files
 

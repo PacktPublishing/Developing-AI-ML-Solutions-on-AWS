@@ -1,0 +1,39 @@
+# Local monitoring loop: the scorecard trains in SageMaker local mode (the /opt/ml
+# container), the monitor computes PSI + SHAP feature-attribution drift, and the
+# from-source CloudWatch shim raises the alarms -- the same code the AWS round runs.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [Local]
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local cloud (Docker)"
+      Children: [Train, Monitor, CloudWatch]
+
+    Train:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "scorecard\nSageMaker local mode (/opt/ml)"
+    Monitor:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "monitor\nPSI + SHAP attribution drift"
+    CloudWatch:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon CloudWatch"
+      Title: "CloudWatch shim\nscore-drift alarm"
+
+  Links:
+    - {Source: Train, SourcePosition: E, Target: Monitor, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Monitor, SourcePosition: E, Target: CloudWatch, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

@@ -1,4 +1,4 @@
-.PHONY: iam lint seed-warehouse deploy image endpoint-local endpoint produce blocks query teardown
+.PHONY: iam lint seed-warehouse deploy image endpoint-local endpoint produce blocks query round teardown
 
 # The cloud round in order: deploy, seed-warehouse, image, endpoint, produce,
 # blocks, query, teardown. EnableWarehouse=true (the default) builds the warehouse.
@@ -9,6 +9,21 @@ STACK := streaming-fraud-ch06
 output = $(shell aws cloudformation describe-stacks --region $(REGION) \
 	--stack-name $(STACK) \
 	--query "Stacks[0].Outputs[?OutputKey=='$(1)'].OutputValue" --output text)
+
+# the whole AWS round in one command (run make iam once first, as the account admin): the
+# stack, the scoring image, the serverless endpoint, a replay of transactions, then the
+# blocked count and the warehouse tally. The consumer (Lambda) and Firehose are asynchronous,
+# so the round waits between the replay and the reads. make teardown when done.
+round:
+	$(MAKE) deploy
+	$(MAKE) seed-warehouse
+	$(MAKE) image
+	$(MAKE) endpoint
+	$(MAKE) produce
+	@echo "waiting for the consumer to score + block and Firehose to deliver..."; sleep 150
+	$(MAKE) blocks
+	@sleep 90
+	$(MAKE) query
 
 # template checks: cfn-lint for correctness, rain for canonical formatting
 lint:
@@ -47,12 +62,13 @@ image:
 		[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
 		echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
 
-# rehearse the deploy in SageMaker local mode: same image, container runs here.
+# rehearse the deploy in SageMaker local mode: the same amd64 endpoint image, container runs
+# here (on an Apple-silicon laptop it runs under emulation, so the first /ping is slow).
 endpoint-local:
 	$(eval REPO := $(call output,ScoringRepoUri))
 	$(eval BUCKET := $(call output,StagingBucketName))
 	$(eval ROLE := $(call output,EndpointRoleArn))
-	cd .. && SAGEMAKER_ROLE_ARN=$(ROLE) IMAGE_URI=$(REPO):local \
+	cd .. && SAGEMAKER_ROLE_ARN=$(ROLE) IMAGE_URI=$(REPO):latest \
 		ARTIFACT_BUCKET=$(BUCKET) AWS_DEFAULT_REGION=$(REGION) \
 		uv run aws/deploy.py
 

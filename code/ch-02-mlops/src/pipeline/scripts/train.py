@@ -1,7 +1,7 @@
 """Pipeline step 2 (Processing): train the scorecard or the challenger.
 
 --model scorecard  -> logistic regression (the transparent incumbent)
---model challenger -> monotone XGBoost (+util, +dpd, -income)
+--model challenger -> monotone CatBoost (+util, +dpd, -income)
 Writes metrics.json (model, auc, held-out scores) to the processing output.
 """
 
@@ -34,14 +34,16 @@ def main() -> None:
 
         clf = LogisticRegression(max_iter=1000).fit(tr[FEATURES], tr[TARGET])
     else:
-        import xgboost as xgb
+        from catboost import CatBoostClassifier
 
-        clf = xgb.XGBClassifier(
-            tree_method="hist",
-            n_estimators=300,
-            max_depth=4,
+        clf = CatBoostClassifier(
+            iterations=300,
+            depth=4,
             learning_rate=0.05,
-            monotone_constraints=(1, 1, -1),
+            loss_function="Logloss",
+            random_seed=1,
+            verbose=False,
+            monotone_constraints=[1, 1, -1],
         ).fit(tr[FEATURES], tr[TARGET])
 
     scores = clf.predict_proba(te[FEATURES])[:, 1]

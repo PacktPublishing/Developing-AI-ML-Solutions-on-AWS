@@ -59,7 +59,18 @@ class LocalPipelineSession(_MlopsLocalPipelineSession, PipelineSession):
 
 
 if MODE == "local":
-    sess = LocalPipelineSession()
+    # Local mode runs the pipeline steps in local containers. With no account (SM_OFFLINE=1)
+    # there is no IAM to validate the training role against, so skip that check the way a
+    # notebook without iam:SimulatePrincipalPolicy does (the SDK's own documented fallback);
+    # with real credentials the SDK validates the role for real. The explicit default_bucket
+    # avoids the STS lookup either way. The aws branch is untouched.
+    if os.environ.get("SM_OFFLINE") == "1":
+        import sagemaker.train.defaults as _train_defaults
+
+        _train_defaults.resolve_and_validate_role = lambda provided_role=None, **_: (
+            provided_role
+        )
+    sess = LocalPipelineSession(default_bucket=BUCKET)
     instance_type = "local"
 else:
     # the step code uploads to the session's default bucket; point it at the

@@ -1,0 +1,49 @@
+# Option 2, SageMaker local mode: ModelBuilder serves a rollout model as a local endpoint
+# (Mode.LOCAL_CONTAINER), the same ModelBuilder path and image the cloud endpoint uses; the
+# only change to reach the serverless endpoint is the Mode. Needs AWS credentials, creates
+# no cloud resources. The champion/challenger A/B itself runs on the compose stack (fig_local).
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Developer, Local]
+
+    Developer:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "Developer"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "SageMaker local mode (swap Mode to deploy to the cloud)"
+      Children: [ModelBuilder, Endpoints]
+
+    ModelBuilder:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "ModelBuilder\nLOCAL_CONTAINER"
+    Endpoints:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Champion, Challenger]
+    Champion:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "champion\ncredit-scorecard (WOE + LR)"
+    Challenger:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "challenger\ncredit-challenger (CatBoost)"
+
+  Links:
+    - {Source: Developer, SourcePosition: E, Target: ModelBuilder, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: ModelBuilder, SourcePosition: E, Target: Champion, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: ModelBuilder, SourcePosition: E, Target: Challenger, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

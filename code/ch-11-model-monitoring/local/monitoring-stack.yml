@@ -1,0 +1,36 @@
+name: ch11-monitoring
+
+# The local S3 the monitoring artifacts land in, standing in for the bucket the SageMaker
+# Processing step writes to on AWS. S3Proxy speaks the S3 API over local disk (no AWS
+# account); `make run` uploads outputs/monitoring/ here, the same artifacts SageMaker
+# uploads from /opt/ml/processing/output on the managed run. CloudWatch stays the
+# MONITOR_LOCAL=1 shim, so this stack is only the artifact store.
+services:
+  s3:
+    image: andrewgaul/s3proxy:latest
+    environment:
+      - S3PROXY_ENDPOINT=http://0.0.0.0:9000
+      - S3PROXY_AUTHORIZATION=aws-v2-or-v4
+      - S3PROXY_IDENTITY=local
+      - S3PROXY_CREDENTIAL=localsecret
+    ports:
+      - "9000:9000"
+
+  # one-shot: create the artifact bucket once S3Proxy answers, then exit
+  createbucket:
+    image: amazon/aws-cli:latest
+    depends_on:
+      - s3
+    environment:
+      - AWS_ACCESS_KEY_ID=local
+      - AWS_SECRET_ACCESS_KEY=localsecret
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        for i in $$(seq 1 30); do
+          aws --endpoint-url http://s3:9000 s3 ls >/dev/null 2>&1 && break; sleep 2;
+        done;
+        aws --endpoint-url http://s3:9000 s3 mb s3://ch11-monitoring 2>/dev/null || true;
+        echo "bucket ready"

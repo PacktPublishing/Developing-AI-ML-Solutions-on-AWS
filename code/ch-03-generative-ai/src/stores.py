@@ -8,13 +8,37 @@ from models import embed
 
 
 def connect():
-    """Connect to the vector store from the standard PG environment variables."""
+    """Connect to the vector store from the standard PG environment variables.
+
+    Locally the password is the plain one. On AWS the express Aurora cluster authenticates
+    through its internet gateway with IAM only, so the password is a short-lived RDS auth
+    token and the connection is TLS; DB_IAM_AUTH=1 selects that path.
+    """
+    host = os.environ.get("PGHOST", "localhost")
+    port = os.environ.get("PGPORT", "5544")
+    user = os.environ.get("PGUSER", "underwriter")
+    dbname = os.environ.get("PGDATABASE", "underwriting")
+    if os.environ.get("DB_IAM_AUTH") == "1":
+        import boto3
+
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        token = boto3.client("rds", region_name=region).generate_db_auth_token(
+            host, int(port), user
+        )
+        return psycopg2.connect(
+            host=host,
+            port=port,
+            user=user,
+            dbname=dbname,
+            password=token,
+            sslmode="require",
+        )
     return psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5544"),
-        user=os.environ.get("PGUSER", "underwriter"),
+        host=host,
+        port=port,
+        user=user,
+        dbname=dbname,
         password=os.environ.get("PGPASSWORD", "underwriter"),
-        dbname=os.environ.get("PGDATABASE", "underwriting"),
     )
 
 

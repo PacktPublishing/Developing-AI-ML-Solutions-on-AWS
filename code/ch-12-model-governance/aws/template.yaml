@@ -1,0 +1,597 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  ch-12 governance stack, one stack end to end: a CodeBuild batch build produces the three
+  serving images (chapter 2's champion and challenger models, and this chapter's rollout
+  gateway); AWS AppConfig holds the application, environment, and feature flag that drive
+  the champion/challenger rollout; two SageMaker endpoints serve the models; and a Fargate
+  gateway (with the AppConfig agent as a sidecar) routes each application to one of them.
+  Deploy in two passes: Serving=false brings up the build infrastructure and AppConfig, the
+  batch build pushes the images, then Serving=true adds the endpoints and the gateway.
+  Widening the rollout is a flag edit (bump RolloutPct and redeploy: a new configuration
+  version and deployment) with the service and endpoints untouched. The gateway parks at
+  desired count 0, so the stack costs nothing at rest.
+
+Parameters:
+  RolloutPct:
+    Description: percent of applications routed to the challenger
+    Type: Number
+    Default: 20
+    MinValue: 0
+    MaxValue: 100
+
+  DesiredCount:
+    Description: gateway task count; parks at 0 and scales to 1 for a run
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 1
+
+  AllowedCidr:
+    Description: the CIDR the gateway port opens to (your IP as x.x.x.x/32)
+    Type: String
+    Default: 0.0.0.0/0
+
+  Serving:
+    Description: gate the serving layer (endpoints + gateway); false until the images exist
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
+
+Conditions:
+  ServingEnabled: !Equals
+    - !Ref Serving
+    - "true"
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # Image build: the source bucket, the three ECR repositories, and a CodeBuild
+  # batch project that builds the images in parallel. All disposable on teardown.
+  # ---------------------------------------------------------------------------
+  SourceBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  ChampionRepo:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch12-champion
+      EmptyOnDelete: true
+
+  ChallengerRepo:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch12-challenger
+      EmptyOnDelete: true
+
+  GatewayRepo:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch12-rollout-gateway
+      EmptyOnDelete: true
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ch12-image-build
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource:
+                  - !GetAtt ChampionRepo.Arn
+                  - !GetAtt ChallengerRepo.Arn
+                  - !GetAtt GatewayRepo.Arn
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${SourceBucket.Arn}/*
+
+              # The batch build orchestrator starts one child build per image; the name is
+              # fixed below, so the ARN is built by Sub (a GetAtt here would be circular).
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:StopBuild
+                  - codebuild:RetryBuild
+                Resource: !Sub arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/ch12-models-build
+
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: ch12-models-build
+      ServiceRole: !GetAtt BuildRole.Arn
+      Source:
+        Type: S3
+        Location: !Sub ${SourceBucket}/src.zip
+      Artifacts:
+        Type: NO_ARTIFACTS
+      BuildBatchConfig:
+        ServiceRole: !GetAtt BuildRole.Arn
+        TimeoutInMins: 30
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_LARGE
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REGISTRY
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+
+  # ---------------------------------------------------------------------------
+  # AppConfig: the application, environment, and feature-flag configuration that
+  # drive the rollout. The AppConfig agent sidecar on the gateway reads this.
+  # ---------------------------------------------------------------------------
+  Application:
+    Type: AWS::AppConfig::Application
+    Properties:
+      Name: credit-governance
+
+  Environment:
+    Type: AWS::AppConfig::Environment
+    Properties:
+      ApplicationId: !Ref Application
+      Name: prod
+
+  Profile:
+    Type: AWS::AppConfig::ConfigurationProfile
+    Properties:
+      ApplicationId: !Ref Application
+      Name: rollout
+      LocationUri: hosted
+      Type: AWS.AppConfig.FeatureFlags
+
+  # The feature-flag document in the AWS.AppConfig.FeatureFlags schema. $loanId is an
+  # AppConfig context variable (no braces, so Sub leaves it alone); RolloutPct is injected.
+  ConfigVersion:
+    Type: AWS::AppConfig::HostedConfigurationVersion
+    Properties:
+      ApplicationId: !Ref Application
+      ConfigurationProfileId: !Ref Profile
+      ContentType: application/json
+
+      # A flag value that uses _variants must NOT carry a top-level "enabled" (that trips
+      # the StrictVariants check); enabled goes on each variant. challenger overrides the
+      # model for its split segment, champion is the complement (no override), default is
+      # the required catch-all (unreachable, since split and not-split are exhaustive).
+      Content: !Sub |
+        {
+          "version": "1",
+          "flags": {
+            "challenger_rollout": {
+              "name": "challenger_rollout",
+              "description": "Route a share of applications to the challenger model.",
+              "attributes": { "model": { "constraints": { "type": "string", "required": false } } }
+            }
+          },
+          "values": {
+            "challenger_rollout": {
+              "_variants": [
+                {
+                  "name": "challenger",
+                  "enabled": true,
+                  "rule": "(split by::$loanId pct::${RolloutPct} seed::\"rollout-2026\")",
+                  "attributeValues": { "model": "credit-challenger" }
+                },
+                {
+                  "name": "champion",
+                  "enabled": true,
+                  "rule": "(not (split by::$loanId pct::${RolloutPct} seed::\"rollout-2026\"))"
+                },
+                {
+                  "name": "default",
+                  "enabled": true
+                }
+              ]
+            }
+          }
+        }
+
+  # Immediate rollout: this is a routing flag, not a risky binary, so deploy all at once.
+  DeploymentStrategy:
+    Type: AWS::AppConfig::DeploymentStrategy
+    Properties:
+      Name: ch12-all-at-once
+      DeploymentDurationInMinutes: 0
+      GrowthFactor: 100
+      FinalBakeTimeInMinutes: 0
+      ReplicateTo: NONE
+
+  Deployment:
+    Type: AWS::AppConfig::Deployment
+    Properties:
+      ApplicationId: !Ref Application
+      EnvironmentId: !Ref Environment
+      ConfigurationProfileId: !Ref Profile
+      ConfigurationVersion: !Ref ConfigVersion
+      DeploymentStrategyId: !Ref DeploymentStrategy
+
+  # ---------------------------------------------------------------------------
+  # Serving layer (Serving=true): the two SageMaker endpoints the gateway routes
+  # between, chapter 2's scorecard and challenger, each on a Serverless endpoint.
+  # ---------------------------------------------------------------------------
+  EndpointRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: serve
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:aws:s3:::sagemaker-${AWS::Region}-${AWS::AccountId}/ch12/*
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/ch12-*
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
+    Condition: ServingEnabled
+
+  ChampionModel:
+    Type: AWS::SageMaker::Model
+    Properties:
+      ExecutionRoleArn: !GetAtt EndpointRole.Arn
+      PrimaryContainer:
+        Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-champion:latest
+        ModelDataUrl: !Sub s3://sagemaker-${AWS::Region}-${AWS::AccountId}/ch12/champion-pl/model.tar.gz
+        Mode: SingleModel
+    Condition: ServingEnabled
+
+  ChallengerModel:
+    Type: AWS::SageMaker::Model
+    Properties:
+      ExecutionRoleArn: !GetAtt EndpointRole.Arn
+      PrimaryContainer:
+        Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-challenger:latest
+        ModelDataUrl: !Sub s3://sagemaker-${AWS::Region}-${AWS::AccountId}/ch12/challenger-cb/model.tar.gz
+        Mode: SingleModel
+    Condition: ServingEnabled
+
+  ChampionEndpointConfig:
+    Type: AWS::SageMaker::EndpointConfig
+    Properties:
+      ProductionVariants:
+        - VariantName: main
+          ModelName: !GetAtt ChampionModel.ModelName
+          ServerlessConfig:
+            MemorySizeInMB: 3072
+            MaxConcurrency: 2
+    Condition: ServingEnabled
+
+  ChallengerEndpointConfig:
+    Type: AWS::SageMaker::EndpointConfig
+    Properties:
+      ProductionVariants:
+        - VariantName: main
+          ModelName: !GetAtt ChallengerModel.ModelName
+          ServerlessConfig:
+            MemorySizeInMB: 3072
+            MaxConcurrency: 2
+    Condition: ServingEnabled
+
+  ChampionEndpoint:
+    Type: AWS::SageMaker::Endpoint
+    Properties:
+      EndpointName: ch12-champion
+      EndpointConfigName: !GetAtt ChampionEndpointConfig.EndpointConfigName
+    Condition: ServingEnabled
+
+  ChallengerEndpoint:
+    Type: AWS::SageMaker::Endpoint
+    Properties:
+      EndpointName: ch12-challenger
+      EndpointConfigName: !GetAtt ChallengerEndpointConfig.EndpointConfigName
+    Condition: ServingEnabled
+
+  # ---------------------------------------------------------------------------
+  # The rollout gateway's network (Serving=true): a minimal public VPC. The task
+  # takes a public IP and reaches AppConfig, SageMaker, and ECR over the internet
+  # gateway, so there are no NAT or VPC-endpoint charges.
+  # ---------------------------------------------------------------------------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.60.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+    Condition: ServingEnabled
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: ServingEnabled
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+    Condition: ServingEnabled
+
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.60.1.0/24
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+      MapPublicIpOnLaunch: true
+    Condition: ServingEnabled
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+    Condition: ServingEnabled
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    Condition: ServingEnabled
+
+  SubnetRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet
+      RouteTableId: !Ref RouteTable
+    Condition: ServingEnabled
+
+  GatewaySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: rollout gateway; inbound 8080 from the allowed CIDR only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: !Ref AllowedCidr
+    Condition: ServingEnabled
+
+  # ---------------------------------------------------------------------------
+  # The Fargate gateway (Serving=true): the routing container plus the AppConfig
+  # agent sidecar.
+  # ---------------------------------------------------------------------------
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: ch12-gateway
+    Condition: ServingEnabled
+
+  LogGroup:
+    DeletionPolicy: Delete
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/ch12-gateway
+      RetentionInDays: 7
+    Condition: ServingEnabled
+
+  # Pulls the images and writes logs (the standard ECS execution role).
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ch12-gateway-exec
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+    Condition: ServingEnabled
+
+  # The running task's own identity: the agent reads AppConfig, the gateway
+  # invokes the two endpoints. Nothing else.
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ch12-gateway-task
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: route
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - appconfig:StartConfigurationSession
+                  - appconfig:GetLatestConfiguration
+                Resource: !Sub arn:aws:appconfig:${AWS::Region}:${AWS::AccountId}:application/${Application}/*
+              - Effect: Allow
+                Action: sagemaker:InvokeEndpoint
+                Resource:
+                  - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/ch12-champion
+                  - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/ch12-challenger
+    Condition: ServingEnabled
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: ch12-gateway
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+
+        # The AppConfig agent sidecar: the same published image the local stack
+        # runs, so the split buckets each application identically here and locally.
+        # It prefetches the rollout flag at startup and serves it on localhost:2772.
+        - Name: appconfig-agent
+          Image: public.ecr.aws/aws-appconfig/aws-appconfig-agent:2.x
+          Essential: true
+          PortMappings:
+            - ContainerPort: 2772
+          Environment:
+            - Name: SERVICE_REGION
+              Value: !Ref AWS::Region
+            - Name: PREFETCH_LIST
+              Value: !Sub ${Application}:prod:rollout
+            - Name: LOG_LEVEL
+              Value: info
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: agent
+
+        # The gateway: reads the evaluated flag from the sidecar and invokes the
+        # champion or challenger endpoint the split picked.
+        - Name: gateway
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-rollout-gateway:latest
+          Essential: true
+          DependsOn:
+            - ContainerName: appconfig-agent
+              Condition: START
+          PortMappings:
+            - ContainerPort: 8080
+          Environment:
+            - Name: APPCONFIG_AGENT_URL
+              Value: http://localhost:2772
+            - Name: APPCONFIG_APP
+              Value: !Ref Application
+            - Name: APPCONFIG_ENV
+              Value: prod
+            - Name: APPCONFIG_PROFILE
+              Value: rollout
+            - Name: CHAMPION_ENDPOINT
+              Value: ch12-champion
+            - Name: CHALLENGER_ENDPOINT
+              Value: ch12-challenger
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: gateway
+    Condition: ServingEnabled
+
+  Service:
+    Type: AWS::ECS::Service
+
+    # The endpoints must be live before the gateway that invokes them.
+    DependsOn:
+      - ChampionEndpoint
+      - ChallengerEndpoint
+    Properties:
+      ServiceName: ch12-gateway
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets:
+            - !Ref Subnet
+          SecurityGroups:
+            - !Ref GatewaySecurityGroup
+          AssignPublicIp: ENABLED
+    Condition: ServingEnabled
+
+Outputs:
+  SourceBucket:
+    Description: the bucket the build source is uploaded to
+    Value: !Ref SourceBucket
+
+  BuildProject:
+    Description: the CodeBuild batch project that builds the three images
+    Value: !Ref BuildProject
+
+  ApplicationId:
+    Description: the AppConfig application id (for the agent sidecar)
+    Value: !Ref Application
+
+  ChampionEndpoint:
+    Description: the champion (credit-scorecard) endpoint
+    Value: !GetAtt ChampionEndpoint.EndpointName
+    Condition: ServingEnabled
+
+  ChallengerEndpoint:
+    Description: the challenger (credit-challenger) endpoint
+    Value: !GetAtt ChallengerEndpoint.EndpointName
+    Condition: ServingEnabled
+
+  ClusterName:
+    Description: the ECS cluster running the gateway
+    Value: !Ref Cluster
+    Condition: ServingEnabled
+
+  ServiceName:
+    Description: the gateway service (scale to 1 for a run)
+    Value: !GetAtt Service.Name
+    Condition: ServingEnabled

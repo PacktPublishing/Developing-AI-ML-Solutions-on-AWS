@@ -1,0 +1,13 @@
+# local dev environments and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# hugging face datasets + generated batch jsonl (reproduce from the fetch/prepare step)
+data/generated/
+outputs/
+
+# sam local build output
+.aws-sam/

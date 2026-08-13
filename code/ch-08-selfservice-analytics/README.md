@@ -10,20 +10,23 @@ redshift-local, on AWS it is the real API under an IAM task role.
 ## Run it locally
 
 ```
-make llm                                  # serve gpt-oss-20b on vllm-metal
-make local                                # fully local, no account, no login
+make local                                # fully offline on Ollama, no account
 AWS_PROFILE=<profile> make local-bedrock  # real Bedrock, Fargate-style creds
-make local-stop                           # tear either down
+make local-claude                         # your own Claude account
+make llm                                  # optional: a faster gpt-oss-20b on vLLM (MLX)
+make local-stop                           # tear the stack down
 ```
 
-`make local` is local end to end: Claude Code drives gpt-oss-20b through
-vLLM's native Anthropic API on the vllm-metal plugin (MLX on Apple Silicon),
-the warehouse is redshift-local behind the from-source Data API shim, and
-the terminal starts straight at the prompt because the credentials are
-ambient, exactly as on the Fargate task. Budget memory honestly: the model
-wants 16 GB to itself, and running it beside the stack and a browser needs
-more than 32 GB to stay interactive; below that, `make local-bedrock` is
-the fast local session.
+`make local` is local end to end: Claude Code drives gpt-oss:20b on the host
+through Ollama's Anthropic-compatible API (BEDROCK_LOCAL=1; run `ollama pull
+gpt-oss:20b` first), the warehouse is redshift-local behind the from-source
+Data API shim, and the terminal starts straight at the prompt because the
+credentials are ambient, exactly as on the Fargate task. Budget memory
+honestly: the model wants 16 GB to itself, and running it beside the stack
+and a browser needs more than 32 GB to stay interactive; below that,
+`make local-bedrock` or `make local-claude` is the lighter local session.
+For a faster local model on Apple Silicon, `make llm` serves gpt-oss-20b on
+vLLM (MLX).
 `make local-bedrock` is the pre-deploy parity check, with credentials from
 the `amazon-ecs-local-container-endpoints` sidecar, the task-metadata path
 the task role fills on Fargate. `make local-claude` swaps in your own Claude

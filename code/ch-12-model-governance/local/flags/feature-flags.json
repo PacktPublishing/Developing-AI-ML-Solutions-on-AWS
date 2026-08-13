@@ -1,0 +1,24 @@
+{
+  "challenger_rollout": {
+    "enabled": true,
+    "name": "challenger_rollout",
+    "description": "Route a share of applications to the challenger model. Bump the challenger variant's pct to widen the rollout with no redeploy; the split is deterministic per loanId, so a loan keeps its assignment.",
+    "_variants": [
+      {
+        "name": "challenger",
+        "enabled": true,
+        "rule": "(split by::$loanId pct::20 seed::\"rollout-2026\")",
+        "attributeValues": {
+          "model": "credit-challenger"
+        }
+      },
+      {
+        "name": "champion",
+        "enabled": true,
+        "attributeValues": {
+          "model": "credit-scorecard"
+        }
+      }
+    ]
+  }
+}

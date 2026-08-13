@@ -1,0 +1,19 @@
+# local dev environments and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# generated data + demo outputs (reproduce from the generator script)
+outputs/
+data/generated/
+
+# sam local build output
+.aws-sam/
+
+# generated application batch
+data/applications.jsonl
+
+# generated Ion config for the local agent (regenerated from the flag JSON)
+local/agent-configs/

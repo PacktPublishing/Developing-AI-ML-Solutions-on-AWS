@@ -1,0 +1,198 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  The underwriting knowledge base on Amazon OpenSearch Service, plus the
+  underwriter app in front of it. A single-node domain with the k-NN plugin holds
+  the embedded memos; OpenSearch Dashboards is the analyst UI. The app is one
+  FastAPI image (ask/recommend UI + /ask and /cases) running in a container Lambda
+  via the Lambda Web Adapter, behind API Gateway. Fine-grained access control
+  gates the domain with a master user, so the endpoint is public but every request
+  authenticates. Delete the stack when the round is done.
+
+Parameters:
+  MasterUserName:
+    Description: Fine-grained-access-control master user for Dashboards and indexing
+    Type: String
+    Default: kbadmin
+
+  EngineVersion:
+
+    # 2.13+ enables the RAG (conversational search) pipeline feature by default;
+    # 2.11 leaves it off and OpenSearch Service will not let you set the flag.
+    Type: String
+    Default: OpenSearch_2.17
+
+  ImageUri:
+    Description: ECR URI of the app image (built by the app-build stack)
+    Type: String
+
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  Kb:
+
+    # Keep the domain and its data on stack delete; the round is ephemeral.
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      DomainName: ch09-kb
+      EngineVersion: !Ref EngineVersion
+
+      # Smallest single node that carries the demo corpus; no dedicated master,
+      # no zone awareness. gp3 with the default 10 GiB is ample for 500 memos.
+      ClusterConfig:
+        InstanceType: t3.small.search
+        InstanceCount: 1
+        DedicatedMasterEnabled: false
+        ZoneAwarenessEnabled: false
+      EBSOptions:
+        EBSEnabled: true
+        VolumeType: gp3
+        VolumeSize: 10
+
+      # Fine-grained access control requires all three of the following.
+      EncryptionAtRestOptions:
+        Enabled: true
+      NodeToNodeEncryptionOptions:
+        Enabled: true
+      DomainEndpointOptions:
+        EnforceHTTPS: true
+      AdvancedSecurityOptions:
+        Enabled: true
+        InternalUserDatabaseEnabled: true
+        MasterUserOptions:
+          MasterUserName: !Ref MasterUserName
+          MasterUserPassword: '{{resolve:secretsmanager:ch09-os-master}}'
+
+      # The endpoint is public so the Lambda can reach it; fine-grained access
+      # control then authenticates every request against the master user. In
+      # production, restrict Dashboards to an IP range and give the app its own
+      # IAM-signed identity (the chapter's hardened posture).
+      AccessPolicies:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: es:ESHttp*
+            Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/ch09-kb/*
+
+  # ---------------------------------------------------------------------------
+  # the RAG connector role: OpenSearch ml-commons assumes this to call Bedrock,
+  # so Dashboards conversational search can generate grounded answers in place.
+  # ---------------------------------------------------------------------------
+  RagRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ch09-rag-connector
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: opensearchservice.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/ch09-kb
+      Policies:
+        - PolicyName: invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:aws:bedrock:*::foundation-model/anthropic.*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+
+  # ---------------------------------------------------------------------------
+  # the underwriter app: one FastAPI image, container Lambda via the Web Adapter
+  # ---------------------------------------------------------------------------
+  AppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: app
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Bedrock
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:aws:bedrock:*::foundation-model/amazon.*
+                  - !Sub arn:aws:bedrock:*::foundation-model/anthropic.*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+              - Sid: ModelSubscription
+                Effect: Allow
+                Action: aws-marketplace:ViewSubscriptions
+                Resource: '*'
+
+  App:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      Role: !GetAtt AppRole.Arn
+      MemorySize: 1024
+      Timeout: 30 # API Gateway HTTP API caps the integration at 30s
+      Environment:
+        Variables:
+          STORE: opensearch
+          OPENSEARCH_HOST: !GetAtt Kb.DomainEndpoint
+          OPENSEARCH_PORT: "443"
+          OPENSEARCH_SSL: "1"
+          OPENSEARCH_USER: !Ref MasterUserName
+          OPENSEARCH_PASSWORD: '{{resolve:secretsmanager:ch09-os-master}}'
+          BEDROCK_REGION: !Ref AWS::Region
+
+          # Generate with Claude on Bedrock (the account's enabled text model);
+          # embeddings stay on Titan v2. The AppRole allows anthropic.* profiles.
+          TEXT_MODEL: global.anthropic.claude-haiku-4-5-20251001-v1:0
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  DomainEndpoint:
+    Value: !GetAtt Kb.DomainEndpoint
+
+  DashboardsURL:
+    Description: Open this, sign in with the master user, and search the memo index
+    Value: !Sub https://${Kb.DomainEndpoint}/_dashboards/
+
+  AppUrl:
+    Description: The underwriter app (ask/recommend) behind API Gateway
+    Value: !Sub https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com
+
+  RagRoleArn:
+    Description: Role ml-commons assumes to call Bedrock for Dashboards RAG
+    Value: !GetAtt RagRole.Arn
+
+  MasterUserName:
+    Value: !Ref MasterUserName

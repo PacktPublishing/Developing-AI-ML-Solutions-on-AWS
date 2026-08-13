@@ -1,0 +1,46 @@
+# The classification round on AWS: an Amazon Bedrock batch inference job. Every
+# conversation is one line of a JSONL manifest in S3; Bedrock replays each modelInput
+# against Claude Haiku 4.5 and writes the answers back as .jsonl.out; route.py collects
+# them and publishes each conversation to its team's SNS topic.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Client, AWSCloud]
+
+    Client:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "classify.py\nroute.py"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [ManifestIn, Bedrock, ResultsOut, SNS]
+
+    ManifestIn:
+      Type: AWS::S3::Bucket
+      Title: "S3\nJSONL manifest"
+    Bedrock:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "Bedrock batch\nCreateModelInvocationJob\n(Claude Haiku 4.5)"
+    ResultsOut:
+      Type: AWS::S3::Bucket
+      Title: "S3\n.jsonl.out"
+    SNS:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Notification Service (Amazon SNS)"
+      Title: "SNS\nten team topics"
+
+  Links:
+    - {Source: Client, SourcePosition: E, Target: ManifestIn, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: ManifestIn, SourcePosition: E, Target: Bedrock, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Bedrock, SourcePosition: E, Target: ResultsOut, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: ResultsOut, SourcePosition: E, Target: SNS, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

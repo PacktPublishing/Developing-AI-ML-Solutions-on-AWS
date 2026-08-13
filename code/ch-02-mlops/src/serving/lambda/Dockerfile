@@ -8,7 +8,7 @@
 FROM public.ecr.aws/lambda/python:3.12
 
 RUN pip install --no-cache-dir \
-    "xgboost>=2.0" \
+    "catboost>=1.2" \
     "scikit-learn>=1.3" \
     "pandas>=2.0" \
     "numpy>=1.26"

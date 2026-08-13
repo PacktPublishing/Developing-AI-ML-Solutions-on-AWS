@@ -11,7 +11,7 @@ from corpus_data import chunk_text, documents
 # -------------------------------------------------------------------------------
 # Clients and configuration
 # -------------------------------------------------------------------------------
-SECRETS = boto3.client("secretsmanager")
+RDS = boto3.client("rds")
 BEDROCK = boto3.client("bedrock-runtime")
 
 TEXT_MODEL = os.environ["TEXT_MODEL"]
@@ -38,15 +38,19 @@ SYSTEM = (
 # Database connection and embedding helpers
 # -------------------------------------------------------------------------------
 def _connect():
-    secret = json.loads(
-        SECRETS.get_secret_value(SecretId=os.environ["DB_SECRET_ARN"])["SecretString"]
-    )
+    # The express Aurora cluster takes IAM authentication only, over its internet gateway:
+    # the password is a short-lived RDS auth token and the connection is TLS.
+    host = os.environ["PGHOST"]
+    port = os.environ["PGPORT"]
+    user = os.environ["PGUSER"]
+    token = RDS.generate_db_auth_token(host, int(port), user)
     return psycopg2.connect(
-        host=os.environ["PGHOST"],
-        port=os.environ["PGPORT"],
+        host=host,
+        port=port,
         dbname=os.environ["PGDATABASE"],
-        user=secret["username"],
-        password=secret["password"],
+        user=user,
+        password=token,
+        sslmode="require",
     )
 
 

@@ -1,0 +1,63 @@
+# Option 1, the rollout stack: applications hit the flag-routing gateway, which asks the
+# real AWS AppConfig agent (a sidecar, the same image ECS uses) for the challenger_rollout
+# variant and routes each one to the champion (chapter 2's WOE scorecard) or the challenger
+# (monotone CatBoost). Widening the rollout is a flag edit; nothing in the app restarts.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Applications, Local]
+
+    Applications:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "applications\n(loanId + features)"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local cloud (Docker Compose)"
+      Children: [GatewayColumn, Models]
+
+    GatewayColumn:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Flags, Gateway]
+    Flags:
+      Type: AWS::Diagram::Resource
+      Preset: "AppConfigAgent"
+      Title: "AppConfig agent (sidecar)\nevaluates the split"
+    Gateway:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Fargate"
+      Title: "rollout gateway\nflag-routed"
+      Children: [GatewayApp]
+    GatewayApp:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "FastAPI"
+
+    Models:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Champion, Challenger]
+    Champion:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "champion\ncredit-scorecard (WOE + LR)"
+    Challenger:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "challenger\ncredit-challenger (CatBoost)"
+
+  Links:
+    - {Source: Applications, SourcePosition: E, Target: Gateway, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Flags, SourcePosition: S, Target: Gateway, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: E, Target: Champion, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Gateway, SourcePosition: E, Target: Challenger, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

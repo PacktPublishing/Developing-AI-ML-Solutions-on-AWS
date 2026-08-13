@@ -1,4 +1,4 @@
-"""SageMaker inference server for the XGBoost challenger (custom container).
+"""SageMaker inference server for the CatBoost challenger (custom container).
 
 Same two-route contract as the scorecard (GET /ping, POST /invocations on port 8080), so one image serves a local container, a real-time endpoint, and a batch-transform job.
 """

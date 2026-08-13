@@ -21,7 +21,7 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Title: "Local (Docker)"
+      Title: "Local (Docker Compose)"
       Children: [Images, Compute, Store]
 
     Images:

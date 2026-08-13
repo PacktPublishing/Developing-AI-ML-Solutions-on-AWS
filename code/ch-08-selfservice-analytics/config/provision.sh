@@ -9,6 +9,11 @@
 
 set -euo pipefail
 
+# Resolve the PII config next to this script, so it works from any caller cwd (make runs
+# this from aws/ as ../config/provision.sh).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PII_YAML="$SCRIPT_DIR/pii_columns.yaml"
+
 uv run --with boto3 python3 -u - <<'PYEOF'
 import os
 import re
@@ -59,7 +64,7 @@ for user in users:
 
 # 2. Masking policies from the shared config.
 line_re = re.compile(r"^(\w+)\.(\w+)\.(\w+):\s*(\w+)\s*$")
-for line in open("config/pii_columns.yaml"):
+for line in open(os.environ["PII_YAML"]):
     m = line_re.match(line.strip())
     if not m:
         continue

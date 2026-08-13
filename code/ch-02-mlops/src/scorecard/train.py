@@ -58,6 +58,7 @@ def train() -> None:
     """Fit the WOE scorecard, evaluate it, log the run, and save the model."""
     from fastwoe import FastWoe
     from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
 
     hp = _hyperparameters()
     C = float(hp.get("C", 1.0))
@@ -72,13 +73,17 @@ def train() -> None:
     train_df = pd.read_csv(os.path.join(TRAIN, "train.csv"))
     X, y = train_df[features], train_df[target]
 
-    # The business rule: monotone WOE binning for the constrained numerics. Pass
-    # the whole dict (categoricals and unconstrained features are 0 = ignored).
+    # The scorecard is a scikit-learn pipeline: FastWoe (monotone WOE binning for the
+    # constrained numerics carries the business rule) into logistic regression.
     monotone = spec["monotone_constraints"] if monotonic else {}
-    woe = FastWoe(monotonic_cst=monotone or None)
-    Xw = woe.fit_transform(X, y)
-    lr = LogisticRegression(C=C, max_iter=max_iter).fit(Xw, y)
-    model = ScorecardPredictor(woe, lr, spec)
+    pipeline = Pipeline(
+        [
+            ("woe", FastWoe(monotonic_cst=monotone or None)),
+            ("lr", LogisticRegression(C=C, max_iter=max_iter)),
+        ]
+    )
+    pipeline.fit(X, y)
+    model = ScorecardPredictor(pipeline, spec)
 
     # Honest metrics on the held-out validation channel when present.
     metrics = {}
@@ -94,19 +99,21 @@ def train() -> None:
 
     # Weight-of-Evidence information value per feature, a scorecard deliverable.
     try:
-        iv = woe.get_iv_analysis()
+        iv = pipeline.named_steps["woe"].get_iv_analysis()
         iv.to_csv(os.path.join(MODEL, "iv_analysis.csv"), index=False)
     except Exception as exc:
         print(f"iv_analysis skipped: {exc}")
 
-    _log_to_mlflow(hp, {"C": C, "max_iter": max_iter, "monotonic": monotonic}, metrics)
+    _log_to_mlflow(
+        hp, {"C": C, "max_iter": max_iter, "monotonic": monotonic}, metrics, pipeline
+    )
     print(f"scorecard written to {MODEL}")
 
 
 # -------------------------------------------------------------------------------
 # Experiment tracking
 # -------------------------------------------------------------------------------
-def _log_to_mlflow(hp: dict, params: dict, metrics: dict) -> None:
+def _log_to_mlflow(hp: dict, params: dict, metrics: dict, pipeline) -> None:
     """Best-effort experiment tracking; skipped when no tracking server is set."""
     uri = os.environ.get("MLFLOW_TRACKING_URI")
     if not uri:
@@ -114,14 +121,20 @@ def _log_to_mlflow(hp: dict, params: dict, metrics: dict) -> None:
         return
     import mlflow
 
-    # Serverless MLflow writes artifacts straight to S3, so the experiment must be created with an S3 artifact_location the first time; set_experiment selects it if it already exists.
+    # Create the experiment before selecting it. The serverless MLflow App returns a bare
+    # 404 from get-by-name for a missing experiment (which set_experiment surfaces as an
+    # error rather than "create it"), so create it explicitly and ignore "already exists".
+    # Locally (sqlite), the App manages no artifact store, so set an S3 artifact_location;
+    # on the App (MLFLOW_ARTIFACT_ROOT unset) it manages its own.
     experiment = hp.get("mlflow_experiment", "credit-scorecard")
-    # Local (sqlite) mode has no server to assign an artifact location, so set one on S3 explicitly; the serverless MLflow App manages its own, so MLFLOW_ARTIFACT_ROOT stays unset there.
     artifact_root = os.environ.get("MLFLOW_ARTIFACT_ROOT")
-    if artifact_root and mlflow.get_experiment_by_name(experiment) is None:
-        mlflow.create_experiment(
-            experiment, artifact_location=f"{artifact_root}/{experiment}"
-        )
+    create_kwargs = (
+        {"artifact_location": f"{artifact_root}/{experiment}"} if artifact_root else {}
+    )
+    try:
+        mlflow.create_experiment(experiment, **create_kwargs)
+    except mlflow.exceptions.MlflowException:
+        pass  # already exists
     mlflow.set_experiment(experiment)
     with mlflow.start_run(run_name=hp.get("run_name", "scorecard")):
         mlflow.set_tag("model_family", "woe-logistic-regression")
@@ -131,24 +144,21 @@ def _log_to_mlflow(hp: dict, params: dict, metrics: dict) -> None:
             mlflow.log_metrics(metrics)
         if os.path.exists(os.path.join(MODEL, "iv_analysis.csv")):
             mlflow.log_artifact(os.path.join(MODEL, "iv_analysis.csv"))
-        # Register the scorecard as a pyfunc model so SageMaker ModelBuilder can
-        # later deploy it straight from the registry.
-        from mlflow_pyfunc import ScorecardPyfunc
-
-        mlflow.pyfunc.log_model(
+        # The scorecard is a scikit-learn pipeline, so it logs with the native sklearn
+        # flavor -- no custom pyfunc -- and registers for promotion from the registry.
+        # cloudpickle, not the default skops: skops refuses custom classes like FastWoe.
+        mlflow.sklearn.log_model(
+            sk_model=pipeline,
             name="model",
-            python_model=ScorecardPyfunc(),
-            artifacts={"model_dir": MODEL},
-            code_paths=["scorecard_model.py", "mlflow_pyfunc.py"],
-            pip_requirements=[
-                "fastwoe",
-                "scikit-learn",
-                "pandas",
-                "joblib",
-                "sagemaker",
-            ],
+            serialization_format="cloudpickle",
+            pip_requirements=["fastwoe", "scikit-learn", "pandas", "joblib"],
             registered_model_name=hp.get("registered_model_name", "credit-scorecard"),
         )
+        # Attach the raw serving files as run artifacts too (same as the challenger): the
+        # native flavor does not carry scorecard.joblib or feature_spec.json, and
+        # package_model.py builds the BYOC model.tar.gz from the registered version's run.
+        mlflow.log_artifact(os.path.join(MODEL, "scorecard.joblib"))
+        mlflow.log_artifact(os.path.join(MODEL, "feature_spec.json"))
     print(f"logged run to {uri}")
 
 

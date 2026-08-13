@@ -1,18 +1,34 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
 Description: |
-  The underwriting assistant on AWS: RDS for PostgreSQL with pgvector as the vector store, and a Lambda that answers a grounded question against Bedrock. The store and the retrieval code are the same as the local chapter; only the Postgres host moves to RDS.
-  Self-contained: the Lambda creates the pgvector extension, the table, and the index on its first call, and seeds the synthetic knowledge base when the table is empty, so a fresh deploy needs no manual SQL and redeploys are idempotent.
-  RDS db.t3.micro is free-tier eligible. Aurora is the scale-up, but Aurora on a free-plan account needs the express configuration, which CloudFormation does not yet expose, so a plain RDS instance keeps this runnable with no account upgrade.
+  The underwriting assistant on AWS: Aurora PostgreSQL Serverless with pgvector as the vector
+  store, and a Lambda that answers a grounded question against Bedrock. The store and the
+  retrieval code are the same as the local chapter; only the Postgres host moves to Aurora.
+  The cluster is created with express configuration -- a serverless instance and an internet
+  access gateway in seconds, runnable on a free-plan account -- through a small inline boto3
+  custom resource, because AWS::RDS::DBCluster does not expose express configuration yet
+  (coverage-roadmap issue 2506). Express clusters are not in a VPC and take IAM authentication
+  only, so the assistant runs outside a VPC and connects with a short-lived RDS auth token
+  over TLS: no VPC, subnets, security group, secret, or NAT gateway. Self-contained: the
+  Lambda creates the pgvector extension, the table, and the index on its first call, and
+  seeds the synthetic knowledge base when the table is empty, so a fresh deploy needs no
+  manual SQL and redeploys are idempotent.
 
 Parameters:
-  DBName:
+  ClusterName:
+    Description: the Aurora DB cluster identifier
     Type: String
-    Default: underwriting
+    Default: ch03-underwriting
 
-  DBUsername:
+  DBUser:
+    Description: the cluster master user (express configuration defaults to postgres)
     Type: String
-    Default: underwriter
+    Default: postgres
+
+  DBName:
+    Description: the database the vector store lives in (express default is postgres)
+    Type: String
+    Default: postgres
 
   TextModel:
     Type: String
@@ -37,127 +53,124 @@ Transform: AWS::Serverless-2016-10-31
 
 Resources:
 
-  # A small VPC so the Lambda can reach a private database. Bedrock and Secrets
-  # Manager are reached through interface endpoints, so no NAT gateway is needed.
-  Vpc:
-    Type: AWS::EC2::VPC
+  # Aurora express configuration has no CloudFormation resource yet, but it is a
+  # create_db_cluster parameter (WithExpressConfiguration), so an inline boto3 Lambda custom
+  # resource creates the cluster and its serverless instance, not a shell-out to the CLI.
+  AuroraProviderRole:
+    Type: AWS::IAM::Role
     Properties:
-      CidrBlock: 10.0.0.0/16
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: aurora-express
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:CreateDBCluster
+                  - rds:CreateDBInstance
+                  - rds:DeleteDBCluster
+                  - rds:DeleteDBInstance
+                  - rds:DescribeDBClusters
+                  - rds:DescribeDBInstances
+                  - rds:EnableInternetAccessGateway
+                  - ec2:DescribeAvailabilityZones
+                Resource: '*'
+              - Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    iam:AWSServiceName: rds.amazonaws.com
 
-  SubnetA:
-    Type: AWS::EC2::Subnet
+  AuroraProvider:
+    Type: AWS::Lambda::Function
     Properties:
-      VpcId: !Ref Vpc
-      CidrBlock: 10.0.1.0/24
-      AvailabilityZone: !Select
-        - 0
-        - !GetAZs
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 900
+      Role: !GetAtt AuroraProviderRole.Arn
+      Code:
 
-  SubnetB:
-    Type: AWS::EC2::Subnet
+        # Inline (ZipFile) so cfnresponse is provided by the runtime; boto3 is already there.
+        ZipFile: |
+          import time
+          import boto3
+          import cfnresponse
+
+          def handler(event, context):
+              rds = boto3.client("rds")
+              cid = event["ResourceProperties"]["DBClusterIdentifier"]
+              deadline = time.time() + context.get_remaining_time_in_millis() / 1000 - 60
+              try:
+                  if event["RequestType"] == "Delete":
+                      _delete(rds, cid, deadline)
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, cid)
+                      return
+                  if event["RequestType"] == "Create":
+                      # one call creates the cluster, a serverless instance, and the gateway
+                      rds.create_db_cluster(
+                          DBClusterIdentifier=cid,
+                          Engine="aurora-postgresql",
+                          WithExpressConfiguration=True,
+                      )
+                  while time.time() < deadline:
+                      c = rds.describe_db_clusters(DBClusterIdentifier=cid)["DBClusters"][0]
+                      if c["Status"] == "available" and c.get("Endpoint"):
+                          cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                              "Endpoint": c["Endpoint"],
+                              "Port": str(c["Port"]),
+                              "ClusterResourceId": c["DbClusterResourceId"],
+                          }, cid)
+                          return
+                      time.sleep(15)
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {}, cid)
+              except Exception as exc:  # always signal, never hang the stack
+                  print("error:", exc)
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {}, cid)
+
+          def _delete(rds, cid, deadline):
+              try:
+                  c = rds.describe_db_clusters(DBClusterIdentifier=cid)["DBClusters"][0]
+              except rds.exceptions.DBClusterNotFoundFault:
+                  return
+              for m in c["DBClusterMembers"]:
+                  try:
+                      rds.delete_db_instance(
+                          DBInstanceIdentifier=m["DBInstanceIdentifier"],
+                          SkipFinalSnapshot=True,
+                      )
+                  except rds.exceptions.DBInstanceNotFoundFault:
+                      pass
+              while time.time() < deadline:
+                  try:
+                      if not rds.describe_db_clusters(DBClusterIdentifier=cid)["DBClusters"][0]["DBClusterMembers"]:
+                          break
+                  except rds.exceptions.DBClusterNotFoundFault:
+                      return
+                  time.sleep(15)
+              try:
+                  rds.delete_db_cluster(DBClusterIdentifier=cid, SkipFinalSnapshot=True)
+              except rds.exceptions.DBClusterNotFoundFault:
+                  pass
+
+  AuroraCluster:
+    Type: AWS::CloudFormation::CustomResource
     Properties:
-      VpcId: !Ref Vpc
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: !Select
-        - 1
-        - !GetAZs
+      ServiceToken: !GetAtt AuroraProvider.Arn
+      DBClusterIdentifier: !Ref ClusterName
 
-  LambdaSg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: assistant lambda
-      VpcId: !Ref Vpc
-
-  DbSg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: postgres from the lambda only
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 5432
-          ToPort: 5432
-          SourceSecurityGroupId: !Ref LambdaSg
-
-  EndpointSg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: interface endpoints, https from the lambda
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          SourceSecurityGroupId: !Ref LambdaSg
-
-  BedrockEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref Vpc
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.bedrock-runtime
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref SubnetA
-        - !Ref SubnetB
-      SecurityGroupIds:
-        - !Ref EndpointSg
-
-  SecretsEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref Vpc
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref SubnetA
-        - !Ref SubnetB
-      SecurityGroupIds:
-        - !Ref EndpointSg
-
-  # Both stateful resources are deliberately disposable; a production store would set Retain, backups, and deletion protection.
-  DbSecret:
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: database credentials for the underwriting assistant
-      GenerateSecretString:
-        SecretStringTemplate: !Sub '{"username": "${DBUsername}"}'
-        GenerateStringKey: password
-        ExcludePunctuation: true
-        PasswordLength: 24
-
-  DbSubnetGroup:
-    Type: AWS::RDS::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: assistant database subnets
-      SubnetIds:
-        - !Ref SubnetA
-        - !Ref SubnetB
-
-  Database:
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Type: AWS::RDS::DBInstance
-    Properties:
-      Engine: postgres
-      DBInstanceClass: db.t3.micro
-      AllocatedStorage: "20"
-      StorageType: gp3
-      DBName: !Ref DBName
-      MasterUsername: !Sub '{{resolve:secretsmanager:${DbSecret}:SecretString:username}}'
-      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DbSecret}:SecretString:password}}'
-      DBSubnetGroupName: !Ref DbSubnetGroup
-      VPCSecurityGroups:
-        - !Ref DbSg
-      PubliclyAccessible: false
-      BackupRetentionPeriod: 0
-      DeletionProtection: false
-
+  # The assistant runs outside a VPC: the express cluster (over its internet gateway) and
+  # Bedrock are both reached over the internet, so no subnets, security groups, or endpoints
+  # are needed. It authenticates to Aurora with a short-lived IAM token (DB_IAM_AUTH=1).
   Assistant:
     Type: AWS::Serverless::Function
     Metadata:
@@ -168,18 +181,13 @@ Resources:
       Runtime: python3.12
       Timeout: 60
       MemorySize: 512
-      VpcConfig:
-        SubnetIds:
-          - !Ref SubnetA
-          - !Ref SubnetB
-        SecurityGroupIds:
-          - !Ref LambdaSg
       Environment:
         Variables:
-          PGHOST: !GetAtt Database.Endpoint.Address
-          PGPORT: "5432"
+          PGHOST: !GetAtt AuroraCluster.Endpoint
+          PGPORT: !GetAtt AuroraCluster.Port
+          PGUSER: !Ref DBUser
           PGDATABASE: !Ref DBName
-          DB_SECRET_ARN: !Ref DbSecret
+          DB_IAM_AUTH: "1"
           TEXT_MODEL: !Ref TextModel
           EMBED_MODEL: !Ref EmbedModel
           GUARDRAIL_ID: !Ref GuardrailId
@@ -195,9 +203,8 @@ Resources:
               Resource: '*'
         - Statement:
             - Effect: Allow
-              Action:
-                - secretsmanager:GetSecretValue
-              Resource: !Ref DbSecret
+              Action: rds-db:connect
+              Resource: !Sub arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${AuroraCluster.ClusterResourceId}/${DBUser}
 
 Outputs:
   FunctionUrl:
@@ -205,5 +212,5 @@ Outputs:
     Value: !GetAtt AssistantUrl.FunctionUrl
 
   DatabaseEndpoint:
-    Description: the RDS PostgreSQL endpoint
-    Value: !GetAtt Database.Endpoint.Address
+    Description: the Aurora writer endpoint
+    Value: !GetAtt AuroraCluster.Endpoint

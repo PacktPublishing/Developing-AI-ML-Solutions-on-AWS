@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  Image-build infrastructure for the underwriter app: an ECR repository and a
+  CodeBuild project that builds the FastAPI + Lambda Web Adapter image (from the
+  chapter root Dockerfile) natively on amd64 and pushes it to ECR. Deploy once,
+  upload the source, start the build, then deploy template.yaml with the ImageUri.
+
+Parameters:
+  RepoName:
+    Type: String
+    Default: ch09-app
+
+Resources:
+  SourceBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  ImageRepo:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref RepoName
+      EmptyOnDelete: true
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: codebuild.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !GetAtt ImageRepo.Arn
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${SourceBucket.Arn}/*
+
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${RepoName}-build
+      ServiceRole: !GetAtt BuildRole.Arn
+      Source:
+        Type: S3
+        Location: !Sub ${SourceBucket}/src.zip
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+            build:
+              commands:
+                - docker build -t "$IMAGE_URI" .
+            post_build:
+              commands:
+                - docker push "$IMAGE_URI"
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_LARGE
+        PrivilegedMode: true # required for docker build
+        EnvironmentVariables:
+          - {Name: ECR_REGISTRY, Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com"}
+          - {Name: IMAGE_URI, Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${RepoName}:latest"}
+
+Outputs:
+  SourceBucket:
+    Value: !Ref SourceBucket
+  ImageUri:
+    Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${RepoName}:latest

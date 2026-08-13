@@ -1,0 +1,49 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudFormation",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/ch10-*/*"
+    },
+    {
+      "Sid": "CloudFormationRead",
+      "Effect": "Allow",
+      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageChapterRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
+        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies", "iam:PassRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/ch10-*"
+    },
+    {"Sid": "BatchBucket", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch10-*", "arn:aws:s3:::ch10-*/*"]},
+    {
+      "Sid": "BedrockBatch",
+      "Effect": "Allow",
+      "Action": ["bedrock:CreateModelInvocationJob", "bedrock:GetModelInvocationJob", "bedrock:ListModelInvocationJobs", "bedrock:StopModelInvocationJob", "bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/*",
+        "arn:aws:bedrock:::foundation-model/*",
+        "arn:aws:bedrock:*:*:inference-profile/*",
+        "arn:aws:bedrock:us-east-1:*:model-invocation-job/*"
+      ]
+    },
+    {"Sid": "BedrockListJobs", "Effect": "Allow", "Action": "bedrock:ListModelInvocationJobs", "Resource": "*"},
+    {"Sid": "BedrockSubscription", "Effect": "Allow", "Action": "aws-marketplace:ViewSubscriptions", "Resource": "*"},
+    {
+      "Sid": "Sns",
+      "Effect": "Allow",
+      "Action": ["sns:CreateTopic", "sns:DeleteTopic", "sns:Subscribe", "sns:Unsubscribe", "sns:Publish", "sns:ListTopics", "sns:ListSubscriptionsByTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes", "sns:TagResource"],
+      "Resource": "*"
+    },
+    {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch10*"}
+  ]
+}

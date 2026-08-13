@@ -1,0 +1,42 @@
+{
+  "credit-scorecard": {
+    "stage": "champion",
+    "description": "Weight-of-Evidence logistic-regression scorecard for consumer credit. FastWoe encodes each feature to its WOE (numerics monotone tree-binned, categoricals target-encoded), then logistic regression scores the vector. The monotone binning carries the bank's directional business rules by construction.",
+    "algorithm": "WOE + LogisticRegression (FastWoe)",
+    "problem_type": "Binary classification (probability of default)",
+    "owner": "Credit Risk Modeling",
+    "risk_rating": "High",
+    "risk_rationale": "The model contributes to consumer credit decisions; errors affect access to credit and portfolio loss.",
+    "intended_use": "Score consumer credit applications for the probability of default, as one input to an underwriting decision.",
+    "out_of_scope": "Not for automated adverse action without human review, and not validated outside the consumer-credit population it was trained on.",
+    "dataset": "Synthetic credit-bureau applications (chapter 2), no real names or PII",
+    "features": {
+      "numeric": ["age", "annual_income", "debt_to_income", "bureau_score", "credit_utilization", "employment_length_years", "loan_amount"],
+      "categorical": ["home_ownership", "loan_purpose", "employment_status"]
+    },
+    "metrics": { "AUC": 0.8625, "Gini": 0.725, "KS": 0.5681 },
+    "metrics_source": "Held-out validation set, chapter 2 training run",
+    "ecr_repo": "ch12-champion",
+    "model_artifact": "ch12/champion-pl/model.tar.gz"
+  },
+  "credit-challenger": {
+    "stage": "challenger",
+    "description": "Monotone gradient-boosted challenger for consumer credit. CatBoost with monotonic constraints on the numeric features, so the model honours the same directional business rules as the incumbent scorecard while capturing interactions the linear model cannot; its native categorical handling also tolerates category values unseen in training rather than failing on them.",
+    "algorithm": "Monotone CatBoost",
+    "problem_type": "Binary classification (probability of default)",
+    "owner": "Credit Risk Modeling",
+    "risk_rating": "High",
+    "risk_rationale": "The model contributes to consumer credit decisions; errors affect access to credit and portfolio loss.",
+    "intended_use": "Candidate replacement for the incumbent scorecard, evaluated against it under a controlled rollout before any promotion.",
+    "out_of_scope": "Not for automated adverse action without human review, and not validated outside the consumer-credit population it was trained on.",
+    "dataset": "Synthetic credit-bureau applications (chapter 2), no real names or PII",
+    "features": {
+      "numeric": ["age", "annual_income", "debt_to_income", "bureau_score", "credit_utilization", "employment_length_years", "loan_amount"],
+      "categorical": ["home_ownership", "loan_purpose", "employment_status"]
+    },
+    "metrics": { "AUC": 0.883, "Gini": 0.766, "KS": 0.6041 },
+    "metrics_source": "Held-out validation set, chapter 2 training run",
+    "ecr_repo": "ch12-challenger",
+    "model_artifact": "ch12/challenger-cb/model.tar.gz"
+  }
+}

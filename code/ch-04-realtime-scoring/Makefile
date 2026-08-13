@@ -6,9 +6,14 @@ export AWS_DEFAULT_REGION ?= us-east-1
 
 COMPOSE := docker compose -f local/decision-service.yml
 
-# both model endpoints, the gateway, and the decision log, built and healthy
+# the decision service, local: DynamoDB plus the two models as concurrent SageMaker local
+# endpoints (each on its own serving_port, 8081/8082) with the gateway ensembling them. Runs
+# in the foreground; score it from another shell (make decide/refer/decline), stop with Ctrl-C.
 up:
-	$(COMPOSE) up -d --build --wait
+	docker build -q -t ch04-scorecard-model src/models/scorecard
+	docker build -q -t ch04-challenger-model src/models/challenger
+	$(COMPOSE) up -d decisions createtable
+	uv run src/serve_local.py
 
 # one clean application: expect APPROVE (both models, and the average, below cutoff)
 decide:
@@ -33,17 +38,17 @@ log:
 	aws dynamodb scan --endpoint-url http://localhost:8000 \
 		--table-name decision_log --select COUNT --query Count
 
-# Option 2, SageMaker local mode: same ModelBuilder code as the cloud, Mode.LOCAL_CONTAINER.
-# Needs AWS creds, a SageMaker role (SM_ROLE), and the image in ECR. MODEL=scorecard|challenger.
-ACCOUNT ?= $(shell env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY aws sts get-caller-identity --query Account --output text)
-ECR := $(ACCOUNT).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com
-SM_ROLE ?=
+# Option 2, SageMaker local mode: the same ModelBuilder code as the cloud, Mode.LOCAL_CONTAINER,
+# the container on this machine. The image is built locally (not in ECR), and ModelBuilder
+# always pulls the serving image, so this runs in the no-account mode (SM_OFFLINE=1): the SDK's
+# account, role, and image-pull calls are stubbed (src/sagemaker_offline.py). The credentialed
+# counterpart is the cloud endpoint (make -C aws deploy). MODEL=scorecard|challenger.
 MODEL ?= scorecard
 sm-local:
-	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn> (make -C aws iam prints it)"; exit 1; }
-	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
-		MODE=local MODEL_IMAGE=$(ECR)/ch04-$(MODEL)-model:latest \
-		SAGEMAKER_ROLE_ARN=$(SM_ROLE) uv run --no-project src/deploy.py
+	docker build -q -t ch04-$(MODEL)-model src/models/$(MODEL)
+	SM_OFFLINE=1 MODE=local MODEL_IMAGE=ch04-$(MODEL)-model:latest \
+		SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
+		uv run --no-project src/deploy.py
 
 # the same gateway and models on Kubernetes: a k3d cluster (k3s in docker), the
 # three images imported, the ensemble manifest applied. Needs k3d and kubectl.
@@ -68,6 +73,9 @@ kube-down:
 	k3d cluster delete decision
 
 down:
+	-pkill -f serve_local.py 2>/dev/null || true
+	-docker ps -aq --filter ancestor=ch04-scorecard-model:latest | xargs -r docker rm -f
+	-docker ps -aq --filter ancestor=ch04-challenger-model:latest | xargs -r docker rm -f
 	$(COMPOSE) down -v
 
 clean: down
