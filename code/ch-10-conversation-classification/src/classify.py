@@ -53,6 +53,23 @@ INSTRUCTION_B = (
     " app/login/transfer issues are Digital Banking."
 )
 
+# Variant C adds few-shot examples on top of B's borders: one canonical utterance per
+# category, so the model sees "if it says this, it is that" rather than only definitions.
+# These are written fresh (not drawn from the scored dataset) to avoid leaking test items.
+INSTRUCTION_C = (
+    INSTRUCTION_B + "\n\nExamples:\n"
+    '"I would like to open a current account" -> Bank Accounts\n'
+    '"My debit card was declined at the till" -> Cards\n'
+    '"How do I redeem my cashback points?" -> Customer Rewards\n'
+    '"The mobile app will not let me log in" -> Digital Banking\n'
+    '"I need to make a claim on my home policy" -> Insurance\n'
+    '"I want to buy units in an equity fund" -> Investment Funds\n'
+    '"What is the rate on a 25-year home loan?" -> Mortgages\n'
+    '"How much can I pay into my pension this year?" -> Pension Plans\n'
+    '"Can I get a 5,000 loan to consolidate debt?" -> Personal Loans\n'
+    '"What interest does your 12-month fixed deposit pay?" -> Savings & Deposits'
+)
+
 
 def model_input(
     text: str, labels: list[str], distribution: bool = False, variant: str = "a"
@@ -60,8 +77,12 @@ def model_input(
     """Build the Converse request body: a single category, or a probability per category."""
     if distribution:
         instruction = INSTRUCTION_PROBS
+    elif variant == "c":
+        instruction = INSTRUCTION_C
+    elif variant == "b":
+        instruction = INSTRUCTION_B
     else:
-        instruction = INSTRUCTION_B if variant == "b" else INSTRUCTION
+        instruction = INSTRUCTION
     tail = "\n\nJSON:" if distribution else "\n\nCategory:"
     prompt = (
         f"{instruction}\n\nCategories:\n- "
@@ -204,8 +225,8 @@ def main() -> None:
     p.add_argument(
         "--variant",
         default="a",
-        choices=["a", "b"],
-        help="prompt variant: a (bare category names) or b (defined borders)",
+        choices=["a", "b", "c"],
+        help="prompt variant: a (bare names), b (defined borders), c (borders + few-shot)",
     )
     a = p.parse_args()
 
