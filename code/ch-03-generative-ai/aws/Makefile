@@ -1,4 +1,9 @@
-.PHONY: iam check-account sync build deploy teardown
+.PHONY: iam check-account sync build deploy round teardown
+
+# the AWS round in one command (run make iam once first, as the account admin): zip and sync
+# the app, then deploy the Aurora Serverless express stack and the assistant Lambda behind its
+# Function URL. make teardown when done.
+round: deploy
 
 STACK ?= underwriting-assistant-ch03
 REGION ?= us-east-1
