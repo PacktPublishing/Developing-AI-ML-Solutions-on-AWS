@@ -1,4 +1,8 @@
-.PHONY: up faces enrol match match-impostor compare down diagrams lint
+.PHONY: up faces enrol match match-impostor compare all down diagrams lint
+
+# the whole local flow in one command: the pgvector store, the synthetic faces, an enrolment,
+# and a genuine match. Then try match-impostor / compare. make down when done.
+all: up faces enrol match
 
 COMPOSE := docker compose -f local/vision-stack.yml
 N ?= 40
