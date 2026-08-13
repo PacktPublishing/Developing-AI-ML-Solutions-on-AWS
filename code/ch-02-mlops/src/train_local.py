@@ -38,11 +38,15 @@ staging = ROOT / "runs-local" / f".sm-train-{MODEL}"
 shutil.rmtree(staging, ignore_errors=True)
 staging.mkdir(parents=True)
 
-# MLFLOW=1 logs the run to the serverless MLflow (sqlite + S3Proxy), the same as the cloud
-# MLflow App. Local mode gives no writable mount besides /opt/ml/model, so the sqlite store
-# rides there (it is collected with the model); the artifacts go to S3Proxy over the host.
+# MLFLOW=1 logs the run and registers the model. Native (default): point the container at
+# the managed MLflow App ARN and pass your real credentials in, so the container -- run here
+# for free -- writes the experiment and the registered model straight to SageMaker. The image
+# already carries mlflow + sagemaker-mlflow, which resolves the arn: tracking URI. SM_OFFLINE=1
+# uses the serverless MLflow instead (sqlite on /opt/ml/model, the only writable mount, so it
+# is collected with the model; artifacts to S3Proxy over the host), needing no account.
+OFFLINE = os.environ.get("SM_OFFLINE") == "1"
 environment = {}
-if os.environ.get("MLFLOW") == "1":
+if os.environ.get("MLFLOW") == "1" and OFFLINE:
     environment = {
         "MLFLOW_TRACKING_URI": "sqlite:////opt/ml/model/mlruns.db",
         "MLFLOW_S3_ENDPOINT_URL": "http://host.docker.internal:9000",
@@ -51,8 +55,20 @@ if os.environ.get("MLFLOW") == "1":
         "AWS_SECRET_ACCESS_KEY": "localsecret",
         "AWS_DEFAULT_REGION": "us-east-1",
     }
+elif os.environ.get("MLFLOW") == "1":
+    import boto3
 
-if environment and SHARED_DB.exists():
+    frozen = boto3.Session().get_credentials().get_frozen_credentials()
+    environment = {
+        "MLFLOW_TRACKING_URI": os.environ["MLFLOW_TRACKING_URI"],
+        "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+        "AWS_ACCESS_KEY_ID": frozen.access_key,
+        "AWS_SECRET_ACCESS_KEY": frozen.secret_key,
+    }
+    if frozen.token:
+        environment["AWS_SESSION_TOKEN"] = frozen.token
+
+if OFFLINE and environment and SHARED_DB.exists():
     # seed the container's /opt/ml/model (mounted from <staging>/model) with the running
     # store so MLflow appends this run to it rather than starting a fresh database
     (staging / "model").mkdir(parents=True, exist_ok=True)
@@ -82,7 +98,7 @@ with tarfile.open(staging / "compressed_artifacts" / "model.tar.gz") as tar:
 shutil.rmtree(staging, ignore_errors=True)
 
 # save the run back to the shared store (with this run appended) for the next model and the ui
-if environment and (MODEL_DIR / "mlruns.db").exists():
+if OFFLINE and environment and (MODEL_DIR / "mlruns.db").exists():
     SHARED_DB.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(MODEL_DIR / "mlruns.db", SHARED_DB)
 print("model ->", MODEL_DIR, sorted(p.name for p in MODEL_DIR.iterdir()))

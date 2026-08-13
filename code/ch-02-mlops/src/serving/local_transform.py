@@ -4,10 +4,10 @@
 # ///
 """Batch-score a file with a SageMaker Batch Transform job in LOCAL mode.
 
-A real SageMaker Transform job on the same BYOC container in local mode (instance_type="local"), the SDK bringing the container up via docker-compose and writing a .out file exactly as a cloud job would (swap instance_type and point at S3 for the cloud). The whole CSV goes as one payload (split_type=None). Fully local: local_stubs skips the SDK's account and role checks, so no real AWS.
+A real SageMaker Transform job on the same BYOC container in local mode (instance_type="local"), the SDK bringing the container up via docker-compose and writing a .out file exactly as a cloud job would (swap instance_type and point at S3 for the cloud). The whole CSV goes as one payload (split_type=None). The image is built locally (not in ECR), so this runs with SM_OFFLINE=1: it lazily stubs the SDK's account and role checks (see sagemaker_offline), needing no account. The credentialed counterpart is a cloud Transform job.
 
 Env: MODEL_IMAGE (local tag), SAGEMAKER_ROLE_ARN (any arn), MODEL_PATH (artifact dir),
-     INPUT (default data/split/test.csv).
+     INPUT (default data/split/test.csv), SM_OFFLINE=1 to run with no account.
 """
 
 import glob
@@ -16,7 +16,6 @@ import os
 import tarfile
 import tempfile
 
-from local_stubs import use_local_stubs
 from sagemaker.core.local import LocalSession
 from sagemaker.core.transformer import Transformer
 
@@ -24,8 +23,12 @@ from sagemaker.core.transformer import Transformer
 # the submodule up front so the attribute exists when the transform job starts.
 importlib.import_module("sagemaker.serve.model_builder")
 
-# local mode has no AWS account: skip the SDK's account, role, and image-pull calls
-use_local_stubs()
+# Offline only: with no account there is no STS or IAM to reach, so lazily stub the SDK's
+# account and role checks. The native path leaves the SDK untouched.
+if os.environ.get("SM_OFFLINE") == "1":
+    from sagemaker_offline import use_local_stubs
+
+    use_local_stubs()
 
 IMAGE = os.environ["MODEL_IMAGE"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]

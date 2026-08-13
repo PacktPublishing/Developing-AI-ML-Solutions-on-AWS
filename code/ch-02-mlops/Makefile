@@ -1,12 +1,14 @@
 .PHONY: up seed train train-challenger mlflow-train mlflow-ui sm-push sm-local sm-batch \
 	amt lambda-build lambda-local fargate-build fargate-local pipeline pipeline-parity all down lint diagrams
 
-# the whole local flow in one command: the local stack, the seed, both models trained in
-# SageMaker local mode with MLflow logging, and the champion/challenger pipeline. make down when done.
+# the whole local flow in one command, fully offline (no account): the local stack, the seed,
+# both models trained in SageMaker local mode logged to the serverless MLflow, and the
+# champion/challenger pipeline. For the native managed-MLflow run, use `make mlflow-train`
+# (with credentials). make down when done.
 all:
 	$(MAKE) up
 	$(MAKE) seed
-	$(MAKE) mlflow-train
+	$(MAKE) mlflow-train SM_OFFLINE=1
 	$(MAKE) pipeline
 
 # Local cloud is S3Proxy (S3 API) only; MLflow is serverless (sqlite + S3Proxy locally). On AWS the one change is MLFLOW_TRACKING_URI -> a SageMaker MLflow App ARN.
@@ -39,26 +41,40 @@ train-challenger:
 	rm -rf runs-local/model-challenger
 	MODEL=challenger uv run src/train_local.py
 
-# train both, logged to serverless MLflow (sqlite + S3Proxy); needs `make up`
-# train both in SageMaker local mode, logged to serverless MLflow (sqlite + S3Proxy); needs
-# `make up`. Local mode has no writable mount but /opt/ml/model, so the sqlite store rides
-# there and the driver threads it between the two runs into one mlflow-store/mlruns.db.
-mlflow-train: up
+# train both in SageMaker local mode (the container on your laptop, free compute), logged and
+# registered to MLflow. Native (default): to the managed MLflow App (APP_ARN, resolved below
+# from the ch02-mlflow app; real credentials), the same tracking server the cloud uses -- run
+# experiments and register models without paying for training compute. SM_OFFLINE=1: to the
+# serverless MLflow instead (sqlite + S3Proxy via `make up`), so it runs with no account;
+# local mode has no writable mount but /opt/ml/model, so the sqlite store rides there and the
+# driver threads it between the two runs into one mlflow-store/mlruns.db.
+mlflow-train:
 	docker build -q -t ch02-scorecard:latest src/scorecard/
 	docker build -q -t ch02-challenger:latest src/challenger/
+ifeq ($(SM_OFFLINE),1)
+	$(MAKE) up
 	rm -rf runs-local/model runs-local/model-challenger mlflow-store/mlruns.db
-	MLFLOW=1 MODEL=scorecard uv run src/train_local.py
-	MLFLOW=1 MODEL=challenger uv run src/train_local.py
+	MLFLOW=1 SM_OFFLINE=1 MODEL=scorecard uv run src/train_local.py
+	MLFLOW=1 SM_OFFLINE=1 MODEL=challenger uv run src/train_local.py
+else
+	@test -n "$(APP_ARN)" && [ "$(APP_ARN)" != "None" ] || { echo "no ch02-mlflow MLflow App on this account: make -C aws mlflow-app (or pass APP_ARN=...); or run SM_OFFLINE=1 for the local sqlite stack"; exit 1; }
+	rm -rf runs-local/model runs-local/model-challenger
+	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY MLFLOW=1 MLFLOW_TRACKING_URI="$(APP_ARN)" MODEL=scorecard uv run src/train_local.py
+	env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY MLFLOW=1 MLFLOW_TRACKING_URI="$(APP_ARN)" MODEL=challenger uv run src/train_local.py
+endif
 
 # browse the runs on demand (no server runs otherwise)
 mlflow-ui:
 	MLFLOW_S3_ENDPOINT_URL=http://localhost:9000 uvx mlflow ui \
 		--backend-store-uri sqlite:///mlflow-store/mlruns.db --port 5000
 
-# SageMaker local mode: the same BYOC image run through SDK v3,
-# fully local. sm-local/sm-batch build the image here and skip the SDK's account, role, and
-# image-pull calls (src/serving/local_stubs.py), so no real AWS. First `make seed train`.
-# sm-push is the cloud image push and needs real credentials.
+# SageMaker local mode serving: the same BYOC image run through SDK v3 ModelBuilder, the
+# container on this machine. The image is built locally (not in ECR), and ModelBuilder always
+# pulls the serving image, so this runs in the no-account mode (SM_OFFLINE=1): the SDK's
+# account, role, and image-pull calls are stubbed (src/serving/sagemaker_offline.py). The
+# credentialed counterpart is the cloud endpoint (make -C aws deploy). Training differs --
+# `make mlflow-train` runs natively, since ModelTrainer runs the local image without a pull.
+# First `make seed train`. sm-push is the cloud image push and needs real credentials.
 ACCOUNT ?= $(shell env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY aws sts get-caller-identity --query Account --output text)
 ECR := $(ACCOUNT).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com
 
@@ -68,16 +84,16 @@ sm-push:
 	aws ecr get-login-password --region $(AWS_DEFAULT_REGION) | docker login --username AWS --password-stdin $(ECR)
 	docker buildx build --platform linux/amd64 --provenance=false -t $(ECR)/ch02-scorecard:latest --push src/scorecard
 
-# real-time: the container as a local SageMaker endpoint (Mode.LOCAL_CONTAINER), fully local
+# real-time: the container as a local SageMaker endpoint (Mode.LOCAL_CONTAINER)
 sm-local:
 	docker build -q -t ch02-scorecard:latest src/scorecard/
-	MODEL_IMAGE=ch02-scorecard:latest SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
+	SM_OFFLINE=1 MODEL_IMAGE=ch02-scorecard:latest SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
 		MODEL_PATH=runs-local/model uv run --no-project src/serving/local_endpoint.py
 
-# batch: the same container as a local SageMaker Batch Transform job, fully local
+# batch: the same container as a local SageMaker Batch Transform job
 sm-batch:
 	docker build -q -t ch02-scorecard:latest src/scorecard/
-	MODEL_IMAGE=ch02-scorecard:latest SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
+	SM_OFFLINE=1 MODEL_IMAGE=ch02-scorecard:latest SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
 		MODEL_PATH=runs-local/model uv run --no-project src/serving/local_transform.py
 
 # Local AMT: Syne Tune runs the same search as managed AMT on your laptop (each trial a local subprocess, TPE scheduler, no instance, no Docker).

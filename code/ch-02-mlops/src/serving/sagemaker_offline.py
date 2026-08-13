@@ -1,10 +1,11 @@
-"""Neutralize the SDK calls that assume a real AWS account, for local serving.
+"""Neutralize the SDK calls that assume a real AWS account (the SM_OFFLINE path only).
 
-In Mode.LOCAL_CONTAINER and a local Transform job, the container runs on this machine, so
-there is no STS or IAM to reach and the image is the one built here, not pulled from ECR. Skip
-the execution-role validation (the way a notebook without iam:SimulatePrincipalPolicy does),
-the default S3 bucket lookup, and the image pull, so the serving scripts run with no real
-credentials. Local testing only; the cloud path (Mode.SAGEMAKER_ENDPOINT) is untouched.
+Native local mode keeps the SDK intact: the container runs on this machine while the
+control-plane calls hit your account. This module is imported only when SM_OFFLINE=1, for
+running with no account at all: with no STS or IAM to reach and the image built here rather
+than pulled from ECR, it skips the execution-role validation (the way a notebook without
+iam:SimulatePrincipalPolicy does), the default S3 bucket lookup, and the image pull. The
+cloud path (Mode.SAGEMAKER_ENDPOINT) is untouched either way.
 """
 
 from sagemaker.core.helper.session_helper import Session
