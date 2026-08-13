@@ -41,13 +41,13 @@ schedule:
 
 # the same run as a local SageMaker Pipeline: every step (including the ModelTrainer
 # training step) runs as a local container through the SDK's local control plane, staging to
-# the local S3 (S3Proxy). Fully local -- no real AWS: the host does the S3 I/O
-# (AWS_ENDPOINT_URL_S3), and pipeline.py skips the SDK's IAM role check in local mode. Needs
-# make up + seed first.
+# the local S3 (S3Proxy). Fully offline -- no account: the host does the S3 I/O
+# (AWS_ENDPOINT_URL_S3), and SM_OFFLINE=1 has pipeline.py skip the SDK's IAM role check. The
+# credentialed path is the managed AWS pipeline (make -C aws round). Needs make up + seed first.
 BATCH_BUCKET ?= portfolio
 pipeline:
 	docker build -q -t ch05-step:local src/pipeline/step_image/
-	AWS_ENDPOINT_URL_S3=http://localhost:9000 \
+	SM_OFFLINE=1 AWS_ENDPOINT_URL_S3=http://localhost:9000 \
 		PIPELINE_MODE=local STEP_IMAGE=ch05-step:local BATCH_BUCKET=$(BATCH_BUCKET) \
 		SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
 		WAREHOUSE_DSN=postgresql://analyst:analyst@host.docker.internal:5439/portfolio?sslmode=require \
