@@ -17,6 +17,8 @@ STACK := ch10-conversation-classification
 # responsive. List them with: aws bedrock list-inference-profiles.
 BATCH_MODEL ?= us.amazon.nova-lite-v1:0
 DATASET ?= conversations
+# prompt variant: a (bare category names) or b (defined category borders)
+VARIANT ?= a
 
 output = $(shell aws cloudformation describe-stacks --region $(REGION) \
 	--stack-name $(STACK) --query "Stacks[0].Outputs[?OutputKey=='$(1)'].OutputValue" --output text)
@@ -37,7 +39,7 @@ deploy:
 
 # classify: submit a real CreateModelInvocationJob and wait for it (tens of minutes)
 classify:
-	cd .. && $(CLOUDENV) uv run src/classify.py --dataset $(DATASET) --bucket $(BUCKET)
+	cd .. && $(CLOUDENV) uv run src/classify.py --dataset $(DATASET) --bucket $(BUCKET) --variant $(VARIANT)
 
 # route: publish each classified conversation to its team's real SNS topic
 route:

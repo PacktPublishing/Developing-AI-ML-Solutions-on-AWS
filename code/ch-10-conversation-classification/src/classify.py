@@ -33,10 +33,35 @@ INSTRUCTION_PROBS = (
     " mapping every category to a probability in [0,1], summing to about 1."
 )
 
+# Variant B draws the category borders instead of listing bare names: a one-line definition
+# per category plus two tie-break rules aimed at the leaks variant A shows (loan requests and
+# app/login issues collapsing into the broad-sounding classes). Select with --variant b.
+INSTRUCTION_B = (
+    "You are a bank's conversation router. Choose the ONE category the conversation is"
+    " mainly about, using these definitions:\n"
+    "- Bank Accounts: current/checking accounts, statements, fees, balances.\n"
+    "- Cards: debit/credit cards, activation, limits, lost or stolen, card fraud.\n"
+    "- Customer Rewards: points, cashback, loyalty, referrals.\n"
+    "- Digital Banking: the mobile app or online banking, login, passwords, transfers, errors.\n"
+    "- Insurance: policies and claims (life, home, travel, health).\n"
+    "- Investment Funds: mutual funds, ETFs, brokerage, buying/selling securities.\n"
+    "- Mortgages: home/property loans, rates, refinancing.\n"
+    "- Pension Plans: retirement/pension contributions and withdrawals.\n"
+    "- Personal Loans: unsecured consumer loans and their repayment (not property).\n"
+    "- Savings & Deposits: savings accounts and fixed/term deposits and their interest ONLY.\n"
+    "Rules: borrowing money is Personal Loans or Mortgages, never Savings & Deposits;"
+    " app/login/transfer issues are Digital Banking."
+)
 
-def model_input(text: str, labels: list[str], distribution: bool = False) -> dict:
+
+def model_input(
+    text: str, labels: list[str], distribution: bool = False, variant: str = "a"
+) -> dict:
     """Build the Converse request body: a single category, or a probability per category."""
-    instruction = INSTRUCTION_PROBS if distribution else INSTRUCTION
+    if distribution:
+        instruction = INSTRUCTION_PROBS
+    else:
+        instruction = INSTRUCTION_B if variant == "b" else INSTRUCTION
     tail = "\n\nJSON:" if distribution else "\n\nCategory:"
     prompt = (
         f"{instruction}\n\nCategories:\n- "
@@ -68,14 +93,20 @@ def _parse_probs(text: str, labels: list[str]) -> dict[str, float]:
 
 
 def write_manifest(
-    rows: list[dict], labels: list[str], bucket: str, key: str, s3, distribution: bool
+    rows: list[dict],
+    labels: list[str],
+    bucket: str,
+    key: str,
+    s3,
+    distribution: bool,
+    variant: str = "a",
 ) -> str:
     """Write the {recordId, modelInput} JSONL manifest to S3; return its s3 URI."""
     lines = [
         json.dumps(
             {
                 "recordId": r["id"],
-                "modelInput": model_input(r["text"], labels, distribution),
+                "modelInput": model_input(r["text"], labels, distribution, variant),
             }
         )
         for r in rows
@@ -124,12 +155,16 @@ def collect(
 
 
 def classify(
-    rows: list[dict], labels: list[str], bucket: str, distribution: bool = False
+    rows: list[dict],
+    labels: list[str],
+    bucket: str,
+    distribution: bool = False,
+    variant: str = "a",
 ) -> dict[str, dict]:
     """Run the whole batch flow and return {conversation id: {pred, probs}}."""
     s3 = s3_client()
     in_uri = write_manifest(
-        rows, labels, bucket, "input/manifest.jsonl", s3, distribution
+        rows, labels, bucket, "input/manifest.jsonl", s3, distribution, variant
     )
     out_uri = f"s3://{bucket}/output/"
     bedrock = get_bedrock()
@@ -166,6 +201,12 @@ def main() -> None:
     p.add_argument(
         "--probs", action="store_true", help="ask for a probability per category"
     )
+    p.add_argument(
+        "--variant",
+        default="a",
+        choices=["a", "b"],
+        help="prompt variant: a (bare category names) or b (defined borders)",
+    )
     a = p.parse_args()
 
     rows = [
@@ -176,7 +217,7 @@ def main() -> None:
         rows = rows[: a.limit]
     labels = json.loads((a.data / f"{a.dataset}.labels.json").read_text())
 
-    preds = classify(rows, labels, a.bucket, a.probs)
+    preds = classify(rows, labels, a.bucket, a.probs, a.variant)
     out = a.data / f"{a.dataset}.predictions.jsonl"
     with out.open("w", encoding="utf-8") as f:
         for r in rows:

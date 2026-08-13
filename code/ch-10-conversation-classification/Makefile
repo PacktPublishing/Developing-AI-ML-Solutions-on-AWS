@@ -15,6 +15,8 @@ export PYTHONPATH := $(CURDIR)/src
 COMPOSE := docker compose -f local/batch-stack.yml
 BUCKET ?= ch10-batch
 DATASET ?= conversations
+# prompt variant: a (bare category names) or b (defined category borders)
+VARIANT ?= a
 
 # Local by default: Bedrock is the Ollama-backed batch shim, S3 is S3Proxy.
 export BEDROCK_LOCAL ?= 1
@@ -34,7 +36,7 @@ prepare:
 
 # classify: run the batch inference job (local shim here) and score it
 classify:
-	uv run src/classify.py --dataset $(DATASET) --bucket $(BUCKET) $(if $(LIMIT),--limit $(LIMIT),)
+	uv run src/classify.py --dataset $(DATASET) --bucket $(BUCKET) --variant $(VARIANT) $(if $(LIMIT),--limit $(LIMIT),)
 
 # route: publish each classified conversation to its team's topic (from-source SNS)
 route:
