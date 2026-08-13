@@ -1,4 +1,10 @@
-.PHONY: up seed train serve produce score firehose deliver lookup query diagrams down clean lint
+.PHONY: all up seed train serve produce score firehose deliver lookup query diagrams down clean lint
+
+# bootstrap the local stack in one command: the compose services, the synthetic stream, the
+# trained scorer, and the serving container. The streaming demo itself is multi-terminal --
+# run `make firehose` in its own terminal, then `make deliver`, `make produce`, and
+# `make score`, then `make query`/`lookup`. make down when finished.
+all: up seed train serve
 
 # Custom icons live in assets/diagrams/. Icon PNGs re-render from SVG at
 # ICON_HEIGHT (needs rsvg-convert); WIDTH sets pixel width (0 = awsdac native).
