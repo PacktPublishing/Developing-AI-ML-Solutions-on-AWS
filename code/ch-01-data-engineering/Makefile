@@ -1,8 +1,10 @@
-.PHONY: test up seed seed-drift run run-glue query certs dbt-run dbt-test gold features features-query features-lookup feature-api feature-group lake-objects lake-parquet lake-table lake-table-query diagrams down lint
+.PHONY: test up seed seed-drift run run-glue query certs dbt-run dbt-test dbt-docs gold features features-query features-lookup feature-api feature-group lake-objects lake-parquet lake-table lake-table-query diagrams down lint
 
 # dbt connects with verified TLS: oblako-ca.pem is the local warehouse cert,
 # trusted via SSL_CERT_FILE, same sslmode as production
-DBT := DBT_PROFILES_DIR=src/bureau-elt/dbt SSL_CERT_FILE=$(PWD)/oblako-bundle.pem WAREHOUSE_SSLMODE=verify-full uvx --from dbt-core --with dbt-redshift dbt
+# dbt is pinned so runs and the docs lineage render reproducibly (an unpinned
+# uvx pulls latest, and the docs graph styling drifts across dbt versions)
+DBT := DBT_PROFILES_DIR=src/bureau-elt/dbt SSL_CERT_FILE=$(PWD)/oblako-bundle.pem WAREHOUSE_SSLMODE=verify-full uvx --from "dbt-core==1.12.2" --with "dbt-redshift==1.11.0" dbt
 
 DATE ?= $(shell date -v-1d +%Y-%m-%d 2>/dev/null || date -d yesterday +%Y-%m-%d)
 
@@ -54,9 +56,20 @@ certs:
 
 dbt-run: certs
 	$(DBT) run --project-dir src/bureau-elt/dbt
+	$(MAKE) dbt-docs
 
 dbt-test: certs
 	$(DBT) test --project-dir src/bureau-elt/dbt
+
+# render the lineage docs (manifest + site) and print the serve command; the
+# chapter's lineage figure is the "View Lineage Graph" view from this site.
+# Real Redshift builds the full column catalog; redshift-local lacks the
+# Redshift-only pg_get_late_binding_view_cols(), so fall back to --empty-catalog
+# (lineage is derived from the manifest, not the catalog).
+dbt-docs: certs
+	$(DBT) docs generate --project-dir src/bureau-elt/dbt \
+	  || $(DBT) docs generate --empty-catalog --project-dir src/bureau-elt/dbt
+	@echo "Lineage graph: $(DBT) docs serve --project-dir src/bureau-elt/dbt  (open, then click View Lineage Graph)"
 
 gold:
 	$(COMPOSE) exec warehouse psql -h 127.0.0.1 -p 5433 -U loader -d bureau -c \

@@ -36,6 +36,36 @@ make features-lookup # one applicant's features from the online store
 make down            # stop and clean
 ```
 
+## The local warehouse: redshift-local
+
+There is no official Redshift Docker image. `redshift-local` is a Postgres 16
+engine that reports a Redshift server version and fronts it with a Redshift wire
+proxy on port 5439, so dlt's `redshift` destination and the `dbt-redshift`
+adapter connect exactly as they do to real Redshift. `make up` starts it for you
+as the `warehouse` service; to run it on its own:
+
+```
+docker run -d --name warehouse \
+  -e POSTGRES_USER=loader \
+  -e POSTGRES_PASSWORD=loader \
+  -e POSTGRES_DB=bureau \
+  -e POSTGRES_HOST_AUTH_METHOD=md5 \
+  -p 5439:5439 \
+  public.ecr.aws/oblako/redshift-local:16
+```
+
+The image is published on Amazon ECR Public (above) and Docker Hub. The Redshift
+wire endpoint is `5439`; the underlying Postgres is on `5433` (what the
+healthcheck probes). dbt connects with `src/bureau-elt/dbt/profiles.yml`
+(`type: redshift`, host `localhost`, port `5439`, user/password `loader`, db
+`bureau`, sslmode `verify-full`); `make certs` writes the trust bundle it uses.
+On real Redshift you change only the host and credentials: the port and the
+profile shape stay the same. If the image is ever unavailable, any PostgreSQL 15+
+works for the local run with `type: postgres` in the profile.
+
+To render the model lineage as a graph, run `make dbt-docs` and follow the
+printed `dbt docs serve` command (open the site, then **View Lineage Graph**).
+
 To see schema evolution, load a second day where the bureau added fields.
 Start from a clean warehouse (`make down && make up`) so each applicant has
 exactly one report per day loaded — `run` appends, so re-running the same
