@@ -21,9 +21,14 @@ from sagemaker.serve.builder.schema_builder import SchemaBuilder
 from sagemaker.serve.mode.function_pointers import Mode
 from sagemaker.serve.model_builder import ModelBuilder
 from sagemaker.serve.serverless import ServerlessInferenceConfig
+from sagemaker.serve.utils.types import ModelServer
 
 ARN = os.environ["MLFLOW_TRACKING_ARN"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]
+IMAGE_URI = os.environ.get(
+    "IMAGE_URI"
+)  # if set, ModelBuilder serves on our image (no DLC)
+MB_MODE = os.environ.get("MB_MODE", "endpoint")  # local -> LOCAL_CONTAINER
 REGISTERED_MODEL = os.environ.get("REGISTERED_MODEL", "credit-challenger")
 MODEL_PATH = os.environ.get("MLFLOW_MODEL_PATH")  # empty -> resolve latest below
 
@@ -57,32 +62,52 @@ sample_output = [0.5]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-builder = ModelBuilder(
-    mode=Mode.SAGEMAKER_ENDPOINT,
+mb_kwargs = dict(
+    mode=Mode.LOCAL_CONTAINER if MB_MODE == "local" else Mode.SAGEMAKER_ENDPOINT,
     schema_builder=SchemaBuilder(
         sample_input=sample_input, sample_output=sample_output
     ),
     role_arn=ROLE,
     model_metadata={"MLFLOW_MODEL_PATH": MODEL_PATH, "MLFLOW_TRACKING_ARN": ARN},
-    # The registered model is a native MLflow flavor (mlflow.sklearn for the scorecard pipeline, mlflow.catboost for the challenger); hand ModelBuilder the runtime requirements rather than relying on auto-detection.
+    # auto: False so ModelBuilder does NOT run its pickle-based dependency detector (which
+    # shells out to the system python and fails); hand it the runtime requirements instead.
     dependencies={
         "auto": False,
         "requirements": os.path.join(HERE, "mb-requirements.txt"),
     },
 )
+if IMAGE_URI:
+    # serve on our BYOC image (no DLC); with image_uri you must name the model_server
+    # so ModelBuilder generates artifacts for it (per the SDK BYOC docs).
+    mb_kwargs["image_uri"] = IMAGE_URI
+    mb_kwargs["model_server"] = ModelServer.TORCHSERVE
+
+builder = ModelBuilder(**mb_kwargs)
 
 builder.build()
 print("built deployable model from", MODEL_PATH)
 
-# v3: deploy from the builder, serverless via inference_config (no instance quota).
-predictor = builder.deploy(
-    endpoint_name=os.environ.get("ENDPOINT_NAME", "ch02-challenger-mb"),
-    inference_config=ServerlessInferenceConfig(
-        memory_size_in_mb=3072, max_concurrency=2
-    ),
-)
-print("deployed serverless endpoint:", getattr(predictor, "endpoint_name", predictor))
+if MB_MODE == "local":
+    predictor = builder.deploy()  # runs the image under local Docker
+    # local mode returns a Predictor, so scoring is a plain call
+    print("prediction:", predictor.predict(sample_input))
+else:
+    endpoint_name = os.environ.get("ENDPOINT_NAME", "ch02-challenger-mb")
+    builder.deploy(
+        endpoint_name=endpoint_name,
+        inference_config=ServerlessInferenceConfig(
+            memory_size_in_mb=3072, max_concurrency=2
+        ),
+    )
+    # a BYOC image_uri deploy returns an Endpoint (no .predict); score through
+    # the runtime client, the same call any application makes.
+    import json
 
-# The SchemaBuilder gave the predictor a serializer that matches the container,
-# so scoring is a plain call, the same two applicants used everywhere else.
-print("prediction:", predictor.predict(sample_input))
+    import boto3
+
+    resp = boto3.client("sagemaker-runtime").invoke_endpoint(
+        EndpointName=endpoint_name,
+        ContentType="application/json",
+        Body=json.dumps(sample_input.iloc[0].to_dict()),
+    )
+    print("prediction:", resp["Body"].read().decode())
