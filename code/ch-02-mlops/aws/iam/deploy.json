@@ -17,6 +17,7 @@
     {"Sid": "DiscoverRoleAndBucket", "Effect": "Allow", "Action": ["iam:ListRoles", "s3:ListAllMyBuckets"], "Resource": "*"},
     {"Sid": "ImageBuildStack", "Effect": "Allow", "Action": "cloudformation:*", "Resource": "arn:aws:cloudformation:us-east-1:*:stack/ch02-*/*"},
     {"Sid": "CloudFormationRead", "Effect": "Allow", "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary", "cloudformation:ValidateTemplate"], "Resource": "*"},
+    {"Sid": "ServerlessTransform", "Effect": "Allow", "Action": "cloudformation:CreateChangeSet", "Resource": "arn:aws:cloudformation:*:aws:transform/Serverless-2016-10-31"},
     {"Sid": "SageMaker", "Effect": "Allow", "Action": "sagemaker:*", "Resource": "*"},
     {"Sid": "SageMakerMlflow", "Effect": "Allow", "Action": ["sagemaker-mlflow:*"], "Resource": "*"},
     {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": ["arn:aws:ecr:us-east-1:*:repository/ch02-*"]},

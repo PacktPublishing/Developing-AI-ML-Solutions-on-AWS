@@ -49,37 +49,11 @@ class ChallengerModel:
         with open(os.path.join(model_dir, SPEC_FILE), "w") as fh:
             json.dump(self.spec, fh, indent=2)
 
-    @staticmethod
-    def _spec_from_model(model: CatBoostClassifier) -> dict:
-        """Recover the feature spec from the model's own names and categorical indices."""
-        names = list(model.feature_names_)
-        categorical_idx = set(model.get_cat_feature_indices())
-        return {
-            "numeric_features": [
-                n for i, n in enumerate(names) if i not in categorical_idx
-            ],
-            "categorical_features": [names[i] for i in sorted(categorical_idx)],
-        }
-
     @classmethod
     def load(cls, model_dir: str) -> "ChallengerModel":
-        """Load a model from a SageMaker model directory, from either packaging.
-
-        Our own save() writes challenger.cbm + feature_spec.json. The MLflow catboost
-        flavor (what ModelBuilder unpacks when it deploys the registered version) writes
-        model.cb and no spec. Take whichever model file is present, and when the spec is
-        missing read the feature layout back from the model itself, so the same container
-        serves the model no matter which path packaged it.
-        """
+        """Load a model previously written by save()."""
         model = CatBoostClassifier()
-        cbm = os.path.join(model_dir, ARTIFACT)
-        model.load_model(
-            cbm if os.path.exists(cbm) else os.path.join(model_dir, "model.cb")
-        )
-        spec_file = os.path.join(model_dir, SPEC_FILE)
-        if os.path.exists(spec_file):
-            with open(spec_file) as fh:
-                spec = json.load(fh)
-        else:
-            spec = cls._spec_from_model(model)
+        model.load_model(os.path.join(model_dir, ARTIFACT))
+        with open(os.path.join(model_dir, SPEC_FILE)) as fh:
+            spec = json.load(fh)
         return cls(model, spec)

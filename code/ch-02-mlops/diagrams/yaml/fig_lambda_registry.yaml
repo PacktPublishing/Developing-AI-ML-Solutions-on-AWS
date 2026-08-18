@@ -1,0 +1,36 @@
+# The registry-loading Lambda: at cold start it resolves the registered version from the
+# MLflow App and downloads the artifact to /tmp, then scores warm invocations. The App's
+# artifacts live in S3, so the bucket backs the App rather than the function.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Caller, Lambda, Registry]
+    Caller:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "scoring request"
+    Lambda:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Lambda"
+      Title: "ch02-lambda-registry\nmlflow-skinny"
+    Registry:
+      Type: AWS::Diagram::VerticalStack
+      Children: [App, Bucket]
+    App:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "MLflow App\nmodel registry"
+    Bucket:
+      Type: AWS::S3::Bucket
+      Title: "artifact bucket\n(model to /tmp)"
+  Links:
+    - {Source: Caller, SourcePosition: E, Target: Lambda, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Lambda, SourcePosition: E, Target: App, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Bucket, SourcePosition: N, Target: App, TargetPosition: S, TargetArrowHead: {Type: Open}}

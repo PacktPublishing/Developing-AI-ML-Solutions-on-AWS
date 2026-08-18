@@ -15,6 +15,7 @@ Parameters:
       - ch02-challenger
       - ch02-scorecard
       - ch02-pipeline-step
+      - ch02-lambda-registry
 
 Resources:
 

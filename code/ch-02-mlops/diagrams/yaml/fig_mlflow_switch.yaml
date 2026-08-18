@@ -1,0 +1,36 @@
+# One model code and MLflow client, two targets. Only MLFLOW_TRACKING_URI differs:
+# local sqlite vs the managed MLflow App.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Code, Client, Targets]
+    Code:
+      Type: AWS::Diagram::Resource
+      Preset: "Source code"
+      Title: "Model code"
+    Client:
+      Type: AWS::Diagram::Resource
+      Preset: "MLflow"
+      Title: "MLflow client"
+    Targets:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Store, App]
+    Store:
+      Type: AWS::Diagram::Resource
+      Preset: "MLflow"
+      Title: "local: sqlite\nMLFLOW_TRACKING_URI = sqlite://..."
+    App:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "AWS: MLflow App\nMLFLOW_TRACKING_URI = arn:aws:...:mlflow-app"
+  Links:
+    - {Source: Code, SourcePosition: E, Target: Client, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Client, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Client, SourcePosition: E, Target: App, TargetPosition: W, TargetArrowHead: {Type: Open}}

@@ -30,11 +30,11 @@ Diagram:
     Ollama:
       Type: AWS::Diagram::Resource
       Preset: "Ollama"
-      Title: "Ollama :11434\n(Amazon Bedrock)"
+      Title: "Ollama :11434\n(Bedrock on AWS)"
     Vectors:
       Type: AWS::Diagram::Resource
       Preset: "Postgres"
-      Title: "pgvector :5544\n(Aurora Serverless)"
+      Title: "pgvector :5544\n(Aurora on AWS)"
   Links:
     - {Source: User, SourcePosition: E, Target: Agent, TargetPosition: W, TargetArrowHead: {Type: Open}}
     - {Source: Agent, SourcePosition: E, Target: Ollama, TargetPosition: W, TargetArrowHead: {Type: Open}}

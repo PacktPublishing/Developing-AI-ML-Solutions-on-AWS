@@ -1,0 +1,67 @@
+# Chapter summary: Airflow orchestrating the whole nightly loop, built on the
+# clean feature-store layout (fig_feature_store) with the raw -> dlt -> dbt front
+# added and Airflow as the conductor on the left.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Orchestrator, AWSCloud]
+    Orchestrator:
+      Type: AWS::Diagram::Resource
+      Preset: "Airflow"
+      Title: "Airflow\nnightly DAG"
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "The nightly data pipeline"
+      Children: [Raw, GlueDlt, Redshift, Group, Stores, Consumers]
+    Raw:
+      Type: AWS::S3::Bucket
+      Title: "S3 raw\n(bureau JSON)"
+    GlueDlt:
+      Type: AWS::Glue::Job
+      Title: "Glue + dlt\nstage"
+    Redshift:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "Redshift\ndbt marts"
+    Group:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "Feature group\ningest"
+    Stores:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Online, Offline]
+    Online:
+      Type: AWS::DynamoDB::Table
+      Title: "online store"
+    Offline:
+      Type: AWS::S3::Bucket
+      Title: "offline store"
+    Consumers:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Serving, Training]
+    Serving:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "serving path"
+    Training:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Athena"
+      Title: "training queries"
+  Links:
+    - {Source: Orchestrator, SourcePosition: E, Target: AWSCloud, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Raw, SourcePosition: E, Target: GlueDlt, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: GlueDlt, SourcePosition: E, Target: Redshift, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Redshift, SourcePosition: E, Target: Group, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Group, SourcePosition: E, Target: Online, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Group, SourcePosition: ESE, Target: Offline, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Online, SourcePosition: E, Target: Serving, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Offline, SourcePosition: E, Target: Training, TargetPosition: W, TargetArrowHead: {Type: Open}}
