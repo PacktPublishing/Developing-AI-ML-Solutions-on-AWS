@@ -1,0 +1,20 @@
+# Local Airflow orchestrating the full ch-01 pipeline through the feature-store
+# ingest, joined to the lakehouse network so tasks reach warehouse/s3/catalog/
+# online-store by service name. Mirrors the EC2 DAG, extended to the feature store.
+services:
+  airflow-full:
+    image: apache/airflow:3.3.0
+    command: standalone
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - _PIP_ADDITIONAL_REQUIREMENTS=uv
+    volumes:
+      - ..:/work
+      - ./airflow-dags:/opt/airflow/dags
+    ports:
+      - "8081:8080"
+    networks: [default]
+networks:
+  default:
+    name: ch01-lakehouse_default
+    external: true

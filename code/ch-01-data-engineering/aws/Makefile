@@ -32,12 +32,14 @@ airflow-password:
 # S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
 # backup bucket (read from the stack outputs) before sam delete tears it down.
 airflow-delete:
-	@BUCKET=$$(aws cloudformation describe-stacks --stack-name ch01-airflow \
-	  --query "Stacks[0].Outputs[?OutputKey=='BackupBucket'].OutputValue" \
-	  --output text 2>/dev/null); \
-	if [ -n "$$BUCKET" ] && [ "$$BUCKET" != "None" ]; then \
-		echo "emptying s3://$$BUCKET"; aws s3 rm "s3://$$BUCKET" --recursive; \
-	fi
+	@for KEY in BackupBucket OfflineBucket; do \
+		BUCKET=$$(aws cloudformation describe-stacks --stack-name ch01-airflow \
+		--query "Stacks[0].Outputs[?OutputKey=='$$KEY'].OutputValue" \
+		--output text 2>/dev/null); \
+		if [ -n "$$BUCKET" ] && [ "$$BUCKET" != "None" ]; then \
+			echo "emptying s3://$$BUCKET"; aws s3 rm "s3://$$BUCKET" --recursive; \
+		fi; \
+	done
 	sam delete --no-prompts
 
 check-account:
@@ -71,6 +73,12 @@ feature-group:
 
 clean-feature-group:
 	env -u AWS_ENDPOINT_URL aws sagemaker delete-feature-group --feature-group-name applicant-credit-profile-fg
+	# deleting the group leaves its offline-store Glue table behind; drop it too
+	@for T in $$(env -u AWS_ENDPOINT_URL aws glue get-tables --database-name sagemaker_featurestore \
+		--query "TableList[?starts_with(Name,'applicant_credit_profile_fg')].Name" --output text 2>/dev/null); do \
+		echo "dropping glue table $$T"; \
+		env -u AWS_ENDPOINT_URL aws glue delete-table --database-name sagemaker_featurestore --name "$$T"; \
+	done
 
 clean-lake:
 	env -u AWS_ENDPOINT_URL aws s3 rm s3://$(LAKE_BUCKET) --recursive

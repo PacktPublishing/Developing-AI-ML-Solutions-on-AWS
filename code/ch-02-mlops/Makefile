@@ -1,5 +1,5 @@
 .PHONY: up seed train train-challenger mlflow-train mlflow-ui sm-push sm-local sm-batch \
-	amt lambda-build lambda-local fargate-build fargate-local pipeline pipeline-parity all down lint diagrams
+	amt lambda-build lambda-local lambda-registry-build lambda-registry-local fargate-build fargate-local pipeline pipeline-parity all down lint diagrams
 
 # the whole local flow in one command, fully offline (no account): the local stack, the seed,
 # both models trained in SageMaker local mode logged to the serverless MLflow, and the
@@ -124,6 +124,26 @@ lambda-local: lambda-build
 	sleep 3
 	curl -s -XPOST http://localhost:9010/2015-03-31/functions/function/invocations --data-binary @fixtures/sample.json; echo
 	docker rm -f ch02-lambda-rie 2>/dev/null || true
+
+# The registry-loading Lambda: no model baked in. mlflow-skinny + sagemaker-mlflow resolve
+# the registered version and download its artifact at cold start (to /tmp). Tested offline
+# against the local sqlite registry + S3Proxy; on AWS point MLFLOW_TRACKING_URI at the App ARN.
+lambda-registry-build:
+	cp src/challenger/challenger_model.py src/serving/lambda-registry/challenger_model.py
+	docker build -q -t ch02-lambda-registry:latest src/serving/lambda-registry/
+
+lambda-registry-local: lambda-registry-build
+	docker rm -f ch02-lambda-registry-rie 2>/dev/null || true
+	docker run -d --name ch02-lambda-registry-rie -p 9011:8080 \
+		-e MLFLOW_TRACKING_URI=sqlite:////mlflow-store/mlruns.db \
+		-e MLFLOW_S3_ENDPOINT_URL=http://host.docker.internal:9000 \
+		-e AWS_ACCESS_KEY_ID=local -e AWS_SECRET_ACCESS_KEY=localsecret -e AWS_DEFAULT_REGION=us-east-1 \
+		-e REGISTERED_MODEL=credit-challenger \
+		-v $(CURDIR)/mlflow-store:/mlflow-store \
+		ch02-lambda-registry:latest
+	sleep 4
+	curl -s -XPOST http://localhost:9011/2015-03-31/functions/function/invocations --data-binary @fixtures/sample.json; echo
+	docker rm -f ch02-lambda-registry-rie 2>/dev/null || true
 
 # assemble + build the Fargate image, then run it as a local ECS task (compose)
 fargate-build: train-challenger

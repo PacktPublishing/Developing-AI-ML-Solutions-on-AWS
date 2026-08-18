@@ -63,6 +63,45 @@ Resources:
             Status: Enabled
             ExpirationInDays: 30
 
+  # The SageMaker Feature Store offline store (Iceberg-format Parquet lands here);
+  # only on a serverless deploy. Emptied by `make airflow-delete` before stack delete.
+  FeatureStoreOfflineBucket:
+    DeletionPolicy: Delete
+    Type: AWS::S3::Bucket
+    Condition: UseServerless
+
+  # The role the feature group assumes to write the offline store and register its
+  # Glue catalog table (distinct from the EC2 instance role).
+  FeatureStoreRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFeatureStoreAccess
+      Policies:
+        - PolicyName: offline-store-s3
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource:
+                  - !GetAtt FeatureStoreOfflineBucket.Arn
+                  - !Sub ${FeatureStoreOfflineBucket.Arn}/*
+    Condition: UseServerless
+
   AirflowInstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -83,6 +122,35 @@ Resources:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub ${BackupBucket.Arn}/airflow-metadata/*
+        - PolicyName: feature-store-ingest
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sagemaker:CreateFeatureGroup
+                  - sagemaker:DescribeFeatureGroup
+                  - sagemaker:PutRecord
+                Resource: '*'
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/${AWS::StackName}-*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: sagemaker.amazonaws.com
+
+              # registering the offline store's Glue catalog table runs as this role
+              - Effect: Allow
+                Action:
+                  - glue:GetDatabase
+                  - glue:CreateDatabase
+                  - glue:GetTable
+                  - glue:CreateTable
+                  - glue:UpdateTable
+                Resource:
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/sagemaker_featurestore
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/sagemaker_featurestore/*
 
   AirflowInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -200,50 +268,122 @@ Resources:
             from datetime import datetime
 
             import boto3
-            import psycopg2
+            import redshift_connector
             from airflow.providers.standard.operators.python import PythonOperator
             from airflow.sdk import DAG
 
-            # local (free tier): redshift-local on this instance. serverless: the
-            # instance role reads the generated secret and targets Redshift Serverless.
-            if os.environ.get("WAREHOUSE_SECRET_ARN"):
-                secret = json.loads(
-                    boto3.client("secretsmanager").get_secret_value(
-                        SecretId=os.environ["WAREHOUSE_SECRET_ARN"]
-                    )["SecretString"]
-                )
-                host = os.environ["WAREHOUSE_HOST"]
-                DSN = f"postgresql://{secret['username']}:{secret['password']}@{host}:5439/bureau"
-            else:
-                DSN = "postgresql://loader:loader@warehouse:5439/bureau"
 
             STAGE = """
-            create table if not exists bureau_reports (applicant_id int, state varchar(2), score int);
+            create table if not exists bureau_reports (applicant_id int, state varchar(2), score int, tradeline_count int, total_balance int, delinquent_count int);
             truncate bureau_reports;
             insert into bureau_reports values
-                (10001, 'CA', 712), (10002, 'TX', 668), (10003, 'NY', 741),
-                (10004, 'CA', 590), (10005, 'TX', 805);
+                (10001, 'CA', 712, 7, 172317, 0), (10002, 'TX', 668, 4, 63563, 1),
+                (10003, 'NY', 741, 5, 90210, 0), (10004, 'CA', 590, 9, 210004, 3),
+                (10005, 'TX', 805, 2, 15000, 0);
             """
             TRANSFORM = """
             drop table if exists applicant_credit_profile;
             create table applicant_credit_profile as
-                select state, count(*) as applicants, round(avg(score)) as avg_score
-                from bureau_reports group by state;
+                select applicant_id, score, state, tradeline_count, total_balance, delinquent_count
+                from bureau_reports;
             """
 
 
+            def connect():
+                """Connect with redshift-connector, the driver the dbt-redshift adapter
+                uses. On Redshift Serverless the credentials come from Secrets Manager;
+                on redshift-local it is the loader user over a self-signed cert, so TLS
+                verification is off."""
+                if os.environ.get("WAREHOUSE_SECRET_ARN"):
+                    secret = json.loads(
+                        boto3.client("secretsmanager").get_secret_value(
+                            SecretId=os.environ["WAREHOUSE_SECRET_ARN"]
+                        )["SecretString"]
+                    )
+                    return redshift_connector.connect(
+                        host=os.environ["WAREHOUSE_HOST"], port=5439, database="bureau",
+                        user=secret["username"], password=secret["password"],
+                    )
+                return redshift_connector.connect(
+                    host="warehouse", port=5439, database="bureau",
+                    user="loader", password="loader", ssl=False,
+                )
+
+
             def run_sql(sql):
-                """Run a statement against the target warehouse."""
-                with psycopg2.connect(DSN) as conn, conn.cursor() as cur:
-                    cur.execute(sql)
+                """Run each statement in the block against the target warehouse."""
+                with connect() as conn, conn.cursor() as cur:
+                    for statement in (s.strip() for s in sql.split(";") if s.strip()):
+                        cur.execute(statement)
+                    conn.commit()
 
 
             def check_profile():
                 """Data-quality gate: the credit-profile mart must not be empty."""
-                with psycopg2.connect(DSN) as conn, conn.cursor() as cur:
+                with connect() as conn, conn.cursor() as cur:
                     cur.execute("select count(*) from applicant_credit_profile")
                     if not cur.fetchone()[0]:
                         raise ValueError("applicant_credit_profile is empty")
+
+
+            def ingest_feature_store():
+                """Ingest the mart into the SageMaker Feature Store, creating the
+                feature group (same schema as the chapter demo) on the first run.
+                Both stores are enabled: the online store for low-latency serving
+                lookups, the offline store (S3, Iceberg-format) for training queries."""
+                import datetime as _dt
+                import time as _t
+
+                fg = os.environ["FEATURE_GROUP"]
+                sm = boto3.client("sagemaker")
+                try:
+                    sm.describe_feature_group(FeatureGroupName=fg)
+                except Exception:
+                    sm.create_feature_group(
+                        FeatureGroupName=fg,
+                        RecordIdentifierFeatureName="applicant_id",
+                        EventTimeFeatureName="event_time",
+                        FeatureDefinitions=[
+                            {"FeatureName": "applicant_id", "FeatureType": "Integral"},
+                            {"FeatureName": "score", "FeatureType": "Integral"},
+                            {"FeatureName": "state", "FeatureType": "String"},
+                            {"FeatureName": "tradeline_count", "FeatureType": "Integral"},
+                            {"FeatureName": "total_balance", "FeatureType": "Integral"},
+                            {"FeatureName": "delinquent_count", "FeatureType": "Integral"},
+                            {"FeatureName": "event_time", "FeatureType": "String"},
+                        ],
+                        OnlineStoreConfig={"EnableOnlineStore": True},
+                        OfflineStoreConfig={
+                            "S3StorageConfig": {"S3Uri": os.environ["OFFLINE_S3_URI"]}
+                        },
+                        RoleArn=os.environ["FEATURE_STORE_ROLE_ARN"],
+                    )
+                    for _ in range(60):
+                        if sm.describe_feature_group(FeatureGroupName=fg)["FeatureGroupStatus"] == "Created":
+                            break
+                        _t.sleep(5)
+                runtime = boto3.client("sagemaker-featurestore-runtime")
+                now = _dt.datetime.now(_dt.timezone.utc).isoformat()
+                with connect() as conn, conn.cursor() as cur:
+                    cur.execute(
+                        "select applicant_id, score, state, tradeline_count,"
+                        " total_balance, delinquent_count from applicant_credit_profile"
+                    )
+                    rows = cur.fetchall()
+                for aid, score, state, tc, tb, dc in rows:
+                    runtime.put_record(
+                        FeatureGroupName=fg,
+                        Record=[
+                            {"FeatureName": "applicant_id", "ValueAsString": str(aid)},
+                            {"FeatureName": "score", "ValueAsString": str(score)},
+                            {"FeatureName": "state", "ValueAsString": str(state)},
+                            {"FeatureName": "tradeline_count", "ValueAsString": str(tc)},
+                            {"FeatureName": "total_balance", "ValueAsString": str(tb)},
+                            {"FeatureName": "delinquent_count", "ValueAsString": str(dc)},
+                            {"FeatureName": "event_time", "ValueAsString": now},
+                        ],
+                    )
+                print(f"ingested {len(rows)} records to feature group {fg}")
 
 
             with DAG("bureau_pipeline", start_date=datetime(2026, 1, 1),
@@ -251,7 +391,8 @@ Resources:
                 stage = PythonOperator(task_id="stage", python_callable=run_sql, op_args=[STAGE])
                 transform = PythonOperator(task_id="transform", python_callable=run_sql, op_args=[TRANSFORM])
                 check = PythonOperator(task_id="check", python_callable=check_profile)
-                stage >> transform >> check
+                ingest = PythonOperator(task_id="ingest", python_callable=ingest_feature_store)
+                stage >> transform >> check >> ingest
             DAG
             cat > /opt/af/compose.yml <<'YML'
             services:
@@ -292,9 +433,14 @@ Resources:
                   - WAREHOUSE_SECRET_ARN=${SecretArn}
                   - WAREHOUSE_HOST=${WarehouseHost}
                   - AWS_DEFAULT_REGION=${AWS::Region}
-                  # the bureau DAG needs psycopg2 (warehouse) and boto3 (read the
-                  # secret), neither in the base image; install them at container start
-                  - _PIP_ADDITIONAL_REQUIREMENTS=psycopg2-binary boto3
+                  # serverless mode: the ingest task writes the mart into the
+                  # SageMaker Feature Store (online store + offline S3 store)
+                  - FEATURE_GROUP=${FeatureGroup}
+                  - OFFLINE_S3_URI=${OfflineS3Uri}
+                  - FEATURE_STORE_ROLE_ARN=${FeatureStoreRoleArn}
+                  # the bureau DAG needs redshift-connector (the warehouse driver, same
+                  # as dbt-redshift) and boto3 (read the secret); install at container start
+                  - _PIP_ADDITIONAL_REQUIREMENTS=redshift-connector boto3
                 ports:
                   - "8080:8080"
                 volumes:
@@ -328,6 +474,18 @@ Resources:
               - UseServerless
               - !GetAtt WarehouseWorkgroup.Workgroup.Endpoint.Address
               - ""
+            FeatureGroup: !If
+              - UseServerless
+              - applicant-credit-profile-fg
+              - ""
+            OfflineS3Uri: !If
+              - UseServerless
+              - !Sub s3://${FeatureStoreOfflineBucket}/offline/
+              - ""
+            FeatureStoreRoleArn: !If
+              - UseServerless
+              - !GetAtt FeatureStoreRole.Arn
+              - ""
 
 Outputs:
   AirflowUrl:
@@ -337,6 +495,11 @@ Outputs:
   BackupBucket:
     Description: S3 bucket holding the nightly Airflow metadata dumps
     Value: !Ref BackupBucket
+
+  OfflineBucket:
+    Description: S3 bucket holding the SageMaker Feature Store offline store
+    Value: !Ref FeatureStoreOfflineBucket
+    Condition: UseServerless
 
   WarehouseEndpoint:
     Description: Redshift Serverless workgroup endpoint the DAG targets

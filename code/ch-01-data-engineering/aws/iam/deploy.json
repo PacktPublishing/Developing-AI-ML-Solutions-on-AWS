@@ -55,7 +55,10 @@
       "Sid": "SageMakerFeatureStore",
       "Effect": "Allow",
       "Action": ["sagemaker:CreateFeatureGroup", "sagemaker:DeleteFeatureGroup", "sagemaker:DescribeFeatureGroup", "sagemaker:ListFeatureGroups", "sagemaker:PutRecord", "sagemaker:GetRecord", "sagemaker:AddTags"],
-      "Resource": "arn:aws:sagemaker:us-east-1:*:feature-group/ch01-*"
+      "Resource": [
+        "arn:aws:sagemaker:us-east-1:*:feature-group/ch01-*",
+        "arn:aws:sagemaker:us-east-1:*:feature-group/applicant-credit-profile-fg"
+      ]
     },
     {"Sid": "EventBridge", "Effect": "Allow", "Action": ["events:PutRule", "events:DeleteRule", "events:DescribeRule", "events:PutTargets", "events:RemoveTargets", "events:TagResource"], "Resource": "*"},
     {

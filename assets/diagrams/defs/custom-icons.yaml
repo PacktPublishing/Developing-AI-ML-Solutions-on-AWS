@@ -62,3 +62,7 @@ Definitions:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "appconfig-agent.png"}
     Label: {Title: "AWS AppConfig", Color: "rgba(0, 0, 0, 255)"}
+  Airflow:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "airflow.png"}
+    Label: {Title: "Apache Airflow", Color: "rgba(0, 0, 0, 255)"}

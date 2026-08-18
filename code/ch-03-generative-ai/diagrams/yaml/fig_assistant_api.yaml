@@ -16,44 +16,33 @@ Diagram:
       Preset: User
       Title: "Underwriter\nSigV4 request"
 
+    # VPC-less express cluster: the Lambda runs outside a VPC and authenticates to
+    # Aurora with a short-lived IAM token, so there is no VPC, secret, or NAT gateway.
     AWSCloud:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Children: [VPC, Services]
-
-    VPC:
-      Type: AWS::EC2::VPC
-      Direction: horizontal
-      Title: "VPC (no NAT)"
-      Children: [Assistant, Database]
+      Children: [Assistant, Services]
 
     Assistant:
       Type: AWS::Diagram::Resource
       Preset: "LambdaCoin"
       Title: "Lambda\nfunction URL"
-    Database:
-      Type: AWS::Diagram::Resource
-      Preset: "Amazon Aurora"
-      Title: "Aurora Serverless\npgvector"
 
     Services:
       Type: AWS::Diagram::VerticalStack
-      Children: [Bedrock, Secrets]
+      Children: [Database, Bedrock]
 
+    Database:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Aurora"
+      Title: "Aurora Serverless\npgvector (IAM auth)"
     Bedrock:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Bedrock"
       Title: "Bedrock\nConverse + Guardrail"
-    Secrets:
-      Type: AWS::Diagram::Resource
-      Preset: "AWS Secrets Manager"
-      Title: "Secrets Manager\nDB credentials"
 
   Links:
     - {Source: Underwriter, SourcePosition: E, Target: Assistant, TargetPosition: W, TargetArrowHead: {Type: Open}}
     - {Source: Assistant, SourcePosition: E, Target: Database, TargetPosition: W, TargetArrowHead: {Type: Open}}
     - {Source: Assistant, SourcePosition: E, Target: Bedrock, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Assistant, SourcePosition: E, Target: Secrets, TargetPosition: W, TargetArrowHead: {Type: Open}}
-  # Bedrock and Secrets Manager are reached through VPC interface endpoints,
-  # which is why the VPC needs no NAT gateway (see assistant-api/template.yaml).

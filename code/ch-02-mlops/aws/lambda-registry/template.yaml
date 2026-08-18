@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: |
+  The registry-loading Lambda example: an arm64 container function that pulls the registered credit-challenger from the SageMaker MLflow App at cold start (no model baked into the image) and scores. See src/serving/lambda-registry and diagrams/fig_lambda_registry. Deploy with the MLflow App's ARN.
+
+Parameters:
+  MlflowAppArn:
+    Description: The SageMaker MLflow App ARN the function reads the registry from.
+    Type: String
+
+  ImageUri:
+    Description: |
+      ECR image URI. Built in-region by CodeBuild (make image REPO=ch02-lambda-registry SRCDIR=serving/lambda-registry), so a ~2 GB image is never pushed over a laptop uplink. On a fast connection you can instead give the function a Metadata build block and let `sam build`/`sam deploy` build and push it locally.
+    Type: String
+
+  RegisteredModel:
+    Type: String
+    Default: credit-challenger
+
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  RegistryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ch02-lambda-registry
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      Architectures:
+        - x86_64
+      MemorySize: 3008
+      Timeout: 120
+      EphemeralStorage:
+        Size: 2048
+      Environment:
+        Variables:
+          MLFLOW_TRACKING_URI: !Ref MlflowAppArn
+          REGISTERED_MODEL: !Ref RegisteredModel
+      Policies:
+
+        # Reaching the MLflow App needs BOTH namespaces: sagemaker-mlflow:* alone returns
+        # 403 from the App's REST endpoint (the authorizer also checks a sagemaker: action).
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sagemaker-mlflow:*
+                - sagemaker:*
+              Resource: '*'
+
+            # read the run artifacts (challenger.cbm + feature_spec.json) from the App's bucket
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !Sub arn:aws:s3:::ch02-sagemaker-mlflow-${AWS::AccountId}-${AWS::Region}
+                - !Sub arn:aws:s3:::ch02-sagemaker-mlflow-${AWS::AccountId}-${AWS::Region}/*
+
+Outputs:
+  FunctionName:
+    Description: The registry-loading Lambda
+    Value: !Ref RegistryFunction
