@@ -34,6 +34,11 @@ Diagram:
       Type: AWS::Diagram::Resource
       Preset: "AWS Fargate"
       Title: "decision-service"
+      Children: [PodApp]
+    PodApp:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "FastAPI"
 
     Ecr:
       Type: AWS::Diagram::Resource

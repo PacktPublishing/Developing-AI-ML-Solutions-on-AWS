@@ -54,6 +54,11 @@ Diagram:
       Type: AWS::Diagram::Resource
       Preset: "AWS Fargate"
       Title: "ECS Fargate\ngateway"
+      Children: [GatewayApp]
+    GatewayApp:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "FastAPI"
 
     Backend:
       Type: AWS::Diagram::HorizontalStack

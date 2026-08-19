@@ -1,0 +1,48 @@
+# The batch run as a SageMaker Pipeline: five steps (training split out of scoring), the same DAG
+# whether PIPELINE_MODE=local (local executor) or PIPELINE_MODE=aws (SageMaker jobs).
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Pipeline]
+
+    Pipeline:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "SageMaker Pipeline: batch-credit-limits   (PIPELINE_MODE = local | aws)"
+      Children: [Shortlist, Train, Score, Decide, Apply]
+
+    Shortlist:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "shortlist\n(Processing)"
+    Train:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "train\n(Training)"
+    Score:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "score\n(Processing)"
+    Decide:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "decide\n(Processing)"
+    Apply:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "apply-limits\n(Processing)"
+
+  Links:
+    - {Source: Shortlist, SourcePosition: E, Target: Train, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Train, SourcePosition: E, Target: Score, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Score, SourcePosition: E, Target: Decide, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Decide, SourcePosition: E, Target: Apply, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
