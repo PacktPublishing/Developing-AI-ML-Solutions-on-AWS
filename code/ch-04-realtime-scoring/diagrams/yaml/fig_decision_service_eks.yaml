@@ -47,6 +47,11 @@ Diagram:
       Type: AWS::Diagram::Resource
       Preset: "Amazon EKS Cloud"
       Title: "EKS Fargate\ngateway pod"
+      Children: [GatewayApp]
+    GatewayApp:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "FastAPI"
 
     Backend:
       Type: AWS::Diagram::HorizontalStack

@@ -28,6 +28,11 @@ Diagram:
       Type: AWS::Diagram::Resource
       Preset: "AWS Fargate"
       Title: "gateway :8080"
+      Children: [GatewayApp]
+    GatewayApp:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "FastAPI"
     Backend:
       Type: AWS::Diagram::VerticalStack
       Children: [Scorecard, Challenger, Dynamo]

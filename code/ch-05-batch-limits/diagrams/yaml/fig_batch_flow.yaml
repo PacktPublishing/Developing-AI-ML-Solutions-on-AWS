@@ -1,0 +1,61 @@
+# The monthly batch run as a four-step flow: shortlist -> score -> decide -> apply, each step
+# handing the next a CSV artifact in S3, with the Redshift warehouse at both ends.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [WarehouseIn, Shortlist, Eligible, Score, Scores, Decide, Decisions, Apply, WarehouseOut]
+
+    WarehouseIn:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "Redshift\ncustomers"
+    Shortlist:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic application"
+      Title: "shortlist"
+    Eligible:
+      Type: AWS::Diagram::Resource
+      Preset: "Documents"
+      Title: "eligible.csv\n(S3)"
+    Score:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic application"
+      Title: "score"
+    Scores:
+      Type: AWS::Diagram::Resource
+      Preset: "Documents"
+      Title: "scores.csv\n(S3)"
+    Decide:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic application"
+      Title: "decide"
+    Decisions:
+      Type: AWS::Diagram::Resource
+      Preset: "Documents"
+      Title: "decisions.csv\n(S3)"
+    Apply:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic application"
+      Title: "apply"
+    WarehouseOut:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "Redshift\nnew limits"
+
+  Links:
+    - {Source: WarehouseIn, SourcePosition: E, Target: Shortlist, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Shortlist, SourcePosition: E, Target: Eligible, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Eligible, SourcePosition: E, Target: Score, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Score, SourcePosition: E, Target: Scores, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Scores, SourcePosition: E, Target: Decide, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Decide, SourcePosition: E, Target: Decisions, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Decisions, SourcePosition: E, Target: Apply, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Apply, SourcePosition: E, Target: WarehouseOut, TargetPosition: W, TargetArrowHead: {Type: Open}}
