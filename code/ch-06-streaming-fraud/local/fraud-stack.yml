@@ -67,3 +67,28 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  grafana:
+    # the fraud desk's incidence board: provisioned datasource (the warehouse) and
+    # dashboard, no click-through setup. Anonymous Admin for local viewing; the same
+    # dashboard JSON deploys to Grafana on Fargate against Redshift Serverless on AWS.
+    image: grafana/grafana:11.2.0
+    depends_on:
+      warehouse:
+        condition: service_healthy
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      # the datasource reads these; on Fargate the task sets them from Redshift Serverless
+      - WAREHOUSE_HOST=warehouse
+      - WAREHOUSE_PORT=5439
+      - WAREHOUSE_USER=analyst
+      - WAREHOUSE_PASSWORD=analyst
+      - WAREHOUSE_DB=fraud
+      - WAREHOUSE_SSLMODE=disable
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    ports:
+      - "3000:3000"

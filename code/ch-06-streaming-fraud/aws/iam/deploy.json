@@ -75,13 +75,26 @@
       "Action": ["sagemaker:CreateModel", "sagemaker:DeleteModel", "sagemaker:CreateEndpointConfig", "sagemaker:DeleteEndpointConfig", "sagemaker:CreateEndpoint", "sagemaker:DeleteEndpoint", "sagemaker:DescribeModel", "sagemaker:DescribeEndpointConfig", "sagemaker:DescribeEndpoint", "sagemaker:InvokeEndpoint", "sagemaker:AddTags"],
       "Resource": "arn:aws:sagemaker:us-east-1:*:*/fraud-*"
     },
-    {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": "arn:aws:ecr:us-east-1:*:repository/ch06-scoring"},
+    {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": ["arn:aws:ecr:us-east-1:*:repository/ch06-scoring", "arn:aws:ecr:us-east-1:*:repository/ch06-grafana"]},
     {"Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
     {
       "Sid": "CodeBuild",
       "Effect": "Allow",
       "Action": ["codebuild:CreateProject", "codebuild:UpdateProject", "codebuild:DeleteProject", "codebuild:StartBuild", "codebuild:BatchGetBuilds", "codebuild:BatchGetProjects"],
-      "Resource": "arn:aws:codebuild:us-east-1:*:project/ch06-scoring-build"
+      "Resource": ["arn:aws:codebuild:us-east-1:*:project/ch06-scoring-build", "arn:aws:codebuild:us-east-1:*:project/ch06-grafana-build"]
+    },
+    {
+      "Sid": "EcsFargate",
+      "Effect": "Allow",
+      "Action": ["ecs:CreateCluster", "ecs:DeleteCluster", "ecs:DescribeClusters", "ecs:PutClusterCapacityProviders", "ecs:RegisterTaskDefinition", "ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition", "ecs:CreateService", "ecs:UpdateService", "ecs:DeleteService", "ecs:DescribeServices", "ecs:ListTasks", "ecs:DescribeTasks", "ecs:TagResource"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcsServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*",
+      "Condition": {"StringEquals": {"iam:AWSServiceName": "ecs.amazonaws.com"}}
     },
     {"Sid": "StagingAndSamBuckets", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::streaming-fraud-ch06-*", "arn:aws:s3:::streaming-fraud-ch06-*/*", "arn:aws:s3:::aws-sam-cli-managed-*", "arn:aws:s3:::aws-sam-cli-managed-*/*"]},
     {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": ["arn:aws:logs:us-east-1:*:log-group:*ch06*", "arn:aws:logs:us-east-1:*:log-group:*fraud*", "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*"]}

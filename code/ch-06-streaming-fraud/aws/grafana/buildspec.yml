@@ -1,0 +1,19 @@
+version: 0.2
+
+# Builds the amd64 Grafana image with the fraud board provisioned in and pushes it to
+# ECR. Fargate runs amd64 and CodeBuild is amd64, so a plain docker build needs no
+# emulation. The base grafana image is pulled from Docker Hub (one anonymous pull per
+# build). Developer -> S3 -> CodeBuild -> ECR, the same path as the scoring image.
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  build:
+    commands:
+      - echo "Building $IMAGE_URI (amd64)"
+      - docker build -t "$IMAGE_URI" .
+      - docker push "$IMAGE_URI"
+  post_build:
+    commands:
+      - echo "Done"
