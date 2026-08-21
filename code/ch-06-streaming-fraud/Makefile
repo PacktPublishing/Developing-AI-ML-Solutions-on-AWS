@@ -30,7 +30,7 @@ seed:
 
 # fit the fraud classifier and freeze its operating threshold
 train:
-	uv run src/scoring/train.py --min-precision 0.30
+	uv run src/scoring/train.py
 
 # serve the model locally (same image, same /ping,/invocations as the endpoint):
 # SageMaker runs the image as `... serve` with the tarball at /opt/ml/model.
