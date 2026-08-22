@@ -11,39 +11,57 @@ Diagram:
     Canvas:
       Type: AWS::Diagram::Canvas
       Direction: horizontal
-      Children: [WarehouseIn, Shortlist, Eligible, Score, Scores, Decide, Decisions, Apply, WarehouseOut]
+      Children: [Run]
 
+    Run:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: vertical
+      Children: [Store, Steps]
+
+    # The three artifacts the steps hand each other, all in one bucket prefix.
+    Store:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Storage Service (Amazon S3)"
+      Direction: horizontal
+      Title: "S3 batch bucket"
+      Children: [Eligible, Scores, Decisions]
+    Eligible:
+      Type: AWS::Diagram::Resource
+      Preset: "Data table"
+      Title: "eligible.csv"
+    Scores:
+      Type: AWS::Diagram::Resource
+      Preset: "Data table"
+      Title: "scores.csv"
+    Decisions:
+      Type: AWS::Diagram::Resource
+      Preset: "Data table"
+      Title: "decisions.csv"
+
+    # The four steps, with the warehouse read at the start and the write-back at the end.
+    Steps:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [WarehouseIn, Shortlist, Score, Decide, Apply, WarehouseOut]
     WarehouseIn:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Redshift"
       Title: "Redshift\ncustomers"
     Shortlist:
       Type: AWS::Diagram::Resource
-      Preset: "Generic application"
+      Preset: "Gear"
       Title: "shortlist"
-    Eligible:
-      Type: AWS::Diagram::Resource
-      Preset: "Documents"
-      Title: "eligible.csv\n(S3)"
     Score:
       Type: AWS::Diagram::Resource
-      Preset: "Generic application"
+      Preset: "Gear"
       Title: "score"
-    Scores:
-      Type: AWS::Diagram::Resource
-      Preset: "Documents"
-      Title: "scores.csv\n(S3)"
     Decide:
       Type: AWS::Diagram::Resource
-      Preset: "Generic application"
+      Preset: "Gear"
       Title: "decide"
-    Decisions:
-      Type: AWS::Diagram::Resource
-      Preset: "Documents"
-      Title: "decisions.csv\n(S3)"
     Apply:
       Type: AWS::Diagram::Resource
-      Preset: "Generic application"
+      Preset: "Gear"
       Title: "apply"
     WarehouseOut:
       Type: AWS::Diagram::Resource
@@ -52,10 +70,10 @@ Diagram:
 
   Links:
     - {Source: WarehouseIn, SourcePosition: E, Target: Shortlist, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Shortlist, SourcePosition: E, Target: Eligible, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Eligible, SourcePosition: E, Target: Score, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Score, SourcePosition: E, Target: Scores, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Scores, SourcePosition: E, Target: Decide, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Decide, SourcePosition: E, Target: Decisions, TargetPosition: W, TargetArrowHead: {Type: Open}}
-    - {Source: Decisions, SourcePosition: E, Target: Apply, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Shortlist, SourcePosition: N, Target: Eligible, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Eligible, SourcePosition: E, Target: Score, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Score, SourcePosition: N, Target: Scores, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Scores, SourcePosition: E, Target: Decide, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Decide, SourcePosition: N, Target: Decisions, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Decisions, SourcePosition: E, Target: Apply, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Apply, SourcePosition: E, Target: WarehouseOut, TargetPosition: W, TargetArrowHead: {Type: Open}}
