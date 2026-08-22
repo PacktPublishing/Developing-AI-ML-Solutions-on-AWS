@@ -1,6 +1,3 @@
-# /// script
-# dependencies = []
-# ///
 """Widen (or narrow) the challenger rollout by editing the feature flag.
 
 Sets the challenger variant's split percentage in the local flag store. The gateway
