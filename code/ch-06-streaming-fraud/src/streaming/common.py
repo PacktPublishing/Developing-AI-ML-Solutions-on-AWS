@@ -6,6 +6,7 @@ Locally the endpoints point at the containers from docker-compose; on AWS the
 same variables point at the real services, and this module does not change.
 """
 
+import contextlib
 import json
 import os
 import time
@@ -65,10 +66,8 @@ def firehose_client():
 
 def ensure_stream(kinesis, name: str, shards: int = 2) -> None:
     """Create the stream if it does not exist and wait until it is ACTIVE."""
-    try:
+    with contextlib.suppress(kinesis.exceptions.ResourceInUseException):
         kinesis.create_stream(StreamName=name, ShardCount=shards)
-    except kinesis.exceptions.ResourceInUseException:
-        pass
     while True:
         summary = kinesis.describe_stream_summary(StreamName=name)
         if summary["StreamDescriptionSummary"]["StreamStatus"] == "ACTIVE":

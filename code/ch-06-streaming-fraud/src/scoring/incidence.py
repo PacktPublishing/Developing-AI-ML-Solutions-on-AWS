@@ -50,8 +50,8 @@ def main() -> None:
         .reset_index()
     )
 
-    # ---------- Fit check: is fraud arrival Poisson? Test at a fine bucket where fraud is rare
-    # (per minute, lambda < 1), the classic rare-event shape with P(0) largest. ----------
+    # Fit check: is fraud arrival Poisson? Test at a fine bucket where fraud is rare
+    # (per minute, lambda < 1), the classic rare-event shape with P(0) largest.
     per_min = (
         df.assign(m=df["event_time"].dt.floor("min")).groupby("m")["is_fraud"].sum()
     )

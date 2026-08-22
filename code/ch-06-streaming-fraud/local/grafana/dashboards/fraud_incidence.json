@@ -118,7 +118,7 @@
     },
     {
       "type": "stat",
-      "title": "Analysts needed (peak, 4/hr)",
+      "title": "Analysts needed (Poisson p95, 4/hr)",
       "datasource": {
         "type": "postgres",
         "uid": "warehouse"
@@ -142,7 +142,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT ceil(max(c) / 4.0) AS analysts FROM (SELECT count(*) AS c FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time) GROUP BY date_trunc('hour', event_time)) h"
+          "rawSql": "SELECT ceil((avg(c) + 1.645 * sqrt(avg(c))) / 4.0) AS analysts FROM (SELECT count(*) AS c FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time) GROUP BY date_trunc('hour', event_time)) h"
         }
       ]
     },
@@ -280,7 +280,7 @@
             "type": "postgres",
             "uid": "warehouse"
           },
-          "rawSql": "SELECT $__timeGroupAlias(event_time,'15m'), avg(afd_score) AS \"mean live score\" FROM score_monitor WHERE $__timeFilter(event_time) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT $__timeGroupAlias(event_time,'15m'), avg(score) AS \"mean live score\" FROM score_monitor WHERE $__timeFilter(event_time) GROUP BY 1 ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -328,7 +328,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT r.bucket AS score, r.train_share AS training, coalesce(l.live_share,0) AS live FROM score_reference r LEFT JOIN (SELECT (afd_score/100)*100 AS bucket, count(*)::float/sum(count(*)) over () AS live_share FROM score_monitor GROUP BY 1) l ON r.bucket=l.bucket ORDER BY r.bucket",
+          "rawSql": "SELECT r.bucket AS score, r.train_share AS training, coalesce(l.live_share,0) AS live FROM score_reference r LEFT JOIN (SELECT (score/100)*100 AS bucket, count(*)::float/sum(count(*)) over () AS live_share FROM score_monitor GROUP BY 1) l ON r.bucket=l.bucket ORDER BY r.bucket",
           "datasource": {
             "type": "postgres",
             "uid": "warehouse"

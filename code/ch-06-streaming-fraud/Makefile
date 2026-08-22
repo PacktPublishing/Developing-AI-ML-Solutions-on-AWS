@@ -32,6 +32,12 @@ seed:
 train:
 	uv run src/scoring/train.py
 
+# size the fraud desk: fit the fraud-arrival rate (per-minute Poisson / Negative Binomial)
+# and project the hourly count. The board's "analysts needed" panel applies the same
+# Poisson busy-hour tail to the live block rate.
+incidence:
+	uv run src/scoring/incidence.py
+
 # serve the model locally (same image, same /ping,/invocations as the endpoint):
 # SageMaker runs the image as `... serve` with the tarball at /opt/ml/model.
 serve:

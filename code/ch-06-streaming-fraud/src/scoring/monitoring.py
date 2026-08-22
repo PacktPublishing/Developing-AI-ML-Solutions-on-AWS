@@ -1,28 +1,31 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["pandas", "numpy", "catboost", "psycopg2-binary"]
+# dependencies = ["pandas", "numpy", "catboost", "scikit-learn", "psycopg2-binary"]
 # ///
-"""Score-drift monitoring: seed the training reference, the live scores, and a DBShap attribution.
+"""Score-drift monitoring: seed the training reference, the live scores, and a drift attribution.
 
 Writes three warehouse tables the Grafana board reads: score_reference (the fixed training
 score distribution), score_monitor (live scores), and drift_attribution (a per-feature Shapley
-attribution of the score drift, the label-free virtual-drift side of Edakunni et al., "Explaining
-Drift using Shapley Values"). The live stream is the held-out test set spread over 24 hours plus
-a simulated fraud-campaign burst, so the drift is visible; replace it with real live scores.
+attribution of the score drift). The score is our AFD-calibrated 0-1000 score (policy.FPRCalibrator,
+reproducing Amazon Fraud Detector's score-to-FPR table), and the attribution is ScoreDriftAttributor, the label-free
+virtual-drift side of Edakunni et al., "Explaining Drift using Shapley Values". The live stream is
+the held-out test set spread over 24 hours plus a simulated fraud-campaign burst, so the drift is
+visible; replace it with real live scores.
 
 Usage:
   uv run scoring/monitoring.py
 """
 
+import json
 import os
-from itertools import combinations
-from math import factorial
 
 import numpy as np
 import pandas as pd
 import psycopg2
 from catboost import CatBoostClassifier
-from policy import afd_score
+from drift import ScoreDriftAttributor
+from policy import FPRCalibrator
+from psycopg2.extras import execute_values
 
 CHAPTER_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,7 +36,6 @@ WAREHOUSE_JDBC = os.environ.get(
 WAREHOUSE_USER = os.environ.get("WAREHOUSE_USER", "analyst")
 WAREHOUSE_PASSWORD = os.environ.get("WAREHOUSE_PASSWORD", "analyst")
 BUCKET = 100  # score-histogram bucket width on the 0-1000 axis
-COALITION_SAMPLES = 2000  # synthetic rows per coalition for the Shapley value function
 SEED = 6
 
 
@@ -44,46 +46,8 @@ def warehouse():
     return psycopg2.connect(dsn)
 
 
-def dbshap_attribution(model, features, train, live, legit, rng):
-    """Shapley-attribute the mean-score drift to each feature's distribution shift.
-
-    Value function is label-free: for a coalition, draw those features from the live marginal
-    and the rest from the training marginal, score, and take the mean-score shift. The Shapley
-    values are signed and sum to the total mean-score drift.
-    """
-    n = len(features)
-    train_mat = np.column_stack(
-        [rng.choice(train[f].values, COALITION_SAMPLES) for f in features]
-    )
-    live_mat = np.column_stack(
-        [rng.choice(live[f].values, COALITION_SAMPLES) for f in features]
-    )
-    big = np.empty((2**n * COALITION_SAMPLES, n))
-    for c in range(2**n):
-        bits = np.array([(c >> j) & 1 for j in range(n)], dtype=bool)
-        big[c * COALITION_SAMPLES : (c + 1) * COALITION_SAMPLES] = np.where(
-            bits[None, :], live_mat, train_mat
-        )
-    scored = afd_score(
-        model.predict_proba(pd.DataFrame(big, columns=features))[:, 1], legit
-    )
-    v = scored.reshape(2**n, COALITION_SAMPLES).mean(axis=1)
-    v -= v[0]  # v(empty) = 0
-    weight = {k: factorial(k) * factorial(n - k - 1) / factorial(n) for k in range(n)}
-    phi = np.zeros(n)
-    for j in range(n):
-        others = [i for i in range(n) if i != j]
-        for k in range(len(others) + 1):
-            for subset in combinations(others, k):
-                s = sum(1 << i for i in subset)
-                phi[j] += weight[k] * (v[s | (1 << j)] - v[s])
-    return sorted(zip(features, phi), key=lambda t: -abs(t[1]))
-
-
 def main() -> None:
     """Score train and held-out test, build the reference/live/attribution tables, and seed them."""
-    import json
-
     with open(f"{CHAPTER_DIR}/artifacts/model_meta.json") as f:
         features = json.load(f)["features"]
     model = CatBoostClassifier()
@@ -94,8 +58,10 @@ def main() -> None:
     test = pd.read_csv(f"{CHAPTER_DIR}/data/split/test.csv", parse_dates=["event_time"])
     rng = np.random.default_rng(SEED)
 
-    # the legitimate-probability reference is fixed at training time; every score is read against it
-    legit = model.predict_proba(train[features])[:, 1][train["is_fraud"].values == 0]
+    # the score is a training artifact: fit the calibrator's reference on the training scores
+    calibrator = FPRCalibrator().fit(
+        model.predict_proba(train[features])[:, 1], train["is_fraud"].values
+    )
 
     # live = held-out test spread over 24h + a fraud-campaign burst in the last 90 minutes
     now = pd.Timestamp.utcnow().tz_localize(None)
@@ -110,23 +76,23 @@ def main() -> None:
     ]
     live = pd.concat([test, burst], ignore_index=True)
 
+    def score(df):
+        return calibrator.transform(model.predict_proba(df[features])[:, 1]).ravel()
+
     ref = (
-        pd.Series(
-            (afd_score(model.predict_proba(train[features])[:, 1], legit) // BUCKET)
-            * BUCKET
-        )
+        pd.Series((score(train) // BUCKET) * BUCKET)
         .value_counts(normalize=True)
         .sort_index()
         .reindex(range(0, 1000, BUCKET), fill_value=0.0)
     )
-    live_scores = afd_score(model.predict_proba(live[features])[:, 1], legit)
-    attrib = dbshap_attribution(model, features, train, live, legit, rng)
-    print(
-        f"total mean-score drift {sum(p for _, p in attrib):.1f}; top: "
-        + ", ".join(f"{f} {p:+.1f}" for f, p in attrib[:3])
+    live_scores = score(live)
+    attrib = (
+        ScoreDriftAttributor(model, calibrator, features).fit(train).attribute(live)
     )
-
-    from psycopg2.extras import execute_values
+    print(
+        f"total mean-score drift {attrib.sum():.1f}; top: "
+        + ", ".join(f"{f} {v:+.1f}" for f, v in attrib.head(3).items())
+    )
 
     with warehouse() as conn, conn.cursor() as cur:
         for t in ("score_reference", "score_monitor", "drift_attribution"):
@@ -134,7 +100,7 @@ def main() -> None:
         cur.execute(
             "CREATE TABLE score_reference (bucket INT, train_share DOUBLE PRECISION)"
         )
-        cur.execute("CREATE TABLE score_monitor (afd_score INT, event_time TIMESTAMP)")
+        cur.execute("CREATE TABLE score_monitor (score INT, event_time TIMESTAMP)")
         cur.execute(
             "CREATE TABLE drift_attribution (feature VARCHAR(40), contribution DOUBLE PRECISION)"
         )
@@ -155,7 +121,7 @@ def main() -> None:
         execute_values(
             cur,
             "INSERT INTO drift_attribution VALUES %s",
-            [(f, round(float(p), 3)) for f, p in attrib],
+            [(f, round(float(v), 3)) for f, v in attrib.items()],
         )
     print(
         f"seeded score_reference({len(ref)}), score_monitor({len(live_scores)}), drift_attribution({len(attrib)})"

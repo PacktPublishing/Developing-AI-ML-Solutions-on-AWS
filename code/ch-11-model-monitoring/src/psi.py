@@ -22,10 +22,10 @@ image and the Processing job never need it.
 Usage:
   from psi import PSIDetector, log_detector
   det = PSIDetector.from_catboost(model, reference, NUMERIC, CATEGORICAL)
-  det.psi(current)                 # {feature: psi}
+  det.psi(current)  # {feature: psi}
   det.save("psi.json"); PSIDetector.load("psi.json")
   with mlflow.start_run():
-      log_detector(det)            # -> registered pyfunc model
+      log_detector(det)  # -> registered pyfunc model
 """
 
 from __future__ import annotations
@@ -91,7 +91,9 @@ class PSIDetector:
         counts = series.astype(str).value_counts(normalize=True)
         return counts.reindex(categories, fill_value=0.0).to_numpy()
 
-    # -- construction -----------------------------------------------------------
+    # -------------------------------------------------------------------------------
+    # Construction from reference data: either quantiles or model split borders.
+    # -------------------------------------------------------------------------------
     @classmethod
     def from_reference(
         cls,
@@ -141,13 +143,15 @@ class PSIDetector:
         reference_pct: dict[str, list[float]] = {}
         for f, bs in borders.items():
             edges = np.array([-np.inf, *bs, np.inf])
-            reference_pct[f] = list(cls._shares(reference[f], edges))
+            reference_pct[f] = [float(x) for x in cls._shares(reference[f], edges)]
         categories = {f: sorted(reference[f].astype(str).unique()) for f in categorical}
         for f, cats in categories.items():
-            reference_pct[f] = list(cls._cat_shares(reference[f], cats))
+            reference_pct[f] = [float(x) for x in cls._cat_shares(reference[f], cats)]
         return cls(borders, categories, reference_pct, binning)
 
-    # -- scoring ----------------------------------------------------------------
+    # -------------------------------------------------------------------------------
+    # Scoring a new batch against the reference proportions.
+    # -------------------------------------------------------------------------------
     def psi(self, current: pd.DataFrame) -> dict[str, float]:
         """Return the PSI of each feature in the current batch against the reference."""
         out: dict[str, float] = {}
@@ -163,7 +167,9 @@ class PSIDetector:
         """Return the features whose PSI exceeds the major-shift threshold."""
         return {f: v for f, v in self.psi(current).items() if v > threshold}
 
-    # -- serialisation ----------------------------------------------------------
+    # -------------------------------------------------------------------------------
+    # Serialization to/from a JSON-safe dict, and save/load to a JSON artifact.
+    # -------------------------------------------------------------------------------
     def to_dict(self) -> dict:
         """Return a JSON-safe representation (all borders finite)."""
         return {
@@ -193,7 +199,11 @@ class PSIDetector:
         return cls.from_dict(json.loads(Path(path).read_text()))
 
 
-# -- MLflow ---------------------------------------------------------------------
+# -------------------------------------------------------------------------------
+# MLflow pyfunc wrapper for a PSIDetector artifact, so the drift baseline carries the
+# same lineage, versioning, and registry as the model it watches. MLflow is imported
+# inside log_detector only, so the monitor image and the Processing job never need it.
+# -------------------------------------------------------------------------------
 ARTIFACT_KEY = "psi_detector"
 
 

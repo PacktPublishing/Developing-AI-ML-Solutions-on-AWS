@@ -1,13 +1,14 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["pandas", "numpy", "catboost", "matplotlib"]
+# dependencies = ["pandas", "numpy", "catboost", "matplotlib", "scikit-learn"]
 # ///
-"""Decision policy: turn one fraud score into three outcomes with two cuts.
+"""Decision policy: a 0-1000 fraud score calibrated to Amazon Fraud Detector's table, banded by two cuts.
 
-A single threshold gives block or pass. A second cut adds an investigate band, the
-gray zone a human reviews, and that band is the analyst caseload the incidence model
-sizes. The rules are ordered and first-match, the same shape a managed rule engine
-(such as the now-retired Amazon Fraud Detector) expresses; here it is a few lines.
+The score reproduces Amazon Fraud Detector's published score-to-false-positive-rate calibration on
+our own model: a record's false-positive rate is measured against the legitimate traffic, then
+mapped through AFD's seven anchor points, so a score of 900 means a 2% false-alarm rate, exactly as
+AFD's score does. Two cuts split it into approve, investigate, and fraud. FPRCalibrator is a
+scikit-learn transformer, so it pickles and drops into a Pipeline after the model.
 
 Usage:
   uv run scoring/policy.py
@@ -16,107 +17,147 @@ Usage:
 import json
 import os
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
+from sklearn.base import BaseEstimator, TransformerMixin
 
+# -------------------------------------------------------------------------------
+# Amazon Fraud Detector's published score-to-FPR anchors (docs: model-scores.html)
+# and the plotting palette and band cuts
+# -------------------------------------------------------------------------------
 CHAPTER_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
-BLOCK_CUT = 0.5  # above this, block outright at the terminal
+AFD_FPR = np.array([0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.10])
+AFD_SCORE = np.array([975, 950, 900, 860, 775, 700, 600])
 APPROVE = "#2CA25F"
 INVESTIGATE = "#F0A030"
-BLOCK = "#E4408A"
+FRAUD = "#E4408A"
+REVIEW_CUT = 700  # investigate at and above this score (a 7% false-alarm rate)
+FRAUD_CUT = 900  # flag as fraud at and above this score (a 2% false-alarm rate)
 
 
-def decide(score: float, review_cut: float, block_cut: float = BLOCK_CUT) -> str:
-    """Map a fraud score to an outcome. Ordered rules, first match wins."""
-    if score >= block_cut:
-        return "block"
+def decide(
+    score: float, review_cut: float = REVIEW_CUT, fraud_cut: float = FRAUD_CUT
+) -> str:
+    """Band a 0-1000 fraud score into approve, investigate, or fraud. Ordered, first match wins."""
+    if score >= fraud_cut:
+        return "fraud"
     if score >= review_cut:
         return "investigate"
     return "approve"
 
 
-def fpr_score(prob: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Return a 0-1000 score whose cut carries a *linear* false-alarm meaning.
-
-    Score is how many legitimate records a record outranks, score = 1000 * P(legit
-    probability <= this), so FPR = 1 - cut/1000 (a cut at 900 tolerates a 10% FPR). This
-    shares the principle of an FPR-anchored score but NOT Amazon Fraud Detector's specific
-    curve, which is nonlinear (AFD's 900 is a 2% FPR). Use afd_score to reproduce AFD's
-    published calibration.
-    """
-    legit = np.sort(prob[y == 0])
-    ecdf = np.searchsorted(legit, prob, side="right") / len(legit)
-    return np.round(1000 * ecdf).astype(int)
-
-
-# Amazon Fraud Detector's published score-to-FPR anchors for OFI/TFI models
-# (docs: model-scores.html). The score is calibrated to the false-positive rate.
-AFD_FPR = np.array([0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.10])
-AFD_SCORE = np.array([975, 950, 900, 860, 775, 700, 600])
-
-
-def afd_score(prob: np.ndarray, legit_prob: np.ndarray) -> np.ndarray:
-    """Return a 0-1000 score calibrated to Amazon Fraud Detector's published score-to-FPR table.
-
-    A cut then means what it means in AFD (score 900 approx 2% false-alarm rate). For each
-    record, the false-positive rate at its probability is measured against a reference set
-    of legitimate probabilities, then mapped through AFD's seven anchor points; outside the
-    published range (FPR < 0.5% or > 10%) the score extends linearly to 1000 and to 0. On
-    held-out data this reproduces AFD's table within the train/test generalization gap.
-    """
-    legit = np.sort(legit_prob)
-    fpr = 1 - np.searchsorted(legit, prob, side="left") / len(legit)  # P(legit >= prob)
-    s = np.empty(len(prob))
+def _fpr_to_score(fpr: np.ndarray) -> np.ndarray:
+    """Map a false-positive rate to the 0-1000 score through AFD's anchors (the score's definition)."""
+    fpr = np.asarray(fpr, float)
+    s = np.empty_like(fpr)
     lo = fpr <= AFD_FPR[0]
     s[lo] = 1000 - (fpr[lo] / AFD_FPR[0]) * (1000 - AFD_SCORE[0])
     mid = (fpr > AFD_FPR[0]) & (fpr <= AFD_FPR[-1])
     s[mid] = np.interp(fpr[mid], AFD_FPR, AFD_SCORE)
     hi = fpr > AFD_FPR[-1]
     s[hi] = AFD_SCORE[-1] * (1 - fpr[hi]) / (1 - AFD_FPR[-1])
-    return np.round(s).astype(int)
+    return s
+
+
+class FPRCalibrator(BaseEstimator, TransformerMixin):
+    """Map a probability of fraud to a 0-1000 score calibrated to Amazon Fraud Detector's table.
+
+    fit freezes the legitimate-probability reference from the training sample; transform measures
+    each probability's false-positive rate against that reference (the share of legitimate records
+    it outranks) and maps it through AFD's seven anchor points, so a score of 900 is a 2% false-alarm
+    rate, reproducing AFD's calibration on our own model. Fitted instances pickle, so the calibration
+    ships with the model.
+    """
+
+    def fit(self, proba, y):
+        """Freeze the sorted legitimate probabilities from the training scores and labels."""
+        proba = np.asarray(proba, float).ravel()
+        y = np.asarray(y).ravel()
+        self.legit_ = np.sort(proba[y == 0])
+        return self
+
+    def transform(self, proba) -> np.ndarray:
+        """Score each probability: its false-positive rate against the reference, mapped through AFD's anchors."""
+        proba = np.asarray(proba, float).ravel()
+        fpr = 1 - np.searchsorted(self.legit_, proba, side="left") / len(self.legit_)
+        return np.round(_fpr_to_score(fpr)).astype(int).reshape(-1, 1)
+
+
+class ProbaExtractor(BaseEstimator, TransformerMixin):
+    """Turn a fitted probabilistic classifier into a transformer: features in, P(fraud) out.
+
+    Lets a classifier sit before FPRCalibrator in a Pipeline, e.g.
+    make_pipeline(ProbaExtractor(model), FPRCalibrator()).fit(X_train, y_train). fit is a no-op.
+    """
+
+    def __init__(self, model):
+        self.model = model
+
+    def fit(self, X, y=None):
+        """No-op: the wrapped classifier is already fitted."""
+        return self
+
+    def transform(self, X) -> np.ndarray:
+        """Return P(fraud) as a column so a downstream transformer receives a 2-D array."""
+        return self.model.predict_proba(X)[:, 1].reshape(-1, 1)
 
 
 def main() -> None:
-    """Score the training rows, apply the band policy, report the split, plot it."""
+    """Score the test rows with the AFD-calibrated score, band them, report the split, plot it."""
     with open(f"{CHAPTER_DIR}/artifacts/model_meta.json") as f:
-        meta = json.load(f)
-    features, review_cut = meta["features"], meta["threshold"]
+        features = json.load(f)["features"]
     model = CatBoostClassifier()
     model.load_model(f"{CHAPTER_DIR}/artifacts/model.cbm")
+    train = pd.read_csv(f"{CHAPTER_DIR}/data/split/train.csv")
+    test = pd.read_csv(f"{CHAPTER_DIR}/data/split/test.csv")
 
-    df = pd.read_csv(f"{CHAPTER_DIR}/data/split/train.csv")
-    score = model.predict_proba(df[features])[:, 1]
-    outcome = np.array([decide(s, review_cut) for s in score])
-    counts = {o: int((outcome == o).sum()) for o in ("approve", "investigate", "block")}
-    print(f"review_cut {review_cut:.4f}, block_cut {BLOCK_CUT}: {counts}")
+    calibrator = FPRCalibrator().fit(
+        model.predict_proba(train[features])[:, 1], train["is_fraud"].values
+    )
+    score = calibrator.transform(model.predict_proba(test[features])[:, 1]).ravel()
+    outcome = np.array([decide(s) for s in score])
+    counts = {o: int((outcome == o).sum()) for o in ("approve", "investigate", "fraud")}
+    print(f"review_cut {REVIEW_CUT} (7% FPR), fraud_cut {FRAUD_CUT} (2% FPR): {counts}")
 
-    # score shown on a 0-1000 axis (display only; the decision uses the probability)
-    s = (score * 1000).clip(0, 1000)
-    lo, hi = review_cut * 1000, BLOCK_CUT * 1000
+    plt.rcParams.update({"font.family": "Arial", "font.size": 15})
+    fig, ax = plt.subplots(figsize=(12, 5.5), dpi=150)
     bins = np.linspace(0, 1000, 60)
-    plt.figure(figsize=(11, 4.2), dpi=150)
-    ax = plt.gca()
-    for m0, m1, c in [(0, lo, APPROVE), (lo, hi, INVESTIGATE), (hi, 1000, BLOCK)]:
-        plt.hist(s[(s >= m0) & (s < m1)], bins=bins, color=c, alpha=0.9)
-    for x in (lo, hi):
-        plt.axvline(x, color="#555", ls="--", lw=1.2)
-    y = plt.ylim()[1] * 0.6
-    for x, label, c in [
-        (lo / 2, f"approve\n{counts['approve']:,}", APPROVE),
-        ((lo + hi) / 2, f"investigate\n{counts['investigate']:,}", INVESTIGATE),
-        ((hi + 1000) / 2, f"block\n{counts['block']:,}", BLOCK),
+    for lo, hi, color in [
+        (0, REVIEW_CUT, APPROVE),
+        (REVIEW_CUT, FRAUD_CUT, INVESTIGATE),
+        (FRAUD_CUT, 1001, FRAUD),
     ]:
-        plt.text(x, y, label, ha="center", color=c, fontsize=11, weight="bold")
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    plt.yscale("log")
-    plt.xlabel("Fraud score (0-1000)")
-    plt.ylabel("Transactions (log)")
-    plt.title("From a threshold to a policy: score bands and outcomes")
+        ax.hist(score[(score >= lo) & (score < hi)], bins=bins, color=color)
+    for x in (REVIEW_CUT, FRAUD_CUT):
+        ax.axvline(x, color="#444", ls="--", lw=1.4)
+    ax.set_ylim(0, ax.get_ylim()[1] * 1.30)
+    ax.legend(
+        handles=[
+            mpatches.Patch(color=APPROVE, label=f"approve {counts['approve']:,}"),
+            mpatches.Patch(
+                color=INVESTIGATE,
+                label=f"investigate {counts['investigate']:,} (>= {REVIEW_CUT}, a 7% false-alarm rate)",
+            ),
+            mpatches.Patch(
+                color=FRAUD,
+                label=f"fraud {counts['fraud']:,} (>= {FRAUD_CUT}, a 2% false-alarm rate)",
+            ),
+        ],
+        loc="upper left",
+        frameon=False,
+        fontsize=15,
+    )
+    ax.set_xlim(0, 1000)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.set_xlabel("Fraud score (0-1000)", fontsize=16)
+    ax.set_ylabel("Transactions", fontsize=16)
+    ax.set_title("Fraud score distribution, with its decision bands", fontsize=18)
+    ax.tick_params(labelsize=14)
     plt.tight_layout()
     os.makedirs(f"{CHAPTER_DIR}/artifacts", exist_ok=True)
     plt.savefig(f"{CHAPTER_DIR}/artifacts/score_bands.png")
