@@ -39,24 +39,22 @@ def run(
     """
     if current_scores is None:
         current_scores = score(model, current)
-    metrics: dict = {"feature_psi": {}}
     violations = []
 
     # Feature PSI the ML way: bin each feature at the model's own split borders.
     detector = PSIDetector.from_catboost(model, reference, NUMERIC, CATEGORICAL)
-    metrics["feature_psi"] = detector.psi(current)
-    for col, value in metrics["feature_psi"].items():
-        if value > PSI_MAJOR:
-            violations.append(
-                {
-                    "monitor": "data-quality",
-                    "feature": col,
-                    "metric": "psi",
-                    "value": value,
-                    "threshold": PSI_MAJOR,
-                }
-            )
-
+    metrics: dict = {"feature_psi": detector.psi(current)}
+    violations.extend(
+        {
+            "monitor": "data-quality",
+            "feature": col,
+            "metric": "psi",
+            "value": value,
+            "threshold": PSI_MAJOR,
+        }
+        for col, value in metrics["feature_psi"].items()
+        if value > PSI_MAJOR
+    )
     # Score PSI: the score has no model borders, so bin it into reference quantiles.
     score_ref = pd.DataFrame({"score": score(model, reference)})
     metrics["score_psi"] = PSIDetector.from_reference(score_ref, ["score"]).psi(
