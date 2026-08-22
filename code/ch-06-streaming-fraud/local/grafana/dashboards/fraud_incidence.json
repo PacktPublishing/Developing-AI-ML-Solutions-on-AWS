@@ -1,82 +1,467 @@
 {
   "uid": "fraud-incidence",
   "title": "Fraud incidence and caseload",
-  "tags": ["fraud"],
+  "tags": [
+    "fraud"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "30s",
-  "time": { "from": "now-24h", "to": "now" },
-  "templating": { "list": [] },
-  "annotations": { "list": [] },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
       "type": "stat",
       "title": "Blocked (window)",
-      "datasource": { "type": "postgres", "uid": "warehouse" },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
-      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "red", "value": null }] } }, "overrides": [] },
+      "datasource": {
+        "type": "postgres",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
       "targets": [
-        { "refId": "A", "format": "table", "rawSql": "SELECT count(*) AS blocked FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time)" }
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS blocked FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time)"
+        }
       ]
     },
     {
       "type": "stat",
       "title": "Decisions (window)",
-      "datasource": { "type": "postgres", "uid": "warehouse" },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+      "datasource": {
+        "type": "postgres",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
       "targets": [
-        { "refId": "A", "format": "table", "rawSql": "SELECT count(*) AS decisions FROM fraud_decisions WHERE $__timeFilter(event_time)" }
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS decisions FROM fraud_decisions WHERE $__timeFilter(event_time)"
+        }
       ]
     },
     {
       "type": "stat",
       "title": "Avg fraud score (blocked)",
-      "datasource": { "type": "postgres", "uid": "warehouse" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "purple" }, "decimals": 4 }, "overrides": [] },
+      "datasource": {
+        "type": "postgres",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "decimals": 4
+        },
+        "overrides": []
+      },
       "targets": [
-        { "refId": "A", "format": "table", "rawSql": "SELECT round(avg(score)::numeric(10,4), 4) AS avg_score FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time)" }
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT round(avg(score)::numeric(10,4), 4) AS avg_score FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time)"
+        }
       ]
     },
     {
       "type": "stat",
       "title": "Analysts needed (peak, 4/hr)",
-      "datasource": { "type": "postgres", "uid": "warehouse" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "orange" } }, "overrides": [] },
+      "datasource": {
+        "type": "postgres",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      },
       "targets": [
-        { "refId": "A", "format": "table", "rawSql": "SELECT ceil(max(c) / 4.0) AS analysts FROM (SELECT count(*) AS c FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time) GROUP BY date_trunc('hour', event_time)) h" }
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT ceil(max(c) / 4.0) AS analysts FROM (SELECT count(*) AS c FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time) GROUP BY date_trunc('hour', event_time)) h"
+        }
       ]
     },
     {
       "type": "timeseries",
       "title": "Fraud blocks per 5 minutes (the caseload the desk works)",
-      "datasource": { "type": "postgres", "uid": "warehouse" },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 4 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "auto" },
-          "color": { "mode": "fixed", "fixedColor": "red" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "orange", "value": 8 }] }
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto"
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 8
+              }
+            ]
+          }
         },
         "overrides": []
       },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
       "targets": [
-        { "refId": "A", "format": "time_series", "rawSql": "SELECT $__timeGroupAlias(event_time, '5m'), count(*) AS blocks FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time) GROUP BY 1 ORDER BY 1" }
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(event_time, '5m'), count(*) AS blocks FROM fraud_decisions WHERE decision = 'block' AND $__timeFilter(event_time) GROUP BY 1 ORDER BY 1"
+        }
       ]
     },
     {
       "type": "timeseries",
       "title": "All decisions per 5 minutes, by outcome",
-      "datasource": { "type": "postgres", "uid": "warehouse" },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 13 },
-      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "datasource": {
+        "type": "postgres",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
       "targets": [
-        { "refId": "A", "format": "time_series", "rawSql": "SELECT $__timeGroupAlias(event_time, '5m'), decision AS metric, count(*) AS n FROM fraud_decisions WHERE $__timeFilter(event_time) GROUP BY 1, decision ORDER BY 1" }
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(event_time, '5m'), decision AS metric, count(*) AS n FROM fraud_decisions WHERE $__timeFilter(event_time) GROUP BY 1, decision ORDER BY 1"
+        }
       ]
+    },
+    {
+      "type": "row",
+      "title": "Score-drift monitoring: live scores vs the training reference",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "panels": [],
+      "id": 100
+    },
+    {
+      "type": "timeseries",
+      "id": 103,
+      "title": "Live fraud score, 15-minute average (the fraud campaign shows as the spike on the right)",
+      "description": "Mean live score over the day. A sustained rise is the first sign the score is drifting; the panels below say by how much and why.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "datasource": {
+            "type": "postgres",
+            "uid": "warehouse"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(event_time,'15m'), avg(afd_score) AS \"mean live score\" FROM score_monitor WHERE $__timeFilter(event_time) GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never"
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "type": "barchart",
+      "title": "Score distribution: live vs training reference",
+      "description": "The fixed training score distribution (blue) and the live score distribution (red). When live pulls to the right of training, the score is drifting up.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT r.bucket AS score, r.train_share AS training, coalesce(l.live_share,0) AS live FROM score_reference r LEFT JOIN (SELECT (afd_score/100)*100 AS bucket, count(*)::float/sum(count(*)) over () AS live_share FROM score_monitor GROUP BY 1) l ON r.bucket=l.bucket ORDER BY r.bucket",
+          "datasource": {
+            "type": "postgres",
+            "uid": "warehouse"
+          }
+        }
+      ],
+      "options": {
+        "orientation": "vertical",
+        "xField": "score",
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80
+          },
+          "unit": "short",
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "training"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "live"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      },
+      "id": 101
+    },
+    {
+      "type": "barchart",
+      "title": "What moved the score: per-feature drift attribution (DBShap)",
+      "description": "Shapley attribution of the score drift to each input feature's distribution shift (label-free virtual drift). Bars sum to the total mean-score drift.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT feature, contribution FROM drift_attribution ORDER BY contribution",
+          "datasource": {
+            "type": "postgres",
+            "uid": "warehouse"
+          }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "xField": "feature",
+        "showValue": "always",
+        "stacking": "none",
+        "fullHighlight": false,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "axisLabel": "score points moved (0-1000)"
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "unit": "none",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "id": 102
     }
   ]
 }

@@ -74,6 +74,11 @@ query:
 		-c "SELECT decision, COUNT(*), ROUND(AVG(score)::numeric, 4) AS avg_score \
 		FROM fraud_decisions GROUP BY decision"
 
+# seed the score-drift monitoring tables (reference, live scores, DBShap attribution)
+# the Grafana board's monitoring row reads
+monitor:
+	uv run src/scoring/monitoring.py
+
 # stop everything this chapter started: the compose stack and the serving
 # container, which runs outside compose the way `make serve` started it
 down:
