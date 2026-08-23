@@ -20,7 +20,6 @@ import os
 from pathlib import Path
 
 import pandas as pd
-
 from attribution import NDCG_MIN, analysis_json
 from cloudwatch import NAMESPACE, get_cloudwatch
 from model import load
@@ -55,14 +54,27 @@ def main() -> None:
         default=None,
         help="directory of Batch Transform .out predictions for the current batch",
     )
+    p.add_argument(
+        "--capture",
+        default=None,
+        help="SageMaker Data Capture records (local dir/file or s3:// prefix) to monitor "
+        "live endpoint traffic instead of --current + --scores",
+    )
     p.add_argument("--out", type=Path, default=Path("outputs/monitoring"))
     a = p.parse_args()
 
     model = load(a.model)
-    reference, current = pd.read_csv(a.reference), pd.read_csv(a.current)
-    report = run(
-        model, reference, current, current_scores=transform_scores(a.scores, current)
-    )
+    reference = pd.read_csv(a.reference)
+    if a.capture:
+        # live path: reconstruct the current batch and its scores from captured traffic
+        from capture import read_capture
+
+        current, current_scores = read_capture(a.capture)
+    else:
+        # batch path: the current CSV, scored by the Batch Transform step if it ran
+        current = pd.read_csv(a.current)
+        current_scores = transform_scores(a.scores, current)
+    report = run(model, reference, current, current_scores=current_scores)
 
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "baseline_analysis.json").write_text(
