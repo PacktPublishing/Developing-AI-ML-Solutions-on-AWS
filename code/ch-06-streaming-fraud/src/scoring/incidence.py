@@ -54,15 +54,42 @@ def main() -> None:
     )
 
     # -------------------------------------------------------------------------------
-    # Fit check: is fraud arrival Poisson? Test per minute, where fraud is rare
+    # Fit check with CatBoost: fit a Poisson regressor on the per-minute counts, read its
+    # average rate, and compare the observed arrivals to Poisson at that rate. Fraud is rare
     # (lambda < 1), the classic rare-event shape with P(0) largest.
     # -------------------------------------------------------------------------------
     per_min = (
-        df.assign(m=df["event_time"].dt.floor("min")).groupby("m")["is_fraud"].sum()
+        df.assign(m=df["event_time"].dt.floor("min"))
+        .groupby("m")
+        .agg(FraudCount=("is_fraud", "sum"), TxCount=("is_fraud", "count"))
+        .reset_index()
     )
-    lam = per_min.mean()
-    k = np.arange(0, int(per_min.max()) + 1)
-    observed = np.array([(per_min == i).mean() for i in k])
+    per_min["HourOfDay"] = per_min["m"].dt.hour
+    per_min["LogTxCount"] = np.log(per_min["TxCount"].clip(lower=1e-2))
+    minute_feats = ["LogTxCount", "HourOfDay"]
+    minute_model = CatBoostRegressor(
+        loss_function="Poisson",
+        iterations=300,
+        learning_rate=0.05,
+        depth=4,
+        random_seed=42,
+        verbose=0,
+        allow_writing_files=False,
+    )
+    minute_model.fit(
+        Pool(
+            per_min[minute_feats],
+            per_min["FraudCount"],
+            cat_features=[minute_feats.index("HourOfDay")],
+        )
+    )
+    # the model's average predicted rate is the CatBoost-Poisson lambda for the arrival check
+    lam = minute_model.predict(
+        Pool(per_min[minute_feats], cat_features=[minute_feats.index("HourOfDay")])
+    ).mean()
+    counts = per_min["FraudCount"]
+    k = np.arange(0, int(counts.max()) + 1)
+    observed = np.array([(counts == i).mean() for i in k])
 
     plt.figure(figsize=(8, 4.5), dpi=150)
     ax = plt.gca()
@@ -74,19 +101,19 @@ def main() -> None:
         lw=2.5,
         marker="o",
         ms=6,
-        label=f"Poisson (lambda = {lam:.2f})",
+        label=f"CatBoost-Poisson (lambda = {lam:.2f})",
     )
     ax.spines[["top", "right"]].set_visible(False)
     ax.set_xticks(k)
     ax.set_xlabel("fraud events per minute", fontsize=14)
     ax.set_ylabel("probability", fontsize=14)
-    ax.set_title("Per-minute fraud arrivals: observed vs Poisson", fontsize=15)
+    ax.set_title("Per-minute fraud arrivals: observed vs CatBoost-Poisson", fontsize=15)
     ax.legend(frameon=False, fontsize=13)
     plt.tight_layout()
     os.makedirs(f"{CHAPTER_DIR}/artifacts", exist_ok=True)
     plt.savefig(f"{CHAPTER_DIR}/artifacts/poisson_fit.png")
     print(
-        f"per-minute lambda {lam:.3f}, variance {per_min.var():.3f}, P(0) {poisson.pmf(0, lam):.3f}"
+        f"per-minute lambda {lam:.3f}, variance {counts.var():.3f}, P(0) {poisson.pmf(0, lam):.3f}"
     )
 
     # -------------------------------------------------------------------------------
