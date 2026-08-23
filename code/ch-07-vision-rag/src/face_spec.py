@@ -1,12 +1,12 @@
 """The chapter's inference contract, served two ways.
 
-One `InferenceSpec` defines what it means to embed, enrol, and match a face. Locally
+One `InferenceSpec` defines what it means to embed, register, and match a face. Locally
 ModelBuilder serves it with Mode.IN_PROCESS, which is the only local path that reaches
 an Apple GPU; on AWS the same class runs inside the serving container behind an
 asynchronous SageMaker endpoint on a GPU instance. The code that answers is identical,
 which is the parity claim this chapter can actually make.
 
-    {"op": "enrol",   "keys": [...]}                          # batched, the GPU case
+    {"op": "register",   "keys": [...]}                          # batched, the GPU case
     {"op": "match",   "key": "probes/x.jpg", "claim": "..."}  # 1:N verification
     {"op": "compare", "a": "a.jpg", "b": "b.jpg", "explain": true}
 """
@@ -66,7 +66,7 @@ class FaceEmbeddingSpec(InferenceSpec):
         return embedder
 
     def invoke(self, input_object: dict | str | bytes, model) -> dict:
-        """Dispatch one request to enrol, match, or compare.
+        """Dispatch one request to register, match, or compare.
 
         The two servers deliver the payload differently: the container parses the JSON
         body and passes a dict, while the SDK's in-process server passes whatever its
@@ -75,14 +75,18 @@ class FaceEmbeddingSpec(InferenceSpec):
         if isinstance(input_object, str | bytes | bytearray):
             input_object = json.loads(input_object)
         op = input_object.get("op", "match")
-        handler = {"enrol": self._enrol, "match": self._match, "compare": self._compare}
+        handler = {
+            "register": self._register,
+            "match": self._match,
+            "compare": self._compare,
+        }
         if op not in handler:
             return {"error": f"unknown op {op!r}"}
         result = handler[op](input_object, model)
         result["device"] = str(model.device)
         return result
 
-    def _enrol(self, params: dict, model) -> dict:
+    def _register(self, params: dict, model) -> dict:
         """Embed many photos in one batch and store them: the operation a GPU rewards."""
         import kycstore
 
@@ -95,19 +99,19 @@ class FaceEmbeddingSpec(InferenceSpec):
         if not all(isinstance(k, str) and k for k in keys):
             return {"error": "keys must be a list of object keys", "batch": len(keys)}
         vectors = model.get_embeddings([read_image(k) for k in keys])
-        enrolled, skipped = 0, []
+        registered, skipped = 0, []
         with kycstore.connect() as conn:
             kycstore.ensure_schema(conn)
             for key, vector in zip(keys, vectors):
                 if vector is None:
                     skipped.append(key)
                     continue
-                parts = key.split("/")  # enrolled/{subject}/{file}
+                parts = key.split("/")  # registered/{subject}/{file}
                 kycstore.insert(
                     conn, parts[1] if len(parts) > 2 else parts[0], key, vector
                 )
-                enrolled += 1
-        return {"enrolled": enrolled, "skipped": skipped, "batch": len(keys)}
+                registered += 1
+        return {"registered": registered, "skipped": skipped, "batch": len(keys)}
 
     def _match(self, params: dict, model) -> dict:
         """1:N search, plus the claim that turns a search into a verification."""

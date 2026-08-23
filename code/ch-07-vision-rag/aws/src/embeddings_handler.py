@@ -1,8 +1,8 @@
-"""Enrolment trigger: hand new identity photos to the asynchronous embedding endpoint.
+"""Registration trigger: hand new identity photos to the asynchronous embedding endpoint.
 
-An upload under `enrolled/{subject}/` fires this function, which does no inference of
+An upload under `registered/{subject}/` fires this function, which does no inference of
 its own. It stages a request in S3 and calls the SageMaker endpoint asynchronously, so
-every embedding in the system, enrolment and verification alike, is produced by the same
+every embedding in the system, registration and verification alike, is produced by the same
 model on the same GPU. The function is a few lines of boto3, which is why it ships as a
 zip rather than a container.
 """
@@ -35,14 +35,14 @@ def lambda_handler(event, context):
         return {"queued": 0}
 
     s3 = boto3.client("s3")
-    # The same id names the staged request and the notification, so an enrolment can
+    # The same id names the staged request and the notification, so an registration can
     # be followed through the status table exactly like a verification.
     request_id = str(uuid.uuid4())
     request_key = f"async-in/{request_id}.json"
     s3.put_object(
         Bucket=BUCKET,
         Key=request_key,
-        Body=json.dumps({"op": "enrol", "keys": keys}).encode(),
+        Body=json.dumps({"op": "register", "keys": keys}).encode(),
     )
 
     # Asynchronous: the endpoint may be at zero instances, in which case this request

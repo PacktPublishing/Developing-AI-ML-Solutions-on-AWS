@@ -1,5 +1,5 @@
-# The enrolment path, which is asynchronous twice over: an ID photo landing under the
-# enrolled/ prefix triggers a Lambda that runs no model, and that Lambda hands the key to
+# The registration path, which is asynchronous twice over: an ID photo landing under the
+# registered/ prefix triggers a Lambda that runs no model, and that Lambda hands the key to
 # the asynchronous endpoint, which embeds on the GPU and writes one row to the faces table.
 Diagram:
   DefinitionFiles:
@@ -28,7 +28,7 @@ Diagram:
     Bucket:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Simple Storage Service (Amazon S3)"
-      Title: "Amazon S3\nenrolled/{subject}/"
+      Title: "Amazon S3\nregistered/{subject}/"
 
     Stage:
       Type: AWS::Diagram::HorizontalStack
@@ -36,7 +36,7 @@ Diagram:
     Embed:
       Type: AWS::Diagram::Resource
       Preset: "AWS Lambda"
-      Title: "enrolment trigger\nLambda (no model)"
+      Title: "registration trigger\nLambda (no model)"
     Gpu:
       Type: AWS::Diagram::Resource
       Preset: "Amazon SageMaker AI"

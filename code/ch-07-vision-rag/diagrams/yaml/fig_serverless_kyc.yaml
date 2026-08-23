@@ -1,4 +1,4 @@
-# The deployed KYC service, at service level: two paths through one embedder. Enrolment
+# The deployed KYC service, at service level: two paths through one embedder. Registration
 # runs on an S3 event, verification on a submission the application polls for. The only
 # model in the system is the asynchronous GPU endpoint in the middle; both paths reach it.
 Diagram:
@@ -35,7 +35,7 @@ Diagram:
     Trigger:
       Type: AWS::Diagram::Resource
       Preset: "AWS Lambda"
-      Title: "enrolment trigger\nno model"
+      Title: "registration trigger\nno model"
     Status:
       Type: AWS::Diagram::Resource
       Preset: "Amazon DynamoDB"

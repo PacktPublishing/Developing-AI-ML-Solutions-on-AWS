@@ -1,4 +1,4 @@
-# The same KYC loop on your laptop. Compose runs one container, pgvector; enrol.py and match.py
+# The same KYC loop on your laptop. Compose runs one container, pgvector; register.py and match.py
 # run on the host and embed on CPU, exactly as the Lambda handlers do. Files stand in for S3.
 Diagram:
   DefinitionFiles:
@@ -25,11 +25,11 @@ Diagram:
     # Column 1 and column 2 are both two-item stacks, so each lane runs dead straight.
     Files:
       Type: AWS::Diagram::VerticalStack
-      Children: [Enrolled, Probe]
-    Enrolled:
+      Children: [Registered, Probe]
+    Registered:
       Type: AWS::Diagram::Resource
       Preset: "Image"
-      Title: "enrolled ID photos\nfaces/enrolled/"
+      Title: "registered ID photos\nfaces/registered/"
     Probe:
       Type: AWS::Diagram::Resource
       Preset: "Image"
@@ -41,7 +41,7 @@ Diagram:
     EnrolPy:
       Type: AWS::Diagram::Resource
       Preset: PyTorch
-      Title: "enrol.py\nFaceNet on CPU"
+      Title: "register.py\nFaceNet on CPU"
     MatchPy:
       Type: AWS::Diagram::Resource
       Preset: PyTorch
@@ -59,7 +59,7 @@ Diagram:
       Title: "pgvector\nlocalhost:5507"
 
   Links:
-    - {Source: Enrolled, SourcePosition: E, Target: EnrolPy, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Registered, SourcePosition: E, Target: EnrolPy, TargetPosition: W, TargetArrowHead: {Type: Open}}
     - {Source: Probe, SourcePosition: E, Target: MatchPy, TargetPosition: W, TargetArrowHead: {Type: Open}}
     - {Source: EnrolPy, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: MatchPy, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

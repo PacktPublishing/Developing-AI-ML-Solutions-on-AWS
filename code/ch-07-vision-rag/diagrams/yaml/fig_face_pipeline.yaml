@@ -1,5 +1,5 @@
 # How one photograph becomes a comparable vector: detect, align, embed. The same three steps
-# run at enrolment and at verification, which is why a selfie and an ID photo are comparable.
+# run at registration and at verification, which is why a selfie and an ID photo are comparable.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
