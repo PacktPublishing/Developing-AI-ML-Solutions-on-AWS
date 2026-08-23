@@ -26,6 +26,21 @@ Parameters:
       - "false"
     Default: "true"
 
+  EnableGrafana:
+    Description: |
+      "true" runs the fraud incidence dashboard as a Grafana service on Fargate, wired to the Redshift Serverless workgroup this stack builds. Needs the warehouse. The service starts at desired count 0; `make grafana-up` scales it to one task. "false" skips it.
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "true"
+
+  GrafanaAllowedCidr:
+    Description: |
+      The CIDR allowed to reach Grafana on port 3000. Defaults to a closed placeholder; `make grafana` fills it with the deployer's address so the board is reachable from this machine only.
+    Type: String
+    Default: 127.0.0.1/32
+
 Conditions:
   HasWarehouse: !Equals
     - !Ref EnableWarehouse
@@ -34,6 +49,12 @@ Conditions:
   NoWarehouse: !Equals
     - !Ref EnableWarehouse
     - "false"
+
+  HasGrafana: !And
+    - !Condition HasWarehouse
+    - !Equals
+      - !Ref EnableGrafana
+      - "true"
 
 Transform: AWS::Serverless-2016-10-31
 
@@ -96,6 +117,11 @@ Resources:
     UpdateReplacePolicy: Delete
     Type: AWS::S3::Bucket
     Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       LifecycleConfiguration:
         Rules:
           - Id: expire-staged-batches
@@ -490,6 +516,217 @@ Resources:
         CompressionFormat: UNCOMPRESSED
     Condition: NoWarehouse
 
+  # ---------------------------------------------------------------------------
+  # The fraud incidence dashboard: Grafana on Fargate, the cloud counterpart of
+  # the local grafana service. Same provisioning and dashboard JSON, baked into
+  # an image and pointed at the Redshift Serverless workgroup above.
+  # ---------------------------------------------------------------------------
+
+  # Where the Grafana image lands. EmptyOnDelete so teardown leaves no layers.
+  GrafanaRepo:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ch06-grafana
+      EmptyOnDelete: true
+    Condition: HasGrafana
+
+  # CodeBuild bakes the provisioning + dashboard into grafana/grafana and pushes
+  # to ECR, the same developer -> S3 -> CodeBuild -> ECR path as the scoring image.
+  GrafanaBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build-grafana-image
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub ${StagingBucket.Arn}/ch06/source/*
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !GetAtt GrafanaRepo.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/ch06-grafana-build*
+    Condition: HasGrafana
+
+  GrafanaBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: ch06-grafana-build
+      ServiceRole: !GetAtt GrafanaBuildRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      TimeoutInMinutes: 30
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REGISTRY
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+          - Name: IMAGE_URI
+            Value: !Sub ${GrafanaRepo.RepositoryUri}:latest
+      Source:
+        Type: S3
+        Location: !Sub ${StagingBucket}/ch06/source/grafana.zip
+    Condition: HasGrafana
+
+  GrafanaLogGroup:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/ch06-grafana
+      RetentionInDays: 1
+    Condition: HasGrafana
+
+  GrafanaCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: ch06-grafana
+    Condition: HasGrafana
+
+  # The task execution role: pull the image, write logs, and read the warehouse
+  # password from Secrets Manager to inject it into the container.
+  GrafanaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: read-warehouse-secret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref WarehouseSecret
+    Condition: HasGrafana
+
+  # Grafana reaches Redshift over 5439 inside the VPC; the browser reaches Grafana
+  # over 3000 from the deployer's address only.
+  GrafanaSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Grafana on Fargate, 3000 from the deployer only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: !Ref GrafanaAllowedCidr
+    Condition: HasGrafana
+
+  # Let the Grafana task query the warehouse; the base WarehouseSg only admits the
+  # Firehose CIDR, so add the Grafana security group as a second source on 5439.
+  WarehouseFromGrafana:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt WarehouseSg.GroupId
+      IpProtocol: tcp
+      FromPort: 5439
+      ToPort: 5439
+      SourceSecurityGroupId: !GetAtt GrafanaSg.GroupId
+    Condition: HasGrafana
+
+  GrafanaTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: ch06-grafana
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt GrafanaExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: grafana
+          Image: !Sub ${GrafanaRepo.RepositoryUri}:latest
+          PortMappings:
+            - ContainerPort: 3000
+          Environment:
+            - Name: GF_AUTH_ANONYMOUS_ENABLED
+              Value: "true"
+            - Name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              Value: Admin
+            - Name: GF_AUTH_DISABLE_LOGIN_FORM
+              Value: "true"
+            - Name: WAREHOUSE_HOST
+              Value: !GetAtt FraudWorkgroup.Workgroup.Endpoint.Address
+            - Name: WAREHOUSE_PORT
+              Value: "5439"
+            - Name: WAREHOUSE_USER
+              Value: analyst
+            - Name: WAREHOUSE_DB
+              Value: fraud
+            - Name: WAREHOUSE_SSLMODE
+              Value: require
+          Secrets:
+            - Name: WAREHOUSE_PASSWORD
+              ValueFrom: !Sub '${WarehouseSecret}:password::'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref GrafanaLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: grafana
+    Condition: HasGrafana
+
+  GrafanaService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: ch06-grafana
+      Cluster: !Ref GrafanaCluster
+      LaunchType: FARGATE
+      DesiredCount: 0
+      TaskDefinition: !Ref GrafanaTaskDef
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref SubnetA
+            - !Ref SubnetB
+            - !Ref SubnetC
+          SecurityGroups:
+            - !GetAtt GrafanaSg.GroupId
+    Condition: HasGrafana
+
 Outputs:
   ScoringRepoUri:
     Description: push the serving image here
@@ -516,3 +753,18 @@ Outputs:
     Description: warehouse admin secret (username analyst, key password)
     Value: !Ref WarehouseSecret
     Condition: HasWarehouse
+
+  GrafanaRepoUri:
+    Description: push the Grafana image here (make grafana-image)
+    Value: !GetAtt GrafanaRepo.RepositoryUri
+    Condition: HasGrafana
+
+  GrafanaClusterName:
+    Description: ECS cluster running the dashboard
+    Value: !Ref GrafanaCluster
+    Condition: HasGrafana
+
+  GrafanaServiceName:
+    Description: the Grafana Fargate service, scaled by make grafana-up / grafana-down
+    Value: !GetAtt GrafanaService.Name
+    Condition: HasGrafana

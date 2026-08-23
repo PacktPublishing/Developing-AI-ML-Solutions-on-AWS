@@ -1,6 +1,6 @@
 version: 0.2
 
-# Builds the facenet Lambda image natively on amd64 in CodeBuild and pushes it to ECR.
+# Builds the facenet SageMaker serving image natively on amd64 in CodeBuild and pushes it to ECR.
 # ECR_REGISTRY and IMAGE_URI come from the CodeBuild project env.
 phases:
   pre_build:

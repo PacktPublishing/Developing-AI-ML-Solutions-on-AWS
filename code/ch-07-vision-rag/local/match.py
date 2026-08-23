@@ -14,8 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from face_embedder import FaceEmbedder
-from kycdb import connect
+from face_embedder import FaceEmbedder, best_devices
+from kycstore import connect, search
 
 MATCH = 0.70
 
@@ -28,19 +28,16 @@ def main() -> None:
     ap.add_argument("--claim", default=None, help="the subject the probe claims to be")
     args = ap.parse_args()
 
-    emb = FaceEmbedder(device="cpu").get_embedding(Path(args.probe).read_bytes())
+    device, detector_device = best_devices()
+    emb = FaceEmbedder(device=device, detector_device=detector_device).get_embedding(
+        Path(args.probe).read_bytes()
+    )
     if emb is None:
         print("no face detected in the probe")
         return
 
-    vec = str(emb.tolist())
-    with connect().cursor() as cur:
-        cur.execute(
-            "SELECT subject, (1 - (embedding <=> %s::vector)) AS score "
-            "FROM faces ORDER BY embedding <=> %s::vector LIMIT %s",
-            (vec, vec, args.k),
-        )
-        matches = [(r[0], round(float(r[1]), 4)) for r in cur.fetchall()]
+    with connect() as conn:
+        matches = [(m["subject"], m["score"]) for m in search(conn, emb, args.k)]
 
     top = matches[0] if matches else None
     if args.claim is None:

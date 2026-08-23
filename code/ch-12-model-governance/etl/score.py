@@ -1,6 +1,3 @@
-# /// script
-# dependencies = []
-# ///
 """Route a batch of applications through the gateway and summarise the split.
 
 POSTs each application to the gateway's /score and tallies which variant served it and

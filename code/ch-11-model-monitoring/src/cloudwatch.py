@@ -51,7 +51,7 @@ class LocalCloudWatch:
         self._alarms[AlarmName] = {
             "Namespace": Namespace,
             "MetricName": MetricName,
-            "Threshold": float(Threshold),
+            "Threshold": Threshold,
             "ComparisonOperator": ComparisonOperator,
         }
         return {}

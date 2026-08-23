@@ -1,0 +1,64 @@
+# SageMaker's third deployment mode. SAGEMAKER_ENDPOINT and LOCAL_CONTAINER both put the
+# model in a container; Mode.IN_PROCESS hosts the same InferenceSpec in the caller's own
+# Python process, which is the only one of the three that can reach an Apple GPU, because
+# Docker Desktop passes no Metal device through to a Linux container. The detector stays
+# on the CPU: MTCNN has no MPS kernel for the pooling its image pyramid needs.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Host]
+
+    Host:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic group"
+      Direction: vertical
+      Title: "SageMaker ModelBuilder (Mode.IN_PROCESS)"
+      Children: [Top, Bottom]
+
+    # read left to right, then drop down and read right to left
+    Top:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Request, Server, Detect]
+    Bottom:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Store, Vector, Model]
+
+    Request:
+      Type: AWS::Diagram::Resource
+      Preset: "Document"
+      Title: "request\n{op, key, claim}"
+    Server:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "SageMaker InProcessServer\n:9007"
+    Detect:
+      Type: AWS::Diagram::Resource
+      Preset: PyTorch
+      Title: "MTCNN detect\nCPU (no MPS kernel)"
+    Model:
+      Type: AWS::Diagram::Resource
+      Preset: PyTorch
+      Title: "InceptionResnetV1\nApple GPU (MPS)"
+    Vector:
+      Type: AWS::Diagram::Resource
+      Preset: "Analyzer"
+      Title: "embedding\n512 numbers"
+    Store:
+      Type: AWS::Diagram::Resource
+      Preset: Postgres
+      Title: "pgvector\nDocker :5507"
+
+  Links:
+    - {Source: Request, SourcePosition: E, Target: Server, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Server, SourcePosition: E, Target: Detect, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Detect, SourcePosition: S, Target: Model, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Model, SourcePosition: W, Target: Vector, TargetPosition: E, TargetArrowHead: {Type: Open}}
+    - {Source: Vector, SourcePosition: W, Target: Store, TargetPosition: E, TargetArrowHead: {Type: Open}}

@@ -1,0 +1,53 @@
+# What changes when a step needs a GPU. The face match stays on the CPU path; a step that
+# needs an accelerator hands off to an asynchronous SageMaker endpoint, which scales to zero,
+# writes its answer to S3, and notifies through SNS. Every link leaves and enters at icon
+# mid-height, so nothing is drawn across a caption.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Cloud]
+
+    Cloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Api, Search, Gpu, Out]
+
+    Api:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon API Gateway"
+      Title: "API Gateway\nPOST /match"
+    Search:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Lambda"
+      Title: "search Lambda\n(CPU only)"
+    Gpu:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "SageMaker Async\nInference (GPU)"
+
+    Out:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Results, Topic]
+    Results:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Storage Service (Amazon S3)"
+      Title: "Amazon S3\nresult document"
+    Topic:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Notification Service (Amazon SNS)"
+      Title: "Amazon SNS\nresult ready"
+
+  Links:
+    - {Source: Api, SourcePosition: E, Target: Search, TargetPosition: W, TargetArrowHead: {Type: Open}, Labels: {SourceRight: {Title: "1"}}}
+    - {Source: Search, SourcePosition: E, Target: Gpu, TargetPosition: W, TargetArrowHead: {Type: Open}, Labels: {SourceRight: {Title: "2"}}}
+    - {Source: Gpu, SourcePosition: E, Target: Results, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {SourceRight: {Title: "3"}}}
+    - {Source: Gpu, SourcePosition: E, Target: Topic, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "4"}}}

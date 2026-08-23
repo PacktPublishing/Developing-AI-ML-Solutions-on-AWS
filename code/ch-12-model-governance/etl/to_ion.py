@@ -1,6 +1,3 @@
-# /// script
-# dependencies = []
-# ///
 """Render the feature-flag JSON as the Amazon Ion the AppConfig agent evaluates.
 
 The agent only evaluates rules (including the split) when the configuration is Ion of
@@ -27,10 +24,9 @@ def to_ion(flags: dict) -> str:
                 "_variant": variant["name"],
                 "enabled": variant.get("enabled", True),
             }
-            body.update(variant.get("attributeValues", variant.get("attributes", {})))
+            body |= variant.get("attributeValues", variant.get("attributes", {}))
             body_json = json.dumps(body)
-            rule = variant.get("rule")
-            if rule:
+            if rule := variant.get("rule"):
                 parts.append(f"   [\n     {rule},\n     '''{body_json}'''\n   ]")
             else:
                 parts.append(f"   '''{body_json}'''")

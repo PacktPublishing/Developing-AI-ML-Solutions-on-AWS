@@ -55,8 +55,14 @@ Resources:
   # instance, so Airflow's run history and connections live here instead.
   BackupBucket:
     DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Type: AWS::S3::Bucket
     Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       LifecycleConfiguration:
         Rules:
           - Id: expire-old-backups
@@ -67,7 +73,14 @@ Resources:
   # only on a serverless deploy. Emptied by `make airflow-delete` before stack delete.
   FeatureStoreOfflineBucket:
     DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
     Condition: UseServerless
 
   # The role the feature group assumes to write the offline store and register its

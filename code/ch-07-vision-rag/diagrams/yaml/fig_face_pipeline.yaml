@@ -1,0 +1,61 @@
+# How one photograph becomes a comparable vector: detect, align, embed. The same three steps
+# run at enrolment and at verification, which is why a selfie and an ID photo are comparable.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Pipeline]
+
+    Pipeline:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic group"
+      Direction: vertical
+      Title: " "
+      Children: [Top, Bottom]
+
+    # read left to right, then drop down and read right to left
+    Top:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Photo, Detect, Crop]
+    Bottom:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Store, Vector, Model]
+
+    Photo:
+      Type: AWS::Diagram::Resource
+      Preset: "Image"
+      Title: "photograph\n(selfie or ID)"
+    Detect:
+      Type: AWS::Diagram::Resource
+      Preset: PyTorch
+      Title: "MTCNN detect\nkeep the largest face"
+    Crop:
+      Type: AWS::Diagram::Resource
+      Preset: "Image"
+      Title: "aligned face\n160 x 160"
+    Model:
+      Type: AWS::Diagram::Resource
+      Preset: PyTorch
+      Title: "InceptionResnetV1\n(VGGFace2)"
+    Vector:
+      Type: AWS::Diagram::Resource
+      Preset: "Analyzer"
+      Title: "embedding\n512 numbers"
+    Store:
+      Type: AWS::Diagram::Resource
+      Preset: Postgres
+      Title: "pgvector\ncosine + HNSW"
+
+  Links:
+    - {Source: Photo, SourcePosition: E, Target: Detect, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Detect, SourcePosition: E, Target: Crop, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Crop, SourcePosition: S, Target: Model, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Model, SourcePosition: W, Target: Vector, TargetPosition: E, TargetArrowHead: {Type: Open}}
+    - {Source: Vector, SourcePosition: W, Target: Store, TargetPosition: E, TargetArrowHead: {Type: Open}}

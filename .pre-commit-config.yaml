@@ -3,6 +3,9 @@
 #   ty        - type-check Python
 #   shfmt     - format shell scripts
 #   mbake     - format Makefiles
+#   rain      - format CloudFormation templates
+#   cfn-lint  - lint CloudFormation templates
+#   gitleaks  - scan for committed secrets
 #   commitizen - check the commit message against the schema in pyproject.toml
 #
 # Install once:  uvx pre-commit install
@@ -80,6 +83,41 @@ repos:
         entry: rain fmt -w
         language: system
         files: (^|/)(template|redshift-serverless)\.yaml$
+      - id: cfn-lint
+        name: cfn-lint (CloudFormation lint)
+        # rain fmt only formats; this is the check that reads the templates.
+        # --non-zero-exit-code error blocks on errors and lets warnings through,
+        # the same bargain the ty hook makes: W1030 fires on every conditional
+        # parameter whose default is empty, which several chapters use on purpose.
+        # Genuine per-template exceptions go in that template's own
+        # Metadata.cfn-lint.config.ignore_checks, not here.
+        entry: uvx cfn-lint --non-zero-exit-code error
+        language: system
+        files: (^|/)(template|build|redshift-serverless)\.yaml$
+
+  # Policy: the book's own template conventions (.cfn-guard.rules), not a
+  # compliance pack. A compliance ruleset such as CIS IG1 reports 106 findings
+  # here, almost all of them arguing against decisions the chapters make on
+  # purpose (no VPC, no bucket versioning, inline policies), so this file
+  # encodes what the repo actually agreed instead.
+  - repo: https://github.com/aws-cloudformation/cloudformation-guard
+    rev: 3.2.0
+    hooks:
+      - id: cfn-guard
+        args: ["--operation", "validate", "--rules", ".cfn-guard.rules"]
+        files: (^|/)(template|build|redshift-serverless)\.yaml$
+        # one process at a time: the hook downloads its binary on first use and
+        # parallel workers exec it while the write is still open, which fails the
+        # whole job with "Text file busy" on a cold CI runner.
+        require_serial: true
+
+  # Secrets: SageMaker local mode has previously written real AWS keys into a
+  # chapter's generated docker-compose.yaml, and this code ships publicly with the
+  # book, so scan every commit. This hook downloads its own binary, no brew needed.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.29.0
+    hooks:
+      - id: gitleaks
 
   # Validate the commit message against [tool.commitizen] in pyproject.toml:
   # "<scope> (<+|~|->): <subject>", scope one of ch-NN, book, repo, tools.

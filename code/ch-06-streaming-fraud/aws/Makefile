@@ -1,4 +1,4 @@
-.PHONY: iam lint seed-warehouse deploy image endpoint-local endpoint produce blocks query round teardown
+.PHONY: iam lint seed-warehouse deploy image endpoint-local endpoint produce blocks query round teardown grafana-image grafana-up grafana-url grafana-down
 
 # The cloud round in order: deploy, seed-warehouse, image, endpoint, produce,
 # blocks, query, teardown. EnableWarehouse=true (the default) builds the warehouse.
@@ -32,7 +32,8 @@ lint:
 
 deploy:
 	sam build
-	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
+		--parameter-overrides GrafanaAllowedCidr=$$(curl -s https://checkip.amazonaws.com)/32
 
 # create the destination table via the Redshift Data API, no VPC path needed,
 # authenticated with the admin secret the stack generated
@@ -97,18 +98,66 @@ query:
 	$(eval SECRET := $(call output,WarehouseSecretArn))
 	@ID=$$(aws redshift-data execute-statement --region $(REGION) \
 		--workgroup-name $(WG) --database fraud --secret-arn $(SECRET) \
-		--sql "SELECT decision, COUNT(*), ROUND(AVG(score)::numeric, 4) FROM fraud_decisions GROUP BY decision" \
+		--sql "SELECT decision, COUNT(*), ROUND(AVG(score)::numeric(10,4), 4) FROM fraud_decisions GROUP BY decision" \
 		--query Id --output text); \
 		while S=$$(aws redshift-data describe-statement --region $(REGION) --id $$ID --query Status --output text); \
 			[ "$$S" = "SUBMITTED" ] || [ "$$S" = "PICKED" ] || [ "$$S" = "STARTED" ]; do sleep 1; done; \
 			aws redshift-data get-statement-result --region $(REGION) --id $$ID --output json
 
-# delete in reverse: endpoint first (it is not in the stack), then empty the
-# staging bucket, then the stack, warehouse and all
+# ---- the fraud dashboard: Grafana on Fargate ----
+
+# build the Grafana image (grafana + the provisioning and dashboard JSON baked in)
+# via the stack's CodeBuild project, same developer -> S3 -> CodeBuild -> ECR path.
+grafana-image:
+	$(eval BUCKET := $(call output,StagingBucketName))
+	rm -rf /tmp/ch06-grafana && mkdir -p /tmp/ch06-grafana
+	cp grafana/Dockerfile grafana/buildspec.yml /tmp/ch06-grafana/
+	cp -R ../local/grafana/provisioning ../local/grafana/dashboards /tmp/ch06-grafana/
+	cd /tmp/ch06-grafana && rm -f /tmp/ch06-grafana-src.zip && zip -q -r /tmp/ch06-grafana-src.zip .
+	aws s3 cp /tmp/ch06-grafana-src.zip s3://$(BUCKET)/ch06/source/grafana.zip
+	@ID=$$(aws codebuild start-build --region $(REGION) --project-name ch06-grafana-build \
+		--query 'build.id' --output text); \
+	echo "build $$ID"; \
+	while STATUS=$$(aws codebuild batch-get-builds --region $(REGION) --ids $$ID \
+		--query 'builds[0].buildStatus' --output text); \
+		[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 15; echo "  $$STATUS"; done; \
+		echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
+
+# scale the service to one task and print its public URL
+grafana-up:
+	$(eval CLUSTER := $(call output,GrafanaClusterName))
+	$(eval SERVICE := $(call output,GrafanaServiceName))
+	aws ecs update-service --region $(REGION) --cluster $(CLUSTER) --service $(SERVICE) --desired-count 1 >/dev/null
+	@echo "waiting for the task to reach steady state..."
+	aws ecs wait services-stable --region $(REGION) --cluster $(CLUSTER) --services $(SERVICE)
+	$(MAKE) grafana-url
+
+# resolve the running task's public IP
+grafana-url:
+	$(eval CLUSTER := $(call output,GrafanaClusterName))
+	$(eval SERVICE := $(call output,GrafanaServiceName))
+	@TASK=$$(aws ecs list-tasks --region $(REGION) --cluster $(CLUSTER) --service-name $(SERVICE) \
+		--query 'taskArns[0]' --output text); \
+		ENI=$$(aws ecs describe-tasks --region $(REGION) --cluster $(CLUSTER) --tasks $$TASK \
+		--query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" --output text); \
+		IP=$$(aws ec2 describe-network-interfaces --region $(REGION) --network-interface-ids $$ENI \
+		--query 'NetworkInterfaces[0].Association.PublicIp' --output text); \
+		echo "Grafana: http://$$IP:3000"
+
+# scale the service back to zero (stop paying for the task, keep the stack)
+grafana-down:
+	$(eval CLUSTER := $(call output,GrafanaClusterName))
+	$(eval SERVICE := $(call output,GrafanaServiceName))
+	aws ecs update-service --region $(REGION) --cluster $(CLUSTER) --service $(SERVICE) --desired-count 0 >/dev/null
+	@echo "grafana scaled to 0"
+
+# delete in reverse: endpoint first (it is not in the stack), scale Grafana to
+# zero, then empty the staging bucket, then the stack, warehouse and all
 teardown:
 	-aws sagemaker delete-endpoint --region $(REGION) --endpoint-name fraud-scoring
 	-aws sagemaker delete-endpoint-config --region $(REGION) --endpoint-config-name fraud-scoring
 	-aws sagemaker delete-model --region $(REGION) --model-name fraud-scoring
+	-$(MAKE) grafana-down
 	-aws s3 rm --recursive s3://$(call output,StagingBucketName)
 	sam delete --no-prompts --region $(REGION)
 

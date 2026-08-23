@@ -54,13 +54,15 @@ def id_crop(path: Path, size: int = 256) -> Image.Image:
     w, h = im.size
     side = min(w, h)
     im = im.crop(((w - side) // 2, (h - side) // 2, (w + side) // 2, (h + side) // 2))
-    return im.resize((size, size), Image.LANCZOS)
+    return im.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def make_selfie(im: Image.Image, rng: random.Random) -> Image.Image:
     """Simulate a second capture of the SAME face with identity-preserving jitter."""
     out = im.rotate(
-        rng.uniform(-12, 12), resample=Image.BICUBIC, fillcolor=(127, 127, 127)
+        rng.uniform(-12, 12),
+        resample=Image.Resampling.BICUBIC,
+        fillcolor=(127, 127, 127),
     )
     out = ImageEnhance.Brightness(out).enhance(rng.uniform(0.85, 1.15))
     out = ImageEnhance.Contrast(out).enhance(rng.uniform(0.9, 1.15))
@@ -69,7 +71,7 @@ def make_selfie(im: Image.Image, rng: random.Random) -> Image.Image:
     z = rng.uniform(0.02, 0.12)
     out = out.crop(
         (int(w * z / 2), int(h * z / 2), int(w * (1 - z / 2)), int(h * (1 - z / 2)))
-    ).resize((w, h), Image.LANCZOS)
+    ).resize((w, h), Image.Resampling.LANCZOS)
     buf = io.BytesIO()
     out.save(buf, format="JPEG", quality=85)
     buf.seek(0)
@@ -91,7 +93,7 @@ def make_selfie_hf(im: Image.Image, strength: float) -> Image.Image:
         guidance_scale=0.0,
         num_inference_steps=2,
     ).images[0]
-    return result.resize(im.size, Image.LANCZOS)
+    return result.resize(im.size, Image.Resampling.LANCZOS)
 
 
 def main() -> None:

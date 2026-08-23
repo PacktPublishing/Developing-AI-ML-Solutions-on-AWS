@@ -8,6 +8,16 @@ Description: |
   training logs to. Train, then package the registered model and deploy again with ImageUri +
   ModelDataUrl: the endpoint is added (it is gated on ModelDataUrl, so the first pass skips it).
 
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+
+        # AWS::SageMaker::MlflowApp is a documented resource type, but cfn-lint's
+        # bundled specification lags behind it and reports E3006 "does not exist".
+        # Scoped to this template so the check still runs everywhere else.
+        - E3006
+
 Parameters:
   MlflowAppName:
     Description: the serverless MLflow App name

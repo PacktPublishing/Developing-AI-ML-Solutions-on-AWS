@@ -1,0 +1,14 @@
+# Load any dashboard JSON dropped in /var/lib/grafana/dashboards at startup.
+apiVersion: 1
+
+providers:
+  - name: fraud
+    orgId: 1
+    folder: Fraud
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

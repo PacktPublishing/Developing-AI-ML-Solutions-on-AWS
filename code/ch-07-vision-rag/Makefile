@@ -1,4 +1,4 @@
-.PHONY: up faces enrol match match-impostor compare all down diagrams lint
+.PHONY: test faces-sheet up faces enrol match match-impostor compare bench serve-inprocess all down diagrams lint
 
 # the whole local flow in one command: the pgvector store, the synthetic faces, an enrolment,
 # and a genuine match. Then try match-impostor / compare. make down when done.
@@ -28,6 +28,18 @@ match:
 match-impostor:
 	cd local && uv run --project . python match.py ../$(FACES)/impostors/$(SUBJECT)/selfie.jpg --claim $(SUBJECT)
 
+# the embedder behind the SageMaker inference contract, in process, on the Apple GPU
+serve-inprocess:
+	SM_OFFLINE=1 PYTHONPATH=src FACES_DIR=data/generated/faces uv run local/serve_inprocess.py
+
+# CPU vs Apple GPU (MPS) for the two embedding stages, over the enrolled photos
+bench:
+	cd local && uv run --project . python bench_device.py -n $(N)
+
+# contact sheet of the test set: enrolled ID, genuine probe, impostor, per subject
+faces-sheet:
+	cd local && uv run --project . python faces_sheet.py ../$(FACES) -n 3
+
 # 1:1 compare + Captum explanation on a genuine pair
 compare:
 	cd local && uv run --project . python compare.py \
@@ -38,6 +50,11 @@ down:
 
 lint:
 	uvx ruff check .
+
+# the vector store against a throwaway pgvector on :5508, so `make up` can stay
+# running on :5507; the suite provisions its own container through docker-py
+test:
+	uv run --with pytest --with "psycopg[binary]" --with psycopg-pool --with docker pytest tests/ -q
 
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
 # WIDTH sets output pixel width (0 = awsdac native); ICON_HEIGHT re-renders custom SVG icons (needs rsvg-convert).

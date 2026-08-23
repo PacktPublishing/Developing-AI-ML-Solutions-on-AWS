@@ -1,0 +1,53 @@
+# The enrolment path, which is asynchronous twice over: an ID photo landing under the
+# enrolled/ prefix triggers a Lambda that runs no model, and that Lambda hands the key to
+# the asynchronous endpoint, which embeds on the GPU and writes one row to the faces table.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Onboarding, Cloud]
+
+    Onboarding:
+      Type: AWS::Diagram::Resource
+      Preset: "Client"
+      Title: "Onboarding\n(ID capture)"
+
+    Cloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Bucket, Stage]
+
+    Bucket:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Storage Service (Amazon S3)"
+      Title: "Amazon S3\nenrolled/{subject}/"
+
+    Stage:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Embed, Gpu, Db]
+    Embed:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Lambda"
+      Title: "enrolment trigger\nLambda (no model)"
+    Gpu:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "SageMaker Async\nembedding (GPU)"
+    Db:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Relational Database Service (Amazon RDS)"
+      Title: "Aurora Serverless\npgvector faces table"
+
+  Links:
+    - {Source: Onboarding, SourcePosition: NE, Target: Bucket, TargetPosition: NW, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "1"}}}
+    - {Source: Bucket, SourcePosition: NE, Target: Embed, TargetPosition: NW, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "2"}}}
+    - {Source: Embed, SourcePosition: E, Target: Gpu, TargetPosition: W, TargetArrowHead: {Type: Open}, Labels: {SourceRight: {Title: "3"}}}
+    - {Source: Gpu, SourcePosition: E, Target: Db, TargetPosition: W, TargetArrowHead: {Type: Open}, Labels: {SourceRight: {Title: "4"}}}

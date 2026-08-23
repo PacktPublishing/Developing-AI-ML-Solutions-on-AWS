@@ -1,4 +1,4 @@
-.PHONY: iam deploy image pipeline round teardown
+.PHONY: iam deploy image pipeline clarify endpoint round teardown
 
 # the whole AWS round in one command (run make iam once first, as the account admin): the
 # stack, the image built by CodeBuild, then the monitoring pipeline. make teardown when done.
@@ -74,9 +74,40 @@ pipeline:
 	PIPELINE_MODE=aws IMAGE_URI=$(IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
 		AWS_DEFAULT_REGION=$(REGION) uv run pipeline.py
 
+# -------------------------------------------------------------------------------
+# clarify: verify the from-source SHAP drift against REAL SageMaker Clarify
+# -------------------------------------------------------------------------------
+# Optional parity check. Runs two Clarify explainability jobs (KernelSHAP) and compares
+# the feature-attribution NDCG with the chapter's from-source (TreeSHAP) NDCG. Clarify is
+# closed to new accounts, so this needs a grandfathered account; make pipeline is the
+# everyday path. Needs make deploy + make image first (for the scorecard serving image).
+clarify:
+	@aws s3api head-bucket --bucket $(BUCKET) 2>/dev/null \
+		|| aws s3 mb s3://$(BUCKET) --region $(REGION)
+	IMAGE_URI=$(IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
+		AWS_DEFAULT_REGION=$(REGION) PYTHONPATH=$(CURDIR)/../src uv run clarify_monitor.py
+
+# -------------------------------------------------------------------------------
+# endpoint: real-time endpoint with Data Capture, then monitor the captured traffic
+# -------------------------------------------------------------------------------
+# The real-time counterpart to make pipeline: deploys the scorecard image as an endpoint
+# with DataCaptureConfig on, sends the current batch through, and prints the capture S3
+# prefix to feed run_monitor.py --capture. Needs make image first (for the serving image).
+endpoint:
+	@aws s3api head-bucket --bucket $(BUCKET) 2>/dev/null \
+		|| aws s3 mb s3://$(BUCKET) --region $(REGION)
+	IMAGE_URI=$(IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
+		AWS_DEFAULT_REGION=$(REGION) PYTHONPATH=$(CURDIR)/../src uv run endpoint.py
+
 teardown:
 	-aws s3 rm s3://$(BUCKET)/ch11 --recursive
-	-aws sagemaker delete-model --model-name ch11-scorecard-transform 2>/dev/null
+	-aws sagemaker delete-endpoint --endpoint-name ch11-scorecard 2>/dev/null
+	-@for c in $$(aws sagemaker list-endpoint-configs --name-contains ch11-scorecard \
+		--query 'EndpointConfigs[].EndpointConfigName' --output text 2>/dev/null); do \
+		aws sagemaker delete-endpoint-config --endpoint-config-name $$c; done
+	-@for m in $$(aws sagemaker list-models --name-contains ch11-scorecard \
+		--query 'Models[].ModelName' --output text 2>/dev/null); do \
+		aws sagemaker delete-model --model-name $$m; done
 	-aws sagemaker delete-pipeline --pipeline-name ch11-monitoring 2>/dev/null
 	-@BUCKET=$$(aws cloudformation describe-stacks --stack-name $(STACK) \
 			--query "Stacks[0].Outputs[?OutputKey=='SourceBucket'].OutputValue" --output text 2>/dev/null); \

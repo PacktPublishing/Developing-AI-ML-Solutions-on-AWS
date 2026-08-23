@@ -63,7 +63,7 @@ Resources:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
                 Resource:
-                  - !Sub arn:aws:bedrock:*::foundation-model/*
+                  - arn:aws:bedrock:*::foundation-model/*
                   - arn:aws:bedrock:::foundation-model/*
                   - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
 

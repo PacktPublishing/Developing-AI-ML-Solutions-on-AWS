@@ -13,6 +13,7 @@ from PIL import Image
 
 
 def _aligned(embedder, image_bytes):
+    """Return the largest detected face, aligned and on the model's device, or None."""
     img = Image.open(BytesIO(image_bytes)).convert("RGB")
     boxes, _ = embedder.detector.detect(img)
     if boxes is None or len(boxes) == 0:
@@ -23,6 +24,7 @@ def _aligned(embedder, image_bytes):
 
 
 def _rgb(t):
+    """Convert one aligned face tensor back to an 8-bit RGB array for display."""
     arr = np.transpose(t.detach().squeeze().cpu().numpy(), (1, 2, 0))
     return (arr * 128.0 + 127.5).clip(0, 255).astype(np.uint8)
 
@@ -48,7 +50,7 @@ _INFERNO = (
 
 def heat_overlay(rgb, sal, vmax=None, alpha=0.6):
     """Overlay an inferno heatmap on an RGB face, scaled to a shared vmax."""
-    v = vmax if vmax else float(sal.max() + 1e-9)
+    v = vmax or float(sal.max() + 1e-9)
     x = np.clip(sal / v, 0, 1) * (len(_INFERNO) - 1)
     lo = np.floor(x).astype(int)
     hi = np.minimum(lo + 1, len(_INFERNO) - 1)
@@ -59,6 +61,7 @@ def heat_overlay(rgb, sal, vmax=None, alpha=0.6):
 
 
 def _saliency(attr):
+    """Reduce an attribution tensor to one magnitude per pixel."""
     # per-pixel attribution magnitude, mean over channels (raw; the caller
     # scales both maps to a shared vmax).
     return attr.detach().abs().mean(dim=1).squeeze().cpu().numpy().astype(np.float32)
@@ -77,6 +80,7 @@ def explain(embedder, a_bytes, b_bytes, steps: int = 50):
     sim = float(torch.cosine_similarity(e_a, e_b, dim=1).item())
 
     def toward(fixed):
+        """Score the varying image by its similarity to the fixed embedding."""
         return lambda x: torch.cosine_similarity(embedder.model(x), fixed, dim=1)
 
     sal_a = _saliency(
