@@ -1,4 +1,4 @@
-.PHONY: up faces enrol match match-impostor compare bench serve-inprocess all down diagrams lint
+.PHONY: test up faces enrol match match-impostor compare bench serve-inprocess all down diagrams lint
 
 # the whole local flow in one command: the pgvector store, the synthetic faces, an enrolment,
 # and a genuine match. Then try match-impostor / compare. make down when done.
@@ -46,6 +46,11 @@ down:
 
 lint:
 	uvx ruff check .
+
+# the vector store against a throwaway pgvector on :5508, so `make up` can stay
+# running on :5507; the suite provisions its own container through docker-py
+test:
+	uv run --with pytest --with "psycopg[binary]" --with psycopg-pool --with docker pytest tests/ -q
 
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac.
 # WIDTH sets output pixel width (0 = awsdac native); ICON_HEIGHT re-renders custom SVG icons (needs rsvg-convert).

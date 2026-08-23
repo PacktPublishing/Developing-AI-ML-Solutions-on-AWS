@@ -86,7 +86,9 @@ jobs:
           - ch-01-data-engineering
           - ch-02-mlops
           - ch-03-generative-ai
+          - ch-07-vision-rag
           - ch-09-underwriting-kb
+          - ch-10-conversation-classification
           - ch-11-model-monitoring
           - ch-12-model-governance
     steps:
