@@ -40,10 +40,12 @@ Diagram:
       Preset: "Amazon SageMaker AI"
       Title: "SageMaker InProcessServer\n:9007"
     Detect:
-      Type: AWS::SageMaker::Model
+      Type: AWS::Diagram::Resource
+      Preset: PyTorch
       Title: "MTCNN detect\nCPU (no MPS kernel)"
     Model:
-      Type: AWS::SageMaker::Model
+      Type: AWS::Diagram::Resource
+      Preset: PyTorch
       Title: "InceptionResnetV1\nApple GPU (MPS)"
     Vector:
       Type: AWS::Diagram::Resource

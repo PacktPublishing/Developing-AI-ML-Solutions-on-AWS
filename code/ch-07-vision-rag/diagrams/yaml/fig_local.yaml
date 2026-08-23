@@ -40,11 +40,11 @@ Diagram:
       Children: [EnrolPy, MatchPy]
     EnrolPy:
       Type: AWS::Diagram::Resource
-      Preset: "Gear"
+      Preset: PyTorch
       Title: "enrol.py\nFaceNet on CPU"
     MatchPy:
       Type: AWS::Diagram::Resource
-      Preset: "Gear"
+      Preset: PyTorch
       Title: "match.py\nFaceNet on CPU"
 
     Compose:

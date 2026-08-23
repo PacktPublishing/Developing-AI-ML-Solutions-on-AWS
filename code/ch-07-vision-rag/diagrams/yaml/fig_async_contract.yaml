@@ -50,7 +50,7 @@ Diagram:
       Title: "scale 0 to 1\n209 s from cold"
     Load:
       Type: AWS::Diagram::Resource
-      Preset: "Gear"
+      Preset: PyTorch
       Title: "load the model\n10.7 s once"
     Infer:
       Type: AWS::Diagram::Resource

@@ -1,4 +1,4 @@
-.PHONY: test up faces enrol match match-impostor compare bench serve-inprocess all down diagrams lint
+.PHONY: test faces-sheet up faces enrol match match-impostor compare bench serve-inprocess all down diagrams lint
 
 # the whole local flow in one command: the pgvector store, the synthetic faces, an enrolment,
 # and a genuine match. Then try match-impostor / compare. make down when done.
@@ -35,6 +35,10 @@ serve-inprocess:
 # CPU vs Apple GPU (MPS) for the two embedding stages, over the enrolled photos
 bench:
 	cd local && uv run --project . python bench_device.py -n $(N)
+
+# contact sheet of the test set: enrolled ID, genuine probe, impostor, per subject
+faces-sheet:
+	cd local && uv run --project . python faces_sheet.py ../$(FACES) -n 3
 
 # 1:1 compare + Captum explanation on a genuine pair
 compare:

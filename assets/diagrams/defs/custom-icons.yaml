@@ -38,6 +38,10 @@ Definitions:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "postgres.png"}
     Label: {Title: "PostgreSQL", Color: "rgba(0, 0, 0, 255)"}
+  PyTorch:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "pytorch.png"}
+    Label: {Title: "PyTorch", Color: "rgba(0, 0, 0, 255)"}
   Iceberg:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "iceberg.png"}

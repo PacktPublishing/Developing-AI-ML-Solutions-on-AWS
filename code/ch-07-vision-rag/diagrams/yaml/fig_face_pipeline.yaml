@@ -33,14 +33,16 @@ Diagram:
       Preset: "Image"
       Title: "photograph\n(selfie or ID)"
     Detect:
-      Type: AWS::SageMaker::Model
+      Type: AWS::Diagram::Resource
+      Preset: PyTorch
       Title: "MTCNN detect\nkeep the largest face"
     Crop:
       Type: AWS::Diagram::Resource
       Preset: "Image"
       Title: "aligned face\n160 x 160"
     Model:
-      Type: AWS::SageMaker::Model
+      Type: AWS::Diagram::Resource
+      Preset: PyTorch
       Title: "InceptionResnetV1\n(VGGFace2)"
     Vector:
       Type: AWS::Diagram::Resource
