@@ -1,49 +1,49 @@
-.PHONY: test faces-sheet up faces enrol match match-impostor compare bench serve-inprocess all down diagrams lint
+.PHONY: test faces-sheet up faces register match match-fraudster compare bench serve-inprocess all down diagrams lint
 
-# the whole local flow in one command: the pgvector store, the synthetic faces, an enrolment,
-# and a genuine match. Then try match-impostor / compare. make down when done.
-all: up faces enrol match
+# the whole local flow in one command: the pgvector store, the synthetic faces, an registration,
+# and a genuine match. Then try match-fraudster / compare. make down when done.
+all: up faces register match
 
 COMPOSE := docker compose -f local/vision-stack.yml
 N ?= 40
 SUBJECT ?= subject_000
 FACES := data/generated/faces
 
-# The local KYC vector-search loop: pgvector container, enrol the ID photos, then match a probe selfie (1:N).
+# The local KYC vector-search loop: pgvector container, register the ID photos, then match a probe selfie (1:N).
 up:
 	$(COMPOSE) up -d --wait
 
-# fetch real faces (UTKFace, CC0) and build id/selfie/impostor pairs (gitignored)
+# fetch real faces (UTKFace, CC0) and build id/selfie/fraudster pairs (gitignored)
 faces:
 	set -a; . ../../.env; set +a; uv run etl/build_pairs.py --n $(N)
 
-enrol:
-	cd local && uv run --project . python enrol.py ../$(FACES)
+register:
+	cd local && uv run --project . python register.py ../$(FACES)
 
 # KYC verification: a genuine selfie's top hit is its own claimed subject -> matched
 match:
 	cd local && uv run --project . python match.py ../$(FACES)/probe/$(SUBJECT)/selfie.jpg --claim $(SUBJECT)
 
-# an impostor selfie resolves to a different subject than claimed -> not matched
-match-impostor:
-	cd local && uv run --project . python match.py ../$(FACES)/impostors/$(SUBJECT)/selfie.jpg --claim $(SUBJECT)
+# an fraudster selfie resolves to a different subject than claimed -> not matched
+match-fraudster:
+	cd local && uv run --project . python match.py ../$(FACES)/fraudsters/$(SUBJECT)/selfie.jpg --claim $(SUBJECT)
 
 # the embedder behind the SageMaker inference contract, in process, on the Apple GPU
 serve-inprocess:
 	SM_OFFLINE=1 PYTHONPATH=src FACES_DIR=data/generated/faces uv run local/serve_inprocess.py
 
-# CPU vs Apple GPU (MPS) for the two embedding stages, over the enrolled photos
+# CPU vs Apple GPU (MPS) for the two embedding stages, over the registered photos
 bench:
 	cd local && uv run --project . python bench_device.py -n $(N)
 
-# contact sheet of the test set: enrolled ID, genuine probe, impostor, per subject
+# contact sheet of the test set: registered ID, genuine probe, fraudster, per subject
 faces-sheet:
 	cd local && uv run --project . python faces_sheet.py ../$(FACES) -n 3
 
 # 1:1 compare + Captum explanation on a genuine pair
 compare:
 	cd local && uv run --project . python compare.py \
-		../$(FACES)/enrolled/$(SUBJECT)/id.jpg ../$(FACES)/probe/$(SUBJECT)/selfie.jpg
+		../$(FACES)/registered/$(SUBJECT)/id.jpg ../$(FACES)/probe/$(SUBJECT)/selfie.jpg
 
 down:
 	$(COMPOSE) down -v

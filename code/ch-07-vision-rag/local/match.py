@@ -1,10 +1,10 @@
-"""Match a probe face against the enrolled store (1:N), the local search Lambda.
+"""Match a probe face against the registered store (1:N), the local search Lambda.
 
 uv run match.py <probe.jpg> [-k N] [--claim SUBJECT]
 
 Without --claim it is a pure 1:N search (is this face anyone we know?). With
 --claim it is KYC verification: matched only when the top hit IS the claimed
-subject above the threshold, so an impostor presenting as one subject but
+subject above the threshold, so an fraudster presenting as one subject but
 resolving to another is rejected.
 """
 
@@ -21,7 +21,7 @@ MATCH = 0.70
 
 
 def main() -> None:
-    """Search the enrolled faces for the closest matches to a probe image."""
+    """Search the registered faces for the closest matches to a probe image."""
     ap = argparse.ArgumentParser()
     ap.add_argument("probe")
     ap.add_argument("-k", type=int, default=5)

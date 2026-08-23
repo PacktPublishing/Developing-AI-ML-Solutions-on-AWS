@@ -121,10 +121,10 @@ def ensure_schema(conn) -> None:
 
     Serialized behind an advisory lock, because Postgres `IF NOT EXISTS` is not
     concurrency-safe: it looks, then inserts into the catalog, and two sessions
-    arriving together both pass the look. Eight enrolment uploads land as eight
+    arriving together both pass the look. Eight registration uploads land as eight
     near-simultaneous invocations on a cold endpoint, so this is not a rare race.
     The loser of that race sees `duplicate key value violates unique constraint
-    "pg_extension_name_index"` and the whole enrolment fails with a 500.
+    "pg_extension_name_index"` and the whole registration fails with a 500.
     """
     with conn.cursor() as cur:
         cur.execute("SELECT pg_advisory_lock(%s)", (_SCHEMA_LOCK,))
@@ -156,7 +156,7 @@ def _create(cur) -> None:
 
 
 def insert(conn, subject: str, key: str, vector) -> None:
-    """Store one embedding, doing nothing if that object is already enrolled."""
+    """Store one embedding, doing nothing if that object is already registered."""
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO faces (subject, s3_key, embedding) "
@@ -166,7 +166,7 @@ def insert(conn, subject: str, key: str, vector) -> None:
 
 
 def search(conn, vector, k: int = 5, exclude_key: str | None = None) -> list[dict]:
-    """Return the k nearest enrolled faces by cosine similarity.
+    """Return the k nearest registered faces by cosine similarity.
 
     HNSW picks the candidates approximately; the score column is exact cosine, so
     sorting these k rows by score is an exact re-rank of an approximate shortlist.

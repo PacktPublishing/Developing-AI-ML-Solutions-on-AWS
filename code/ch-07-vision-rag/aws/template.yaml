@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
 Description: |
-  Serverless vision RAG for KYC on AWS. Identity photos land in S3, an enrolment
+  Serverless vision RAG for KYC on AWS. Identity photos land in S3, an registration
   trigger hands them to an asynchronous SageMaker endpoint on a GPU instance, and the
   face vectors go into an express Aurora Serverless cluster with pgvector. The endpoint
   publishes each completion to SNS, a subscriber writes the outcome to DynamoDB, and
@@ -169,7 +169,7 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
-  # The enrolment trigger. It runs no model: it hands the new object keys to the
+  # The registration trigger. It runs no model: it hands the new object keys to the
   # asynchronous endpoint and returns. A few lines of boto3 package as a zip, so
   # there is no image to build and nothing here to keep in step with the model.
   EmbeddingsFunction:
@@ -193,8 +193,8 @@ Resources:
               Resource: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/${EndpointName}
       Events:
 
-        # only enrolled/ uploads enrol; probes/ objects are matched, not stored
-        Enrolled:
+        # only registered/ uploads register; probes/ objects are matched, not stored
+        Registered:
           Type: S3
           Properties:
             Bucket: !Ref ImagesBucket
@@ -203,7 +203,7 @@ Resources:
               S3Key:
                 Rules:
                   - Name: prefix
-                    Value: enrolled/
+                    Value: registered/
 
   # The SageMaker endpoint's execution role. It pulls the serving image, reads the
   # identity images, writes async results back, and fetches the database password.
@@ -321,7 +321,7 @@ Outputs:
     Value: !Ref VerificationsTable
 
   ImagesBucket:
-    Description: upload identity images here (enrolled/{subject}/ or probes/)
+    Description: upload identity images here (registered/{subject}/ or probes/)
     Value: !Ref ImagesBucket
 
   DatabaseEndpoint:

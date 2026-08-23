@@ -82,17 +82,17 @@ def bench_embed(faces: torch.Tensor, device: str) -> dict:
 
 
 def main() -> None:
-    """Compare CPU and MPS on the chapter's enrolled ID photos."""
+    """Compare CPU and MPS on the chapter's registered ID photos."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("faces", nargs="?", default="../data/generated/faces")
     ap.add_argument("-n", type=int, default=40)
     args = ap.parse_args()
 
-    paths = sorted(Path(args.faces).glob("enrolled/*/id.jpg"))[: args.n]
+    paths = sorted(Path(args.faces).glob("registered/*/id.jpg"))[: args.n]
     images = [Image.open(BytesIO(p.read_bytes())).convert("RGB") for p in paths]
     mps = torch.backends.mps.is_available()
     print(f"torch {torch.__version__}, mps available {mps}")
-    print(f"{len(images)} enrolled ID photos")
+    print(f"{len(images)} registered ID photos")
 
     faces, detect_secs = detect_all(images)
     print("\ndetect + align (CPU only, MTCNN cannot run on MPS)")
@@ -130,7 +130,7 @@ def main() -> None:
         run_cpu = detect_secs + cpu["loop_total"]
         run_mps = detect_secs + gpu["loop_total"]
         print(
-            f"whole enrolment run (detect + embed): cpu {run_cpu:.2f} s, "
+            f"whole registration run (detect + embed): cpu {run_cpu:.2f} s, "
             f"cpu detect + mps embed {run_mps:.2f} s, {run_cpu / run_mps:.2f}x"
         )
 

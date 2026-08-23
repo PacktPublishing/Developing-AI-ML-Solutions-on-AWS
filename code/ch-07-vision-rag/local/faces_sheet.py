@@ -1,4 +1,4 @@
-"""Contact sheet of the test set: enrolled ID, genuine probe, and impostor.
+"""Contact sheet of the test set: registered ID, genuine probe, and fraudster.
 
 Saves /tmp/ch07_faces.png: one row per subject, three panels each, so the chapter
 can show what "the same face twice" and "a different face under the same claim"
@@ -16,7 +16,7 @@ CELL = 200
 GAP = 10
 PAD = 16
 TOP = 30
-COLUMNS = ("enrolled", "probe", "impostors")
+COLUMNS = ("registered", "probe", "fraudsters")
 HEADINGS = ("registered ID photo", "genuine probe selfie", "fraudster selfie")
 
 
@@ -30,7 +30,7 @@ def _font(size: int):
 
 def _cell(root: Path, column: str, subject: str) -> Image.Image:
     """Load one panel, square-cropped to the sheet's cell size."""
-    name = "id.jpg" if column == "enrolled" else "selfie.jpg"
+    name = "id.jpg" if column == "registered" else "selfie.jpg"
     im = Image.open(root / column / subject / name).convert("RGB")
     return im.resize((CELL, CELL), Image.Resampling.LANCZOS)
 
@@ -48,10 +48,12 @@ def main() -> None:
     root = Path(args.faces)
     subjects = (
         args.subjects
-        or sorted(p.name for p in (root / "enrolled").iterdir() if p.is_dir())[: args.n]
+        or sorted(p.name for p in (root / "registered").iterdir() if p.is_dir())[
+            : args.n
+        ]
     )
     if not subjects:
-        raise SystemExit(f"no subjects under {root}/enrolled")
+        raise SystemExit(f"no subjects under {root}/registered")
 
     width = PAD * 2 + CELL * 3 + GAP * 2
     height = TOP + PAD + len(subjects) * (CELL + GAP) - GAP + PAD

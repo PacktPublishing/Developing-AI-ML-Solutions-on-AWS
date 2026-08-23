@@ -48,19 +48,19 @@ endpoint:
 	 ENDPOINT_NAME=$(ENDPOINT_NAME) INSTANCE_TYPE=$(INSTANCE_TYPE) \
 	 uv run deploy.py
 
-# Upload identity photos and probe selfies. The probes/ and impostors/ objects are
-# inert; the enrolled/ ones fire the enrolment trigger, which is the whole enrolment
+# Upload identity photos and probe selfies. The probes/ and fraudsters/ objects are
+# inert; the registered/ ones fire the registration trigger, which is the whole registration
 # path: S3 event -> Lambda -> asynchronous endpoint -> Aurora -> SNS -> status table.
 FACES ?= ../data/generated/faces
 SUBJECTS ?= 8
 seed:
 	@B=$(call out,$(STACK),ImagesBucket); \
-	for s in $$(ls $(FACES)/enrolled | head -$(SUBJECTS)); do \
+	for s in $$(ls $(FACES)/registered | head -$(SUBJECTS)); do \
 		aws s3 cp $(FACES)/probe/$$s/selfie.jpg s3://$$B/probes/$$s/selfie.jpg --only-show-errors; \
-		aws s3 cp $(FACES)/impostors/$$s/selfie.jpg s3://$$B/impostors/$$s/selfie.jpg --only-show-errors; \
+		aws s3 cp $(FACES)/fraudsters/$$s/selfie.jpg s3://$$B/fraudsters/$$s/selfie.jpg --only-show-errors; \
 	done; \
-	for s in $$(ls $(FACES)/enrolled | head -$(SUBJECTS)); do \
-		aws s3 cp $(FACES)/enrolled/$$s/id.jpg s3://$$B/enrolled/$$s/id.jpg --only-show-errors; \
+	for s in $$(ls $(FACES)/registered | head -$(SUBJECTS)); do \
+		aws s3 cp $(FACES)/registered/$$s/id.jpg s3://$$B/registered/$$s/id.jpg --only-show-errors; \
 	done; \
 	 echo "seeded $(SUBJECTS) subjects"
 
@@ -79,7 +79,7 @@ status:
 	@aws dynamodb scan --table-name $(call out,$(STACK),StatusTable) \
 	  --query "Items[].{id:verification_id.S,status:status.S,at:updated_at.S}" --output table
 
-# Deploy the app stack: the express Aurora cluster, the images bucket, the enrolment
+# Deploy the app stack: the express Aurora cluster, the images bucket, the registration
 # trigger, the results topic, and the status table its subscriber writes.
 deploy:
 	sam build

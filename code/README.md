@@ -94,7 +94,7 @@ DynamoDB, with the credit warehouse alongside for enrichment.
 ## Chapter 07 — Vision RAG
 
 KYC face verification as vector search: a face embedder turns an ID and a selfie
-into vectors, pgvector finds the nearest enrolled identity, and the match is
+into vectors, pgvector finds the nearest registered identity, and the match is
 verified against the claimed subject — the whole loop behind an HTTP API.
 
 ![Serverless KYC](ch-07-vision-rag/diagrams/png/fig_serverless_kyc.png)

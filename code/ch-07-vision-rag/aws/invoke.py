@@ -112,10 +112,10 @@ def main() -> None:
     ap.add_argument("--compare", nargs=2, metavar=("A", "B"))
     ap.add_argument("--explain", action="store_true")
     ap.add_argument(
-        "--enrol",
+        "--register",
         nargs="+",
         metavar="KEY",
-        help="bulk-enrol these object keys in one batched GPU pass",
+        help="bulk-register these object keys in one batched GPU pass",
     )
     ap.add_argument(
         "--via",
@@ -125,8 +125,8 @@ def main() -> None:
     )
     a = ap.parse_args()
 
-    if a.enrol:
-        payload = {"op": "enrol", "keys": a.enrol}
+    if a.register:
+        payload = {"op": "register", "keys": a.register}
     elif a.compare:
         payload = {
             "op": "compare",
@@ -137,7 +137,7 @@ def main() -> None:
     elif a.key:
         payload = {"op": "match", "key": a.key, "claim": a.claim}
     else:
-        ap.error("pass --key, --compare, or --enrol")
+        ap.error("pass --key, --compare, or --register")
 
     if a.via == "status" and not STATUS_TABLE:
         ap.error("--via status needs STATUS_TABLE set")

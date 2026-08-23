@@ -5,10 +5,10 @@
 """Build the KYC face pairs from a real, permissively-licensed face set (UTKFace, CC0).
 
 Output (under a gitignored dir):
-    <out>/enrolled/<subject>/id.jpg      the real face (enrolled)
+    <out>/registered/<subject>/id.jpg      the real face (registered)
     <out>/probe/<subject>/selfie.jpg     the simulated re-capture (the match probe)
-    <out>/impostors/<subject>/selfie.jpg  a different person's selfie (non-match)
-    <out>/pairs.csv                      subject,id_path,selfie_path,impostor_path
+    <out>/fraudsters/<subject>/selfie.jpg  a different person's selfie (non-match)
+    <out>/pairs.csv                      subject,id_path,selfie_path,fraudster_path
 
 Run (Kaggle token in the repo .env as KAGGLE_API_KEY):
     uv run etl/build_pairs.py --n 40
@@ -64,7 +64,7 @@ def _is_adult(path: Path) -> bool:
 
 
 def id_crop(path: Path, size: int = 256) -> Image.Image:
-    """Crop the real face to a square enrolled ID photo at a fixed size."""
+    """Crop the real face to a square registered ID photo at a fixed size."""
     im = Image.open(path).convert("RGB")
     w, h = im.size
     side = min(w, h)
@@ -112,7 +112,7 @@ def make_selfie_hf(im: Image.Image, strength: float) -> Image.Image:
 
 
 def main() -> None:
-    """Fetch real faces and emit enrolled/probe/impostor triples."""
+    """Fetch real faces and emit registered/probe/fraudster triples."""
     ap = argparse.ArgumentParser(description="Build KYC face pairs from UTKFace (CC0).")
     ap.add_argument("--n", type=int, default=40, help="how many subjects")
     ap.add_argument("--out", type=Path, default=Path("data/generated/faces"))
@@ -135,25 +135,25 @@ def main() -> None:
             make_selfie_hf(ident, args.strength) if args.hf else make_selfie(ident, rng)
         )
         # a non-match "selfie" from a different subject (wraps around the list)
-        impostor_src = subjects[(i + 1) % len(subjects)]
-        impostor = make_selfie(id_crop(impostor_src), rng)
+        fraudster_src = subjects[(i + 1) % len(subjects)]
+        fraudster = make_selfie(id_crop(fraudster_src), rng)
 
-        id_path = args.out / "enrolled" / subject / "id.jpg"
+        id_path = args.out / "registered" / subject / "id.jpg"
         selfie_path = args.out / "probe" / subject / "selfie.jpg"
-        impostor_path = args.out / "impostors" / subject / "selfie.jpg"
+        fraudster_path = args.out / "fraudsters" / subject / "selfie.jpg"
         for p, img in (
             (id_path, ident),
             (selfie_path, selfie),
-            (impostor_path, impostor),
+            (fraudster_path, fraudster),
         ):
             p.parent.mkdir(parents=True, exist_ok=True)
             img.save(p, format="JPEG", quality=92)
-        rows.append((subject, id_path, selfie_path, impostor_path))
+        rows.append((subject, id_path, selfie_path, fraudster_path))
 
     manifest = args.out / "pairs.csv"
     with open(manifest, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["subject", "id_path", "selfie_path", "impostor_path"])
+        w.writerow(["subject", "id_path", "selfie_path", "fraudster_path"])
         w.writerows(rows)
     print(f"{len(rows)} subjects -> {args.out} (manifest {manifest})")
 
