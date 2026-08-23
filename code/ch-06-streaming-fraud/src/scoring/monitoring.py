@@ -6,8 +6,9 @@
 
 Writes three warehouse tables the Grafana board reads: score_reference (the fixed training
 score distribution), score_monitor (live scores), and drift_attribution (a per-feature Shapley
-attribution of the score drift). The score is our AFD-calibrated 0-1000 score (policy.FPRCalibrator,
-reproducing Amazon Fraud Detector's score-to-FPR table), and the attribution is ScoreDriftAttributor, the label-free
+attribution of the score drift). The score is a percentile-among-legit score raised to a power
+(policy.FPRCalibrator; the default gamma puts 900 at a 2% false-positive rate, matching Amazon
+Fraud Detector's published table), and the attribution is ScoreDriftAttributor, the label-free
 virtual-drift side of Edakunni et al., "Explaining Drift using Shapley Values". The live stream is
 the held-out test set spread over 24 hours plus a simulated fraud-campaign burst, so the drift is
 visible; replace it with real live scores.

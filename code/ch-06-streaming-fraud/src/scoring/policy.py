@@ -2,12 +2,15 @@
 # requires-python = ">=3.12"
 # dependencies = ["pandas", "numpy", "catboost", "matplotlib", "scikit-learn"]
 # ///
-"""Decision policy: a 0-1000 fraud score calibrated to Amazon Fraud Detector's table, banded by two cuts.
+"""Decision policy: a 0-1000 fraud score from a single calibration, banded by two cuts.
 
-The score reproduces Amazon Fraud Detector's published score-to-false-positive-rate calibration on
-our own model: a record's false-positive rate is measured against the legitimate traffic, then
-mapped through AFD's seven anchor points, so a score of 900 means a 2% false-alarm rate, exactly as
-AFD's score does. Two cuts split it into approve, investigate, and fraud. FPRCalibrator is a
+The score is a record's percentile among legitimate traffic, raised to a power: score =
+1000 * r**gamma, where r is the share of legitimate records the transaction outranks. gamma
+is a shape knob. At gamma = 1 the score is linear, so a cut carries FPR = 1 - score/1000. The
+default gamma = ln(0.9)/ln(0.98) puts a 2% false-positive rate at score 900, which is Amazon
+Fraud Detector's published anchor, and reproduces the rest of AFD's score-to-FPR table to within
+a few points. Either way a cut's false-alarm rate is exact and invertible (score_to_fpr), and it
+holds on held-out data because r is uniform on legitimates by construction. FPRCalibrator is a
 scikit-learn transformer, so it pickles and drops into a Pipeline after the model.
 
 Usage:
@@ -25,18 +28,18 @@ from catboost import CatBoostClassifier
 from sklearn.base import BaseEstimator, TransformerMixin
 
 # -------------------------------------------------------------------------------
-# Amazon Fraud Detector's published score-to-FPR anchors (docs: model-scores.html)
-# and the plotting palette and band cuts
+# Calibration knob, plotting palette, and band cuts
 # -------------------------------------------------------------------------------
 CHAPTER_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
-AFD_FPR = np.array([0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.10])
-AFD_SCORE = np.array([975, 950, 900, 860, 775, 700, 600])
-APPROVE = "#2CA25F"
-INVESTIGATE = "#F0A030"
-FRAUD = "#E4408A"
-REVIEW_CUT = 700  # investigate at and above this score (a 7% false-alarm rate)
+# gamma that puts a 2% FPR at score 900, Amazon Fraud Detector's canonical anchor
+# (docs: model-scores.html); gamma = 1 would give the linear score, FPR = 1 - score/1000.
+GAMMA = np.log(0.9) / np.log(0.98)
+APPROVE = "#3FA45B"  # AWS-slide green
+INVESTIGATE = "#ED9A2E"  # AWS-slide orange
+FRAUD = "#2699F0"  # AWS-slide blue
+REVIEW_CUT = 700  # investigate at and above this score (about a 7% false-alarm rate)
 FRAUD_CUT = 900  # flag as fraud at and above this score (a 2% false-alarm rate)
 
 
@@ -51,28 +54,24 @@ def decide(
     return "approve"
 
 
-def _fpr_to_score(fpr: np.ndarray) -> np.ndarray:
-    """Map a false-positive rate to the 0-1000 score through AFD's anchors (the score's definition)."""
-    fpr = np.asarray(fpr, float)
-    s = np.empty_like(fpr)
-    lo = fpr <= AFD_FPR[0]
-    s[lo] = 1000 - (fpr[lo] / AFD_FPR[0]) * (1000 - AFD_SCORE[0])
-    mid = (fpr > AFD_FPR[0]) & (fpr <= AFD_FPR[-1])
-    s[mid] = np.interp(fpr[mid], AFD_FPR, AFD_SCORE)
-    hi = fpr > AFD_FPR[-1]
-    s[hi] = AFD_SCORE[-1] * (1 - fpr[hi]) / (1 - AFD_FPR[-1])
-    return s
+def score_to_fpr(score, gamma: float = GAMMA) -> np.ndarray:
+    """Return the false-positive rate a score cut carries: FPR = 1 - (score/1000)**(1/gamma)."""
+    return 1 - (np.asarray(score, float) / 1000) ** (1 / gamma)
 
 
 class FPRCalibrator(BaseEstimator, TransformerMixin):
-    """Map a probability of fraud to a 0-1000 score calibrated to Amazon Fraud Detector's table.
+    """Map a probability of fraud to a 0-1000 score: score = 1000 * r**gamma.
 
-    fit freezes the legitimate-probability reference from the training sample; transform measures
-    each probability's false-positive rate against that reference (the share of legitimate records
-    it outranks) and maps it through AFD's seven anchor points, so a score of 900 is a 2% false-alarm
-    rate, reproducing AFD's calibration on our own model. Fitted instances pickle, so the calibration
-    ships with the model.
+    fit freezes the legitimate-probability reference from the training sample. transform measures
+    r, the share of that reference each probability outranks (its percentile among legitimates),
+    and raises it to gamma. r is uniform on legitimates by construction, so a cut carries an exact,
+    invertible false-alarm rate (score_to_fpr) that holds out of sample. The default gamma puts a
+    2% FPR at score 900, matching Amazon Fraud Detector's published anchor; gamma = 1 is the linear
+    score. Fitted instances pickle, so the calibration ships with the model.
     """
+
+    def __init__(self, gamma: float = GAMMA):
+        self.gamma = gamma
 
     def fit(self, proba, y):
         """Freeze the sorted legitimate probabilities from the training scores and labels."""
@@ -82,10 +81,10 @@ class FPRCalibrator(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, proba) -> np.ndarray:
-        """Score each probability: its false-positive rate against the reference, mapped through AFD's anchors."""
+        """Score each probability: its percentile among the legitimate reference, raised to gamma."""
         proba = np.asarray(proba, float).ravel()
-        fpr = 1 - np.searchsorted(self.legit_, proba, side="left") / len(self.legit_)
-        return np.round(_fpr_to_score(fpr)).astype(int).reshape(-1, 1)
+        r = np.searchsorted(self.legit_, proba, side="right") / len(self.legit_)
+        return np.round(1000 * r**self.gamma).astype(int).reshape(-1, 1)
 
 
 class ProbaExtractor(BaseEstimator, TransformerMixin):
@@ -108,7 +107,7 @@ class ProbaExtractor(BaseEstimator, TransformerMixin):
 
 
 def main() -> None:
-    """Score the test rows with the AFD-calibrated score, band them, report the split, plot it."""
+    """Score the test rows, band them, report the split and each cut's measured FPR, plot it."""
     with open(f"{CHAPTER_DIR}/artifacts/model_meta.json") as f:
         features = json.load(f)["features"]
     model = CatBoostClassifier()
@@ -122,20 +121,37 @@ def main() -> None:
     score = calibrator.transform(model.predict_proba(test[features])[:, 1]).ravel()
     outcome = np.array([decide(s) for s in score])
     counts = {o: int((outcome == o).sum()) for o in ("approve", "investigate", "fraud")}
-    print(f"review_cut {REVIEW_CUT} (7% FPR), fraud_cut {FRAUD_CUT} (2% FPR): {counts}")
+    # the false-alarm rate each cut actually costs on the held-out legitimates
+    legit = score[test["is_fraud"].values == 0]
+    review_fpr = (legit >= REVIEW_CUT).mean()
+    fraud_fpr = (legit >= FRAUD_CUT).mean()
+    print(f"gamma {GAMMA:.3f}: {counts}")
+    print(
+        f"  measured FPR: review_cut {REVIEW_CUT} -> {review_fpr:.1%} "
+        f"(claimed {score_to_fpr(REVIEW_CUT):.1%}), "
+        f"fraud_cut {FRAUD_CUT} -> {fraud_fpr:.1%} (claimed {score_to_fpr(FRAUD_CUT):.1%})"
+    )
 
     plt.rcParams.update({"font.family": "Arial", "font.size": 15})
-    fig, ax = plt.subplots(figsize=(12, 5.5), dpi=150)
+    _, ax = plt.subplots(figsize=(12, 5.5), dpi=150)
     bins = np.linspace(0, 1000, 60)
     for lo, hi, color in [
         (0, REVIEW_CUT, APPROVE),
         (REVIEW_CUT, FRAUD_CUT, INVESTIGATE),
         (FRAUD_CUT, 1001, FRAUD),
     ]:
-        ax.hist(score[(score >= lo) & (score < hi)], bins=bins, color=color)
+        ax.hist(
+            score[(score >= lo) & (score < hi)],
+            bins=bins,
+            color=color,
+            edgecolor="white",
+            linewidth=0.6,
+        )
     for x in (REVIEW_CUT, FRAUD_CUT):
         ax.axvline(x, color="#444", ls="--", lw=1.4)
-    ax.set_ylim(0, ax.get_ylim()[1] * 1.30)
+    ax.set_ylim(
+        0, np.histogram(score, bins)[0].max() * 1.32
+    )  # headroom for the upper-left legend
     ax.legend(
         handles=[
             mpatches.Patch(color=APPROVE, label=f"approve {counts['approve']:,}"),
@@ -150,7 +166,7 @@ def main() -> None:
         ],
         loc="upper left",
         frameon=False,
-        fontsize=15,
+        fontsize=14,
     )
     ax.set_xlim(0, 1000)
     ax.spines[["top", "right"]].set_visible(False)
