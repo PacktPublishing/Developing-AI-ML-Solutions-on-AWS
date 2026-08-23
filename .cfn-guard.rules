@@ -1,0 +1,34 @@
+#
+# The book's own template conventions, not a compliance pack. Every rule here
+# encodes a decision the chapters already made, so a failure means drift rather
+# than a policy opinion.
+#
+
+let ecr_repos = Resources.*[ Type == 'AWS::ECR::Repository' ]
+rule ECR_EMPTY_ON_DELETE when %ecr_repos !empty {
+  # a repository with images in it blocks stack deletion
+  %ecr_repos.Properties.EmptyOnDelete == true
+  << Violation: every chapter's ECR repository sets EmptyOnDelete so `make delete` succeeds. >>
+}
+
+let buckets = Resources.*[ Type == 'AWS::S3::Bucket' ]
+rule S3_PUBLIC_ACCESS_BLOCKED when %buckets !empty {
+  %buckets.Properties.PublicAccessBlockConfiguration exists
+  %buckets.Properties.PublicAccessBlockConfiguration.BlockPublicAcls == true
+  %buckets.Properties.PublicAccessBlockConfiguration.BlockPublicPolicy == true
+  %buckets.Properties.PublicAccessBlockConfiguration.IgnorePublicAcls == true
+  %buckets.Properties.PublicAccessBlockConfiguration.RestrictPublicBuckets == true
+  << Violation: buckets holding identity images or model artifacts block all public access. >>
+}
+
+rule S3_DELETES_WITH_THE_STACK when %buckets !empty {
+  %buckets.DeletionPolicy == 'Delete'
+  %buckets.UpdateReplacePolicy == 'Delete'
+  << Violation: teardown must leave nothing behind; set DeletionPolicy and UpdateReplacePolicy to Delete. >>
+}
+
+let ecs_services = Resources.*[ Type == 'AWS::ECS::Service' ]
+rule ECS_IS_FARGATE when %ecs_services !empty {
+  %ecs_services.Properties.LaunchType == 'FARGATE'
+  << Violation: the book runs Fargate, never EC2 capacity. >>
+}

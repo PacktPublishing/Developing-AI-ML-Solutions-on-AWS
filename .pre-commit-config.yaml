@@ -95,6 +95,18 @@ repos:
         language: system
         files: (^|/)(template|build|redshift-serverless)\.yaml$
 
+  # Policy: the book's own template conventions (.cfn-guard.rules), not a
+  # compliance pack. A compliance ruleset such as CIS IG1 reports 106 findings
+  # here, almost all of them arguing against decisions the chapters make on
+  # purpose (no VPC, no bucket versioning, inline policies), so this file
+  # encodes what the repo actually agreed instead.
+  - repo: https://github.com/aws-cloudformation/cloudformation-guard
+    rev: 3.2.0
+    hooks:
+      - id: cfn-guard
+        args: ["--operation", "validate", "--rules", ".cfn-guard.rules"]
+        files: (^|/)(template|build|redshift-serverless)\.yaml$
+
   # Secrets: SageMaker local mode has previously written real AWS keys into a
   # chapter's generated docker-compose.yaml, and this code ships publicly with the
   # book, so scan every commit. This hook downloads its own binary, no brew needed.
