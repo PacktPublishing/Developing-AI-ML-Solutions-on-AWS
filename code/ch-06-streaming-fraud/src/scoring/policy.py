@@ -7,9 +7,10 @@
 The score is a record's percentile among legitimate traffic, raised to a power: score =
 1000 * r**gamma, where r is the share of legitimate records the transaction outranks. gamma
 is a shape knob. At gamma = 1 the score is linear, so a cut carries FPR = 1 - score/1000. The
-default gamma = ln(0.9)/ln(0.98) puts a 2% false-positive rate at score 900, which is Amazon
-Fraud Detector's published anchor, and reproduces the rest of AFD's score-to-FPR table to within
-a few points. Either way a cut's false-alarm rate is exact and invertible (score_to_fpr), and it
+default gamma = ln(0.9)/ln(0.98) is solved from one anchor, 1000 * 0.98**gamma = 900, so a 2%
+false-alarm cut sits at score 900 (also where Amazon Fraud Detector's published scale puts a 2%
+rate); it stretches the top of the range, giving the fraud band room. Either way a cut's
+false-alarm rate is exact and invertible (score_to_fpr), and it
 holds on held-out data because r is uniform on legitimates by construction. FPRCalibrator is a
 scikit-learn transformer, so it pickles and drops into a Pipeline after the model.
 
@@ -33,8 +34,8 @@ from sklearn.base import BaseEstimator, TransformerMixin
 CHAPTER_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
-# gamma that puts a 2% FPR at score 900, Amazon Fraud Detector's canonical anchor
-# (docs: model-scores.html); gamma = 1 would give the linear score, FPR = 1 - score/1000.
+# gamma solved from one anchor, 1000 * 0.98**gamma = 900: a 2% false-alarm cut sits at score 900
+# (also where AFD's published scale puts a 2% rate); gamma = 1 would be the linear FPR = 1 - score/1000.
 GAMMA = np.log(0.9) / np.log(0.98)
 APPROVE = "#3FA45B"  # AWS-slide green
 INVESTIGATE = "#ED9A2E"  # AWS-slide orange
