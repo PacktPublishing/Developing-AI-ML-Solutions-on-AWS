@@ -106,6 +106,10 @@ repos:
       - id: cfn-guard
         args: ["--operation", "validate", "--rules", ".cfn-guard.rules"]
         files: (^|/)(template|build|redshift-serverless)\.yaml$
+        # one process at a time: the hook downloads its binary on first use and
+        # parallel workers exec it while the write is still open, which fails the
+        # whole job with "Text file busy" on a cold CI runner.
+        require_serial: true
 
   # Secrets: SageMaker local mode has previously written real AWS keys into a
   # chapter's generated docker-compose.yaml, and this code ships publicly with the
