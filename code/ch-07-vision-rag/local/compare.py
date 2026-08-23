@@ -12,17 +12,19 @@ from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from face_embedder import FaceEmbedder
+from face_embedder import FaceEmbedder, best_devices
 from face_explainer import explain, heat_overlay
 
 CELL = 256
 
 
 def _up(rgb):
-    return Image.fromarray(rgb).resize((CELL, CELL), Image.LANCZOS)
+    """Scale one RGB array up to the contact sheet's cell size."""
+    return Image.fromarray(rgb).resize((CELL, CELL), Image.Resampling.LANCZOS)
 
 
-def _font(size, bold=False):
+def _font(size):
+    """Return Helvetica at this size, or PIL's bitmap font where it is absent."""
     try:
         return ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", size)
     except OSError:
@@ -32,7 +34,8 @@ def _font(size, bold=False):
 def main() -> None:
     """Compare two local images and print the decision."""
     a, b = sys.argv[1], sys.argv[2]
-    emb = FaceEmbedder(device="cpu")
+    device, detector_device = best_devices()
+    emb = FaceEmbedder(device=device, detector_device=detector_device)
     out = explain(emb, Path(a).read_bytes(), Path(b).read_bytes())
     if out is None:
         print("no face detected in one of the images")
@@ -53,7 +56,7 @@ def main() -> None:
     h = top + CELL + banner
     canvas = Image.new("RGB", (w, h), (30, 30, 30))
     draw = ImageDraw.Draw(canvas)
-    tf, sf = _font(15), _font(22, bold=True)
+    tf, sf = _font(15), _font(22)
 
     x = pad
     for img, title in panels:

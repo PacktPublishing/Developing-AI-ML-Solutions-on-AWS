@@ -1,0 +1,102 @@
+# The asynchronous endpoint as a delivery model, in the shape AWS draws it: an internal
+# queue in front of the endpoint, managed infrastructure that scales between zero and one
+# instance behind it, S3 carrying both the request and the answer, and SNS announcing
+# completion. SNS cannot write to a table itself, so a small subscriber does, and the
+# application polls that table rather than the endpoint.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Client, Cloud]
+
+    Client:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "applicant"
+
+    Cloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: vertical
+      Children: [Main, Notify]
+
+    Main:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Front, Infra, Store]
+
+    # SNS has no DynamoDB protocol, so the notification goes to a subscriber that writes
+    # the outcome to a table the application can poll.
+    Notify:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Sns, Writer, Table]
+    Sns:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Notification Service (Amazon SNS)"
+      Title: "SNS\nsuccess or error"
+    Writer:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Lambda"
+      Title: "subscriber\nwrites the outcome"
+    Table:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon DynamoDB"
+      Title: "DynamoDB\nverification status"
+
+    # queue directly above the endpoint it feeds
+    Front:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Queue, Endpoint]
+    Queue:
+      Type: AWS::Diagram::Resource
+      Preset: "Queue"
+      Title: "queue"
+    Endpoint:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "async endpoint"
+
+    # what SageMaker manages on your behalf: instances that come and go, and the code
+    Infra:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic group"
+      Direction: vertical
+      Title: "managed infrastructure"
+      Children: [Inst, Code]
+    Inst:
+      Type: AWS::Diagram::Resource
+      Preset: "Instances"
+      Title: "ml.g4dn.xlarge\n0 to 1 instance"
+    Code:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic application"
+      Title: "inference code\nFaceEmbeddingSpec"
+
+    Store:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Images, Db]
+    Images:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Storage Service (Amazon S3)"
+      Title: "S3\nrequest and answer"
+    Db:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Relational Database Service (Amazon RDS)"
+      Title: "Aurora\npgvector"
+
+  Links:
+    - {Source: Client, SourcePosition: NE, Target: Endpoint, TargetPosition: NW, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "1"}}}
+    - {Source: Queue, SourcePosition: SE, Target: Endpoint, TargetPosition: NE, TargetArrowHead: {Type: Open}, Labels: {TargetRight: {Title: "2"}}}
+    - {Source: Endpoint, SourcePosition: E, Target: Inst, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "3"}}}
+    - {Source: Inst, SourcePosition: E, Target: Images, TargetPosition: W, TargetArrowHead: {Type: Open}, SourceArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "4"}}}
+    - {Source: Code, SourcePosition: E, Target: Db, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "5"}}}
+    - {Source: Code, SourcePosition: SW, Target: Sns, TargetPosition: NE, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "6"}}}
+    - {Source: Sns, SourcePosition: E, Target: Writer, TargetPosition: W, TargetArrowHead: {Type: Open}, Labels: {SourceRight: {Title: "7"}}}
+    - {Source: Writer, SourcePosition: E, Target: Table, TargetPosition: W, TargetArrowHead: {Type: Open}, Labels: {SourceRight: {Title: "8"}}}
+    - {Source: Table, SourcePosition: SW, Target: Client, TargetPosition: SE, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "9"}}}

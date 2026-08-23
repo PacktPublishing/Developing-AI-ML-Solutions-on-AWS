@@ -13,60 +13,285 @@
     {
       "Sid": "CloudFormationRead",
       "Effect": "Allow",
-      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Action": [
+        "cloudformation:Describe*",
+        "cloudformation:List*",
+        "cloudformation:GetTemplateSummary"
+      ],
       "Resource": "*"
     },
-    {"Sid": "SamTransform", "Effect": "Allow", "Action": "cloudformation:CreateChangeSet", "Resource": "arn:aws:cloudformation:us-east-1:aws:transform/*"},
+    {
+      "Sid": "SamTransform",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateChangeSet",
+      "Resource": "arn:aws:cloudformation:us-east-1:aws:transform/*"
+    },
     {
       "Sid": "ManageChapterRoles",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
-        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
-        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
-        "iam:ListAttachedRolePolicies", "iam:PassRole"
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PassRole"
       ],
       "Resource": "arn:aws:iam::*:role/ch07-*"
     },
     {
       "Sid": "VpcNetworking",
       "Effect": "Allow",
-      "Action": ["ec2:*Vpc*", "ec2:*Subnet*", "ec2:*Route*", "ec2:*InternetGateway*", "ec2:*NatGateway*", "ec2:*SecurityGroup*", "ec2:*Address*", "ec2:*NetworkInterface*", "ec2:Describe*", "ec2:*Tags"],
+      "Action": [
+        "ec2:*Vpc*",
+        "ec2:*Subnet*",
+        "ec2:*Route*",
+        "ec2:*InternetGateway*",
+        "ec2:*NatGateway*",
+        "ec2:*SecurityGroup*",
+        "ec2:*Address*",
+        "ec2:*NetworkInterface*",
+        "ec2:Describe*",
+        "ec2:*Tags"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "RdsPgvector",
       "Effect": "Allow",
-      "Action": ["rds:CreateDBSubnetGroup", "rds:DeleteDBSubnetGroup", "rds:DescribeDBSubnetGroups", "rds:CreateDBInstance", "rds:DeleteDBInstance", "rds:DescribeDBInstances", "rds:ModifyDBInstance", "rds:AddTagsToResource", "rds:ListTagsForResource"],
+      "Action": [
+        "rds:AddTagsToResource",
+        "rds:CreateDBCluster",
+        "rds:CreateDBInstance",
+        "rds:CreateDBSubnetGroup",
+        "rds:DeleteDBCluster",
+        "rds:DeleteDBInstance",
+        "rds:DeleteDBSubnetGroup",
+        "rds:DescribeDBClusters",
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBSubnetGroups",
+        "rds:EnableInternetAccessGateway",
+        "rds:ListTagsForResource",
+        "rds:ModifyDBCluster",
+        "rds:ModifyDBInstance"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "DbCredentials",
       "Effect": "Allow",
-      "Action": ["secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:GetRandomPassword", "secretsmanager:TagResource"],
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:GetRandomPassword",
+        "secretsmanager:TagResource"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "Lambda",
       "Effect": "Allow",
-      "Action": ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:InvokeFunction", "lambda:CreateFunctionUrlConfig", "lambda:DeleteFunctionUrlConfig", "lambda:GetFunctionUrlConfig", "lambda:AddPermission", "lambda:RemovePermission", "lambda:TagResource"],
+      "Action": [
+        "lambda:AddPermission",
+        "lambda:CreateFunction",
+        "lambda:CreateFunctionUrlConfig",
+        "lambda:DeleteFunction",
+        "lambda:DeleteFunctionUrlConfig",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:GetFunctionUrlConfig",
+        "lambda:GetPolicy",
+        "lambda:InvokeFunction",
+        "lambda:ListFunctions",
+        "lambda:ListTags",
+        "lambda:RemovePermission",
+        "lambda:TagResource",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration"
+      ],
       "Resource": "arn:aws:lambda:us-east-1:*:function:ch07-*"
     },
     {
       "Sid": "ApiGateway",
       "Effect": "Allow",
-      "Action": ["apigateway:POST", "apigateway:GET", "apigateway:PATCH", "apigateway:DELETE", "apigateway:PUT", "apigateway:TagResource", "apigateway:UntagResource"],
+      "Action": [
+        "apigateway:POST",
+        "apigateway:GET",
+        "apigateway:PATCH",
+        "apigateway:DELETE",
+        "apigateway:PUT",
+        "apigateway:TagResource",
+        "apigateway:UntagResource"
+      ],
       "Resource": "arn:aws:apigateway:us-east-1::/*"
     },
-    {"Sid": "EcrRepository", "Effect": "Allow", "Action": "ecr:*", "Resource": "arn:aws:ecr:us-east-1:*:repository/ch07-*"},
-    {"Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
+    {
+      "Sid": "EcrRepository",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:us-east-1:*:repository/ch07-*"
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
     {
       "Sid": "CodeBuild",
       "Effect": "Allow",
-      "Action": ["codebuild:CreateProject", "codebuild:UpdateProject", "codebuild:DeleteProject", "codebuild:StartBuild", "codebuild:BatchGetBuilds", "codebuild:BatchGetProjects"],
+      "Action": [
+        "codebuild:BatchGetBuilds",
+        "codebuild:BatchGetProjects",
+        "codebuild:CreateProject",
+        "codebuild:DeleteProject",
+        "codebuild:ListBuildsForProject",
+        "codebuild:StartBuild",
+        "codebuild:UpdateProject"
+      ],
       "Resource": "arn:aws:codebuild:us-east-1:*:project/ch07-*"
     },
-    {"Sid": "SourceBucket", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch07-*", "arn:aws:s3:::ch07-*/*", "arn:aws:s3:::aws-sam-cli-managed-*", "arn:aws:s3:::aws-sam-cli-managed-*/*"]},
-    {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch07*"}
+    {
+      "Sid": "SourceBucket",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::ch07-*",
+        "arn:aws:s3:::ch07-*/*",
+        "arn:aws:s3:::aws-sam-cli-managed-*",
+        "arn:aws:s3:::aws-sam-cli-managed-*/*"
+      ]
+    },
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DeleteLogGroup",
+        "logs:DescribeLogStreams",
+        "logs:FilterLogEvents",
+        "logs:GetLogEvents",
+        "logs:PutRetentionPolicy",
+        "logs:TagResource"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch07*"
+    },
+    {
+      "Sid": "SageMakerHosting",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CreateEndpoint",
+        "sagemaker:CreateEndpointConfig",
+        "sagemaker:CreateModel",
+        "sagemaker:DeleteEndpoint",
+        "sagemaker:DeleteEndpointConfig",
+        "sagemaker:DeleteModel",
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:DescribeEndpointConfig",
+        "sagemaker:DescribeModel",
+        "sagemaker:InvokeEndpoint",
+        "sagemaker:InvokeEndpointAsync",
+        "sagemaker:ListEndpoints",
+        "sagemaker:ListModels",
+        "sagemaker:UpdateEndpoint",
+        "sagemaker:UpdateEndpointWeightsAndCapacities"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PassServingRoleToSageMaker",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/ch07-vision-rag-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "sagemaker.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ScaleTheEndpointToZero",
+      "Effect": "Allow",
+      "Action": [
+        "application-autoscaling:RegisterScalableTarget",
+        "application-autoscaling:DeregisterScalableTarget",
+        "application-autoscaling:PutScalingPolicy",
+        "application-autoscaling:DeleteScalingPolicy",
+        "application-autoscaling:DescribeScalableTargets",
+        "application-autoscaling:DescribeScalingPolicies",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AsyncResultNotifications",
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetSubscriptionAttributes",
+        "sns:GetTopicAttributes",
+        "sns:ListSubscriptionsByTopic",
+        "sns:ListTagsForResource",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:TagResource",
+        "sns:Unsubscribe",
+        "sns:UntagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "VerificationStatusTable",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:DescribeContinuousBackups",
+        "dynamodb:DescribeTable",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:GetItem",
+        "dynamodb:ListTagsOfResource",
+        "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource",
+        "dynamodb:UpdateContinuousBackups",
+        "dynamodb:UpdateTable",
+        "dynamodb:UpdateTimeToLive"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:*:table/ch07-*"
+    },
+    {
+      "Sid": "ConnectToAuroraWithIam",
+      "Effect": "Allow",
+      "Action": "rds-db:connect",
+      "Resource": "arn:aws:rds-db:*:*:dbuser:*/*"
+    },
+    {
+      "Sid": "AutoScalingServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": "sagemaker.application-autoscaling.amazonaws.com"
+        }
+      }
+    }
   ]
 }

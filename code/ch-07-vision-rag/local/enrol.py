@@ -8,33 +8,27 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from face_embedder import FaceEmbedder
-from kycdb import connect, ensure_schema
+from face_embedder import FaceEmbedder, best_devices
+from kycstore import connect, ensure_schema, insert
 
 
 def main() -> None:
     """Embed every enrolled ID photo into the faces table."""
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("../data/generated/faces")
-    embedder = FaceEmbedder(device="cpu")
-    conn = connect()
-    ensure_schema(conn)
-
+    device, detector_device = best_devices()
+    embedder = FaceEmbedder(device=device, detector_device=detector_device)
     enrolled = 0
-    for id_path in sorted(root.glob("enrolled/*/id.jpg")):
-        subject = id_path.parent.name
-        key = f"enrolled/{subject}/id.jpg"
-        emb = embedder.get_embedding(id_path.read_bytes())
-        if emb is None:
-            print(f"no face in {key}")
-            continue
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO faces (subject, s3_key, embedding) "
-                "VALUES (%s, %s, %s::vector) ON CONFLICT (s3_key) DO NOTHING",
-                (subject, key, str(emb.tolist())),
-            )
-        conn.commit()
-        enrolled += 1
+    with connect() as conn:
+        ensure_schema(conn)
+        for id_path in sorted(root.glob("enrolled/*/id.jpg")):
+            subject = id_path.parent.name
+            key = f"enrolled/{subject}/id.jpg"
+            emb = embedder.get_embedding(id_path.read_bytes())
+            if emb is None:
+                print(f"no face in {key}")
+                continue
+            insert(conn, subject, key, emb)
+            enrolled += 1
     print(f"enrolled {enrolled} face(s)")
 
 

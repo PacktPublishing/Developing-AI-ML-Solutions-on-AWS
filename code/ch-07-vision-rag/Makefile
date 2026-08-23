@@ -1,4 +1,4 @@
-.PHONY: up faces enrol match match-impostor compare all down diagrams lint
+.PHONY: up faces enrol match match-impostor compare bench serve-inprocess all down diagrams lint
 
 # the whole local flow in one command: the pgvector store, the synthetic faces, an enrolment,
 # and a genuine match. Then try match-impostor / compare. make down when done.
@@ -27,6 +27,14 @@ match:
 # an impostor selfie resolves to a different subject than claimed -> not matched
 match-impostor:
 	cd local && uv run --project . python match.py ../$(FACES)/impostors/$(SUBJECT)/selfie.jpg --claim $(SUBJECT)
+
+# the embedder behind the SageMaker inference contract, in process, on the Apple GPU
+serve-inprocess:
+	SM_OFFLINE=1 PYTHONPATH=src FACES_DIR=data/generated/faces uv run local/serve_inprocess.py
+
+# CPU vs Apple GPU (MPS) for the two embedding stages, over the enrolled photos
+bench:
+	cd local && uv run --project . python bench_device.py -n $(N)
 
 # 1:1 compare + Captum explanation on a genuine pair
 compare:

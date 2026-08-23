@@ -1,0 +1,73 @@
+# What asynchronous inference changes: the call returns a location, not an answer. The
+# top row is everything the caller's process does; the bottom row is what happens after
+# it has already returned. The timings are measured on this chapter's own endpoint.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [Caller, Cloud]
+
+    # the caller's own process: two short calls, minutes apart
+    Caller:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic group"
+      Direction: horizontal
+      Title: "the caller's process"
+      Children: [Submit, Gap, Poll]
+    Submit:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic application"
+      Title: "invoke_endpoint_async\nreturns a location"
+    Gap:
+      Type: AWS::Diagram::Resource
+      Preset: "Gear"
+      Title: "free to do\nanything else"
+    Poll:
+      Type: AWS::Diagram::Resource
+      Preset: "Generic application"
+      Title: "read the status row\nby verification id"
+
+    Cloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Children: [Queued, Wake, Load, Infer, Emit]
+
+    Queued:
+      Type: AWS::Diagram::Resource
+      Preset: "Queue"
+      Title: "queued\n10.0 s in backlog"
+    Wake:
+      Type: AWS::Diagram::Resource
+      Preset: "Instances"
+      Title: "scale 0 to 1\n209 s from cold"
+    Load:
+      Type: AWS::Diagram::Resource
+      Preset: "Gear"
+      Title: "load the model\n10.7 s once"
+    Infer:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "embed and search\n250 ms warm"
+    Emit:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Notification Service (Amazon SNS)"
+      Title: "answer to S3,\ncompletion to SNS"
+
+  Links:
+    - {Source: Submit, SourcePosition: E, Target: Gap, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Gap, SourcePosition: E, Target: Poll, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Submit, SourcePosition: S, Target: Queued, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal, Labels: {TargetLeft: {Title: "the request"}}}
+    - {Source: Queued, SourcePosition: E, Target: Wake, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Wake, SourcePosition: E, Target: Load, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Load, SourcePosition: E, Target: Infer, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Infer, SourcePosition: E, Target: Emit, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    # straight, so the label renders on the source side and clears the title above
+    - {Source: Emit, SourcePosition: N, Target: Poll, TargetPosition: S, TargetArrowHead: {Type: Open}, Labels: {SourceRight: {Title: "the answer"}}}

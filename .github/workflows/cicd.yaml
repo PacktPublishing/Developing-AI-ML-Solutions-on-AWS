@@ -31,6 +31,26 @@ jobs:
       - name: pre-commit (ruff, ty, shfmt, shellcheck, mbake)
         run: uvx pre-commit run --all-files --show-diff-on-failure
 
+  # Secrets, over the whole history rather than the working tree. The pre-commit
+  # hook only sees staged changes, so it is a no-op under `pre-commit run
+  # --all-files` in the quality job above; this is the check that would catch a key
+  # committed once and deleted later. fetch-depth 0 is what makes the history
+  # visible; the scan takes about a second for this repo.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: install gitleaks
+        run: |
+          curl -fsSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.29.0/gitleaks_8.29.0_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+      - name: scan git history
+        run: gitleaks git --redact --no-banner .
+
   # Byte-compile the chapter code on each supported Python so a version-specific
   # syntax error (for example the 3.14-only bracketless except) fails loudly
   # rather than only surfacing on a reader's machine. This is a syntax check; it
@@ -52,24 +72,26 @@ jobs:
             -x '(\.aws-sam|\.ruff_cache|\.venv|__pycache__)' \
             code
 
-  # Shim tests: the suite provisions its own DynamoDB Local via docker-py
-  # (runners have a Docker daemon), so no services block is needed.
+  # Every chapter that has a tests/ directory, one job each so a failure names
+  # the chapter. Each suite declares its own dependencies in the chapter's
+  # `make test` line, and the ones that need a database or DynamoDB Local
+  # provision their own container through docker-py, which the runners provide.
+  # Add a chapter here when it grows a tests/ directory.
   tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chapter:
+          - ch-01-data-engineering
+          - ch-02-mlops
+          - ch-03-generative-ai
+          - ch-09-underwriting-kb
+          - ch-11-model-monitoring
+          - ch-12-model-governance
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - name: sagemaker-local test suite
-        working-directory: code/ch-01-data-engineering
-        run: make test
-
-  # ch-03: unit tests for the routing rule and the guardrail shim, plus a
-  # pgvector round-trip that provisions its own container via docker-py.
-  tests-genai:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - name: generative-ai test suite
-        working-directory: code/ch-03-generative-ai
+      - name: ${{ matrix.chapter }} test suite
+        working-directory: code/${{ matrix.chapter }}
         run: make test

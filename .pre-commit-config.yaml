@@ -3,6 +3,9 @@
 #   ty        - type-check Python
 #   shfmt     - format shell scripts
 #   mbake     - format Makefiles
+#   rain      - format CloudFormation templates
+#   cfn-lint  - lint CloudFormation templates
+#   gitleaks  - scan for committed secrets
 #   commitizen - check the commit message against the schema in pyproject.toml
 #
 # Install once:  uvx pre-commit install
@@ -80,6 +83,25 @@ repos:
         entry: rain fmt -w
         language: system
         files: (^|/)(template|redshift-serverless)\.yaml$
+      - id: cfn-lint
+        name: cfn-lint (CloudFormation lint)
+        # rain fmt only formats; this is the check that reads the templates.
+        # --non-zero-exit-code error blocks on errors and lets warnings through,
+        # the same bargain the ty hook makes: W1030 fires on every conditional
+        # parameter whose default is empty, which several chapters use on purpose.
+        # Genuine per-template exceptions go in that template's own
+        # Metadata.cfn-lint.config.ignore_checks, not here.
+        entry: uvx cfn-lint --non-zero-exit-code error
+        language: system
+        files: (^|/)(template|build|redshift-serverless)\.yaml$
+
+  # Secrets: SageMaker local mode has previously written real AWS keys into a
+  # chapter's generated docker-compose.yaml, and this code ships publicly with the
+  # book, so scan every commit. This hook downloads its own binary, no brew needed.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.29.0
+    hooks:
+      - id: gitleaks
 
   # Validate the commit message against [tool.commitizen] in pyproject.toml:
   # "<scope> (<+|~|->): <subject>", scope one of ch-NN, book, repo, tools.

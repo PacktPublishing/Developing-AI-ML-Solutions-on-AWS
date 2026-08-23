@@ -1,4 +1,5 @@
-# The same Vision RAG loop on your laptop: facenet Lambda containers under the Lambda RIE, pgvector for RDS, S3Proxy for S3.
+# The same KYC loop on your laptop. Compose runs one container, pgvector; enrol.py and match.py
+# run on the host and embed on CPU, exactly as the Lambda handlers do. Files stand in for S3.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -10,43 +11,55 @@ Diagram:
     Canvas:
       Type: AWS::Diagram::Canvas
       Direction: horizontal
-      Children: [Applicant, Local]
+      Children: [Host, Compose]
 
-    Applicant:
+    # The scripts and the face files live on the host; Compose runs only the database.
+    # Boxing the host side also drops both lanes clear of the Compose header badge.
+    Host:
       Type: AWS::Diagram::Resource
-      Preset: User
-      Title: "Applicant"
+      Preset: "Generic group"
+      Direction: horizontal
+      Title: "Your laptop (uv run)"
+      Children: [Files, Scripts]
 
-    Local:
+    # Column 1 and column 2 are both two-item stacks, so each lane runs dead straight.
+    Files:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Enrolled, Probe]
+    Enrolled:
+      Type: AWS::Diagram::Resource
+      Preset: "Image"
+      Title: "enrolled ID photos\nfaces/enrolled/"
+    Probe:
+      Type: AWS::Diagram::Resource
+      Preset: "Image"
+      Title: "probe selfie\nfaces/probe/"
+
+    Scripts:
+      Type: AWS::Diagram::VerticalStack
+      Children: [EnrolPy, MatchPy]
+    EnrolPy:
+      Type: AWS::Diagram::Resource
+      Preset: "Gear"
+      Title: "enrol.py\nFaceNet on CPU"
+    MatchPy:
+      Type: AWS::Diagram::Resource
+      Preset: "Gear"
+      Title: "match.py\nFaceNet on CPU"
+
+    Compose:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
-      Title: "Local (Docker Compose)"
-      Children: [Images, Compute, Store]
-
-    Images:
-      Type: AWS::S3::Bucket
-      Title: "S3Proxy :9000\n(S3)"
-
-    Compute:
-      Type: AWS::Diagram::VerticalStack
-      Children: [Embed, Search]
-    Embed:
-      Type: AWS::Diagram::Resource
-      Preset: "LambdaCoin"
-      Title: "embeddings RIE :9011\n(facenet)"
-    Search:
-      Type: AWS::Diagram::Resource
-      Preset: "LambdaCoin"
-      Title: "search RIE :9010\n(facenet)"
-
+      Title: "Docker Compose"
+      Children: [Store]
     Store:
       Type: AWS::Diagram::Resource
       Preset: "Postgres"
-      Title: "pgvector :5432\n(RDS Postgres)"
+      Title: "pgvector\nlocalhost:5507"
 
   Links:
-    - {Source: Images, SourcePosition: E, Target: Embed, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Applicant, SourcePosition: E, Target: Search, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Embed, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Search, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Enrolled, SourcePosition: E, Target: EnrolPy, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: Probe, SourcePosition: E, Target: MatchPy, TargetPosition: W, TargetArrowHead: {Type: Open}}
+    - {Source: EnrolPy, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: MatchPy, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

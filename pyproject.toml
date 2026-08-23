@@ -10,6 +10,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    # pytest is here for the type checker as much as for the tests: without it
+    # ty cannot see that pytest.skip() is NoReturn, and every test that skips on
+    # a missing Docker daemon reports its container handle as possibly unbound.
+    "pytest>=8.0",
     "pydocstyle>=6.3.0",
     "ruff>=0.15.21",
 ]
@@ -57,10 +61,6 @@ convention = "pep257"
 
 [tool.ty.environment]
 python-version = "3.12"
-
-[tool.ty.src]
-# ch-07 is mid-refactor; skip type-checking it until it settles
-exclude = ["code/ch-07-vision-rag/**"]
 
 [tool.ty.rules]
 possibly-unresolved-reference = "warn"
