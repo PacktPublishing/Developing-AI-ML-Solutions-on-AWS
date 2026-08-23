@@ -45,7 +45,22 @@ def fetch_faces(cache: Path) -> list[Path]:
         images = sorted(cache.rglob("*.jpg"))
     if not images:
         raise SystemExit(f"no images found under {cache}")
-    return images
+    return [p for p in images if _is_adult(p)]
+
+
+# UTKFace encodes its labels in the filename as age_gender_race_date. A KYC example
+# has no business showing children: nobody onboards a one-year-old, and a set drawn
+# without this filter puts infants in the fraudster column. It also drops the one
+# watermarked file in the sample, which is an infant photograph.
+MIN_AGE = 18
+
+
+def _is_adult(path: Path) -> bool:
+    """Return True when the filename's leading age field is an adult age."""
+    try:
+        return int(path.name.split("_", 1)[0]) >= MIN_AGE
+    except ValueError:
+        return False
 
 
 def id_crop(path: Path, size: int = 256) -> Image.Image:

@@ -17,7 +17,7 @@ GAP = 10
 PAD = 16
 TOP = 30
 COLUMNS = ("enrolled", "probe", "impostors")
-HEADINGS = ("enrolled ID photo", "genuine probe selfie", "impostor selfie")
+HEADINGS = ("registered ID photo", "genuine probe selfie", "fraudster selfie")
 
 
 def _font(size: int):
@@ -40,12 +40,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("faces", nargs="?", default="../data/generated/faces")
     ap.add_argument("-n", type=int, default=3)
+    ap.add_argument(
+        "--subjects", nargs="+", help="pick these subjects instead of the first N"
+    )
     args = ap.parse_args()
 
     root = Path(args.faces)
-    subjects = sorted(p.name for p in (root / "enrolled").iterdir() if p.is_dir())[
-        : args.n
-    ]
+    subjects = (
+        args.subjects
+        or sorted(p.name for p in (root / "enrolled").iterdir() if p.is_dir())[: args.n]
+    )
     if not subjects:
         raise SystemExit(f"no subjects under {root}/enrolled")
 
