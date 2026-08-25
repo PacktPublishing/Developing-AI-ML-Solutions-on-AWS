@@ -1,6 +1,14 @@
 COMPOSE := docker compose -f local/analytics-stack.yml
 
-.PHONY: llm local local-bedrock local-claude all local-stop lint
+# awsdac renders diagrams/yaml into diagrams/png. Custom icons ship as SVG and
+# are rasterised at ICON_HEIGHT (needs rsvg-convert); WIDTH sets pixel width
+# (0 = awsdac native).
+AWSDAC_VERSION := v0.22.4
+AWSDAC := $(shell go env GOPATH)/bin/awsdac
+WIDTH ?= 0
+ICON_HEIGHT ?= 500
+
+.PHONY: llm local local-bedrock local-claude all local-stop diagrams lint
 
 # the one-command local flow: bring the whole stack up fully offline (Ollama-backed
 # gpt-oss:20b, no account), then open http://localhost:7681 and ask a question. make
@@ -45,3 +53,14 @@ llm:
 		--speculative-config '{"method":"ngram","num_speculative_tokens":8,"prompt_lookup_max":4}'
 
 # iam and the cloud deploy live in aws/Makefile (make -C aws iam / deploy).
+
+diagrams:
+	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
+	@for s in ../../assets/diagrams/icons/*.svg; do \
+		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
+	done
+	@mkdir -p diagrams/png
+	@for f in diagrams/yaml/*.yaml; do \
+		echo "  $$f"; \
+		"$(AWSDAC)" -f "$$f" -o "diagrams/png/$$(basename $$f .yaml).png" --width $(WIDTH); \
+	done

@@ -1,7 +1,9 @@
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
-      LocalFile: /Users/deburky/.claude/skills/aws-diagram/definition-for-aws-icons-light.yaml
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
 
   Resources:
     Canvas:
@@ -14,42 +16,51 @@ Diagram:
     Analyst:
       Type: AWS::Diagram::Resource
       Preset: User
-      Title: "Analyst\n(browser terminal)"
+      Title: "browser terminal"
 
     AWSCloud:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: horizontal
       Children:
-        - TaskCol
+        - AgentCol
         - BackendCol
+        - WarehouseCol
 
-    TaskCol:
+    # single child: the task centres on the canvas axis, so the analyst's link
+    # lands on the icon instead of striking through the caption below it.
+    AgentCol:
       Type: AWS::Diagram::VerticalStack
       Children:
         - Task
-        - TaskRole
 
     Task:
       Type: AWS::Diagram::Resource
       Preset: "AWS Fargate"
-      Title: "ECS Fargate"
-
-    TaskRole:
-      Type: AWS::Diagram::Resource
-      Preset: "AWS Identity and Access Management (IAM)"
-      Title: "IAM task role\nread-only, scoped"
+      Title: "ECS Fargate task\nagent + read-only role"
 
     BackendCol:
       Type: AWS::Diagram::VerticalStack
       Children:
         - Bedrock
+        - Helper
+
+    # own column: a link dropped from the helper's S would run straight through
+    # the caption underneath it.
+    WarehouseCol:
+      Type: AWS::Diagram::VerticalStack
+      Children:
         - Warehouse
 
     Bedrock:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Bedrock"
       Title: "Bedrock\nClaude (InvokeModel)"
+
+    Helper:
+      Type: AWS::Diagram::Resource
+      Preset: Claude
+      Title: "Data API helper\ntimeout, row cap, masking"
 
     Warehouse:
       Type: AWS::Diagram::Resource
@@ -71,17 +82,17 @@ Diagram:
       TargetArrowHead:
         Type: Open
       Type: orthogonal
-    - Source: TaskRole
+    - Source: Task
       SourcePosition: E
-      Target: Warehouse
+      Target: Helper
       TargetPosition: W
       TargetArrowHead:
         Type: Open
       Type: orthogonal
-    - Source: TaskRole
-      SourcePosition: N
-      Target: Task
-      TargetPosition: S
+    - Source: Helper
+      SourcePosition: E
+      Target: Warehouse
+      TargetPosition: W
       TargetArrowHead:
         Type: Open
       Type: orthogonal
