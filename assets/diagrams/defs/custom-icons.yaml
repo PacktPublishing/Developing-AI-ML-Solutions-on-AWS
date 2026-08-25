@@ -5,6 +5,7 @@
 # consumes. Presets:
 #   - Strands / LambdaCoin: the agent mark and the classic AWS Lambda coin.
 #   - MinIO, MLflow, Ollama, Postgres, Iceberg, Trino, FastAPI, OpenSearch: local-stack tools (SVG).
+#   - Claude: the Claude mark, for the model and the tools it drives.
 Definitions:
   CustomIcons:
     Type: Directory
@@ -18,6 +19,10 @@ Definitions:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "lambda-coin.png"}
     Label: {Title: "AWS Lambda", Color: "rgba(0, 0, 0, 255)"}
+  Claude:
+    Type: Preset
+    Icon: {Source: CustomIcons, Path: "claude.png"}
+    Label: {Title: "Claude", Color: "rgba(0, 0, 0, 255)"}
   Docker:
     Type: Preset
     Icon: {Source: CustomIcons, Path: "docker.png"}
