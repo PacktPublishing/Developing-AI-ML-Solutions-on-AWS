@@ -29,7 +29,7 @@ Diagram:
     ApiGateway:
       Type: AWS::Diagram::Resource
       Preset: "Amazon API Gateway"
-      Title: "API Gateway\nask / recommend"
+      Title: "API Gateway\nask / cases"
     Lambda:
       Type: AWS::Diagram::Resource
       Preset: "AWS Lambda"
