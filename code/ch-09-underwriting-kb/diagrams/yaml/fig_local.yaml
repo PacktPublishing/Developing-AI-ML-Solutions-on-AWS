@@ -1,7 +1,7 @@
-# Local retrieval: the FastAPI ask/recommend app embeds the question and the memos
-# with Ollama (the local Bedrock stand-in), retrieves the nearest chunks from the
-# vector store, and grounds the answer in them with citations. OpenSearch mirrors
-# the AWS domain; STORE=pgvector | s3vectors swaps it, the retrieval code unchanged.
+# The local half of the pair: the same shape as fig_aws with the local stand-ins
+# swapped in. The FastAPI ask/cases app embeds the question and the memos with
+# Ollama instead of Bedrock and retrieves the nearest chunks from an OpenSearch
+# container instead of a managed domain. Dashboards comes up on 5601 either way.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -25,12 +25,15 @@ Diagram:
       Preset: AWSCloudNoLogo
       Direction: horizontal
       Title: "Local cloud (Docker Compose)"
-      Children: [App, Backends]
+      Children: [AppCol, Backends]
 
+    AppCol:
+      Type: AWS::Diagram::VerticalStack
+      Children: [App]
     App:
       Type: AWS::Diagram::Resource
       Preset: "FastAPI"
-      Title: "FastAPI app\nask / recommend (uvicorn)"
+      Title: "FastAPI app\nuvicorn"
     Backends:
       Type: AWS::Diagram::VerticalStack
       Children: [Ollama, Store]
@@ -41,7 +44,7 @@ Diagram:
     Store:
       Type: AWS::Diagram::Resource
       Preset: "OpenSearch"
-      Title: "OpenSearch\n(pgvector | S3 Vectors)"
+      Title: "OpenSearch\ncontainer + Dashboards"
 
   Links:
     - {Source: Underwriter, SourcePosition: E, Target: App, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

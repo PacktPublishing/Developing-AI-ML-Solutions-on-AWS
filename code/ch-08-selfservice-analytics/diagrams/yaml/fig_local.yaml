@@ -1,0 +1,67 @@
+# The same shape as fig_assistant, with the local stand-ins swapped in: the same
+# container, the same UNMODIFIED helper. Only the two endpoints move. The model
+# seam points at Ollama on the host instead of Bedrock, and
+# AWS_ENDPOINT_URL_REDSHIFT_DATA points at the from-source Data API shim in
+# front of redshift-local instead of the real Data API.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Browser, Local]
+
+    Browser:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "browser terminal"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: horizontal
+      Title: "Local (Docker Compose)"
+      Children: [AgentCol, BackendCol, WarehouseCol]
+
+    # single child: the container centres on the canvas axis, so the browser's
+    # link lands on the icon instead of striking through the caption below it.
+    AgentCol:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Assistant]
+    Assistant:
+      Type: AWS::Diagram::Resource
+      Preset: Docker
+      Title: "assistant container\nttyd + Claude Code"
+
+    BackendCol:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Model, Helper]
+    Model:
+      Type: AWS::Diagram::Resource
+      Preset: Ollama
+      Title: "Ollama\ngpt-oss:20b (host)"
+    Helper:
+      Type: AWS::Diagram::Resource
+      Preset: Claude
+      Title: "Data API helper\nunmodified"
+
+    # own column: a link dropped from the helper's S would run straight through
+    # the caption underneath it.
+    WarehouseCol:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Warehouse]
+    Warehouse:
+      Type: AWS::Diagram::Resource
+      Preset: "RedshiftLocal"
+      Title: "redshift-local :5439\nlocal Data API"
+
+  Links:
+    - {Source: Browser, SourcePosition: E, Target: Assistant, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Assistant, SourcePosition: E, Target: Model, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Assistant, SourcePosition: E, Target: Helper, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Helper, SourcePosition: E, Target: Warehouse, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

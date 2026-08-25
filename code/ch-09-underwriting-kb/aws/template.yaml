@@ -187,7 +187,7 @@ Outputs:
     Value: !Sub https://${Kb.DomainEndpoint}/_dashboards/
 
   AppUrl:
-    Description: The underwriter app (ask/recommend) behind API Gateway
+    Description: The underwriter app (ask/cases) behind API Gateway
     Value: !Sub https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com
 
   RagRoleArn:

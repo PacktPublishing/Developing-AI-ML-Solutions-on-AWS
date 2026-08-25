@@ -1,0 +1,44 @@
+# One config, two enforcement points. config/pii_columns.yaml is read both by
+# the helper's mask_records (which masks by column NAME, before rows reach the
+# model) and by the warehouse-side DDL that provision.sh attaches to the
+# read-only user, so the two layers cannot drift. The warehouse layer is the
+# backstop for the case the first one misses: a column name that does not
+# survive into the result, such as SELECT email AS e.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [ConfigCol, LayerCol]
+
+    # single child: the config centres on the canvas axis, so both links leave
+    # on the icon centre line, clear of the caption below it.
+    ConfigCol:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Config]
+    Config:
+      Type: AWS::Diagram::Resource
+      Preset: "Documents"
+      Title: "pii_columns.yaml\nsingle source of truth"
+
+    LayerCol:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Helper, Warehouse]
+    Helper:
+      Type: AWS::Diagram::Resource
+      Preset: Claude
+      Title: "layer 1: the helper\nmasks by column name"
+    Warehouse:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Redshift"
+      Title: "layer 2: the warehouse\npolicy on the read-only user"
+
+  Links:
+    - {Source: Config, SourcePosition: E, Target: Helper, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Config, SourcePosition: E, Target: Warehouse, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
