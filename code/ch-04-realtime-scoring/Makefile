@@ -1,4 +1,4 @@
-.PHONY: up decide refer decline log sm-local kube-up kube-decide kube-down down clean lint
+.PHONY: up decide refer decline log sm-local kube-up kube-decide kube-down down clean lint test
 
 export AWS_ACCESS_KEY_ID ?= local
 export AWS_SECRET_ACCESS_KEY ?= localsecret
@@ -84,3 +84,7 @@ clean: down
 lint:
 	uvx ruff format src/
 	uvx ruff check src/
+
+# the gateway's decision rules, with no network and no AWS account
+test:
+	uv run --with pytest --with fastapi --with httpx --with boto3 --with pydantic pytest tests/ -q
