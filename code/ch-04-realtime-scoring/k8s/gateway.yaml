@@ -24,6 +24,15 @@ spec:
               value: decision_log
             - name: AWS_DEFAULT_REGION
               value: us-east-1
+            # a deciding model that does not answer inside these bounds refers the
+            # application instead of deciding it on partial evidence. Set SHADOW_MODELS
+            # to challenger to measure it on live traffic without moving the decision.
+            - name: SHADOW_MODELS
+              value: ""
+            - name: MODEL_TIMEOUT
+              value: "2.0"
+            - name: MODEL_ATTEMPTS
+              value: "2"
           ports: [{ containerPort: 8000 }]
           readinessProbe:
             httpGet: { path: /health, port: 8000 }

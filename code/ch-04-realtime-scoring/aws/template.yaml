@@ -13,6 +13,21 @@ Parameters:
       - eks
     Default: ecs
 
+  ShadowModels:
+    Description: models called and logged but kept out of the decision. Empty means every endpoint contributes to the averaged PD (an ensemble); set it to challenger to run champion/challenger, where the challenger is measured on live traffic without moving the decision.
+    Type: String
+    Default: ""
+
+  ModelTimeout:
+    Description: seconds to wait for one model call before treating it as failed
+    Type: String
+    Default: "2.0"
+
+  ModelAttempts:
+    Description: attempts per model call before the gateway gives up and refers the application
+    Type: String
+    Default: "2"
+
 Conditions:
   IsEcs: !Equals
     - !Ref Compute
@@ -338,9 +353,18 @@ Resources:
             - Name: DECISIONS_TABLE
               Value: !Ref DecisionLog
 
-            # the model endpoints to ensemble (name=SageMaker endpoint name)
+            # the model endpoints to score against (name=SageMaker endpoint name)
             - Name: ENDPOINTS
               Value: scorecard=ch04-scorecard,challenger=ch04-challenger
+
+            # a deciding model that does not answer inside these bounds sends the
+            # application to a human rather than being decided on partial evidence
+            - Name: SHADOW_MODELS
+              Value: !Ref ShadowModels
+            - Name: MODEL_TIMEOUT
+              Value: !Ref ModelTimeout
+            - Name: MODEL_ATTEMPTS
+              Value: !Ref ModelAttempts
           LogConfiguration:
             LogDriver: awslogs
             Options:
