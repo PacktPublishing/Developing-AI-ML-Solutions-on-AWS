@@ -1,0 +1,26 @@
+# Privileges as code. redtape (tomasfarias/redtape, MIT) reads this file, compares it
+# with what the warehouse actually grants, and issues only the GRANT and REVOKE needed
+# to close the gap. The same file runs against redshift-local and Redshift Serverless.
+#
+# Identity is deliberately not here. The accounts are created by config/provision.sh as
+# PASSWORD DISABLE (IAM credentials only), which this tool cannot express, so the make
+# targets scope it to GRANT and REVOKE and it never creates or drops a user.
+
+groups:
+  - name: analysts
+    privileges:
+      schema:
+        usage:
+          # redtape names objects database.schema[.table]; the database is
+          # analytics in both places (Compose POSTGRES_DB and the stack's DbName)
+          - analytics.analytics
+      table:
+        select:
+          - analytics.analytics.applicant_credit_profile
+          - analytics.analytics.applicants
+
+users:
+  - name: bi_analyst
+    is_superuser: false
+    member_of:
+      - analysts

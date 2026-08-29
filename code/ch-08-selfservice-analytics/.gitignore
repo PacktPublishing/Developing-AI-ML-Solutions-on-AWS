@@ -1,0 +1,4 @@
+
+# redtape needs the password in a file; generated per command, never committed
+.redtape.ini
+.access-plan.sql
