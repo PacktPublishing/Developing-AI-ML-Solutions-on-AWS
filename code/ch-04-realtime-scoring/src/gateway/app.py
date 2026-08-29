@@ -57,7 +57,7 @@ class Application(BaseModel):
     requested_amount: float
     dti: float  # debt-to-income, 0..1
     utilization: float  # revolving utilization, 0..1
-    days_past_due: int = 0
+    days_past_due: int = 0  # bureau-reported delinquency, not our history
     kyc_passed: bool = True
 
 
