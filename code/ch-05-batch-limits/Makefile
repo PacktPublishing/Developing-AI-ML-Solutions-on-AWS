@@ -51,7 +51,12 @@ pipeline:
 		PIPELINE_MODE=local STEP_IMAGE=ch05-step:local BATCH_BUCKET=$(BATCH_BUCKET) \
 		SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
 		WAREHOUSE_DSN=postgresql://analyst:analyst@host.docker.internal:5439/portfolio?sslmode=require \
-		uv run src/pipeline/pipeline.py
+		LAMBDA_WAREHOUSE_DSN=postgresql://analyst:analyst@localhost:5439/portfolio?sslmode=require \
+		LAMBDA_HANDLERS='{"ch05-decide":"decide.handler","ch05-apply-limits":"handler.handler"}' \
+		PYTHONPATH=src/pipeline:aws/lambda/apply_limits:aws/lambda/decide \
+		S3_ENDPOINT=http://localhost:9000 SNS_ENDPOINT=http://localhost:8009 \
+		TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:ch05-batch-alerts \
+		uv run --with psycopg2-binary src/pipeline/pipeline.py
 
 query:
 	$(COMPOSE) exec warehouse psql -h 127.0.0.1 -p 5433 -U analyst -d portfolio \

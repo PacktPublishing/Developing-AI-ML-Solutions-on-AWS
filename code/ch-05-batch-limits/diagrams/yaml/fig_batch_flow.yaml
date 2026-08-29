@@ -1,4 +1,6 @@
-# The monthly batch run as a four-step flow: shortlist -> score -> decide -> apply, each step
+# The monthly batch run as a four-step flow: shortlist -> score -> decide -> apply. The first
+# three run as containers over the whole book, and each does a different kind of work: a SQL read,
+# the model, then the policy rules. apply is a short transaction, so it is a Lambda. Each step
 # handing the next a CSV artifact in S3, with the Redshift warehouse at both ends.
 Diagram:
   DefinitionFiles:
@@ -49,20 +51,20 @@ Diagram:
       Title: "Redshift\ncustomers"
     Shortlist:
       Type: AWS::Diagram::Resource
-      Preset: "Gear"
-      Title: "shortlist"
+      Preset: "Amazon SageMaker AI"
+      Title: "shortlist\n(Processing: SQL read)"
     Score:
       Type: AWS::Diagram::Resource
-      Preset: "Gear"
-      Title: "score"
+      Preset: "Amazon SageMaker AI"
+      Title: "score\n(Processing: the model)"
     Decide:
       Type: AWS::Diagram::Resource
-      Preset: "Gear"
-      Title: "decide"
+      Preset: "AWS Lambda"
+      Title: "decide\n(Lambda: the rules)"
     Apply:
       Type: AWS::Diagram::Resource
-      Preset: "Gear"
-      Title: "apply"
+      Preset: "AWS Lambda"
+      Title: "apply\n(Lambda: the write)"
     WarehouseOut:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Redshift"

@@ -34,12 +34,12 @@ Diagram:
       Title: "score\n(Processing)"
     Decide:
       Type: AWS::Diagram::Resource
-      Preset: "Amazon SageMaker AI"
-      Title: "decide\n(Processing)"
+      Preset: "AWS Lambda"
+      Title: "decide\n(Lambda)"
     Apply:
       Type: AWS::Diagram::Resource
-      Preset: "Amazon SageMaker AI"
-      Title: "apply-limits\n(Processing)"
+      Preset: "AWS Lambda"
+      Title: "apply-limits\n(Lambda)"
 
   Links:
     - {Source: Shortlist, SourcePosition: E, Target: Train, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

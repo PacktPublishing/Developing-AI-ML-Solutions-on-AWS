@@ -18,6 +18,7 @@ Run local:  docker build -t ch05-step:local pipeline/step_image/
 import json
 import os
 
+from sagemaker.core.lambda_helper import Lambda
 from sagemaker.core.processing import (
     NetworkConfig,
     PipelineSession,
@@ -28,6 +29,11 @@ from sagemaker.core.processing import (
 from sagemaker.core.shapes import ProcessingS3Input, ProcessingS3Output
 from sagemaker.mlops.local.local_pipeline_session import (
     LocalPipelineSession as _MlopsLocalPipelineSession,
+)
+from sagemaker.mlops.workflow.lambda_step import (
+    LambdaOutput,
+    LambdaOutputTypeEnum,
+    LambdaStep,
 )
 from sagemaker.mlops.workflow.pipeline import Pipeline
 from sagemaker.mlops.workflow.steps import ProcessingStep, TrainingStep
@@ -40,6 +46,16 @@ MODE = os.environ.get("PIPELINE_MODE", "local")
 IMAGE = os.environ["STEP_IMAGE"]
 ROLE = os.environ["SAGEMAKER_ROLE_ARN"]
 BUCKET = os.environ["BATCH_BUCKET"]
+# on AWS the deployed function; locally a placeholder, since lambda_local calls the
+# handler rather than the Lambda API
+APPLY_LIMITS_ARN = os.environ.get(
+    "APPLY_LIMITS_ARN",
+    "arn:aws:lambda:us-east-1:000000000000:function:ch05-apply-limits",
+)
+DECIDE_ARN = os.environ.get(
+    "DECIDE_ARN",
+    "arn:aws:lambda:us-east-1:000000000000:function:ch05-decide",
+)
 WAREHOUSE_DSN = os.environ["WAREHOUSE_DSN"]
 IO_PREFIX = os.environ.get("IO_PREFIX", "batch/pipeline-io")
 
@@ -70,6 +86,10 @@ if MODE == "local":
         _train_defaults.resolve_and_validate_role = lambda provided_role=None, **_: (
             provided_role
         )
+    # local mode has executors for Processing and Training but not Lambda; this adds one
+    from lambda_local import install as _install_lambda_step
+
+    _install_lambda_step()
     sess = LocalPipelineSession(default_bucket=BUCKET)
     instance_type = "local"
 else:
@@ -176,33 +196,37 @@ score = ProcessingStep(
     ),
 )
 
-decide = ProcessingStep(
+# decide is rules over one row at a time, so it runs as a Lambda rather than a
+# container. It reads the scored book and writes decisions.csv beside it; the step
+# after it reads that same path.
+decide = LambdaStep(
     name="decide",
-    step_args=processor("decide").run(
-        code=os.path.join(SCRIPTS, "decide.py"),
-        inputs=[
-            step_input("scores", out_uri(score, "scores"), "/opt/ml/processing/input")
-        ],
-        outputs=[step_output("decide", "decisions", "/opt/ml/processing/output")],
-    ),
+    lambda_func=Lambda(function_arn=DECIDE_ARN),
+    inputs={
+        "scores_uri": out_uri(score, "scores"),
+        "decisions_uri": f"s3://{BUCKET}/decisions",
+    },
+    outputs=[LambdaOutput("decided", LambdaOutputTypeEnum.Integer)],
 )
 
-apply_limits = ProcessingStep(
+
+# The write is a Lambda step in both places: on AWS the real function, locally the same
+# handler through lambda_local, which teaches the local executor a step type it does not
+# ship with. One definition, five steps, wherever it runs.
+apply_limits_step = LambdaStep(
     name="apply-limits",
-    step_args=processor("apply-limits").run(
-        code=os.path.join(SCRIPTS, "apply.py"),
-        inputs=[
-            step_input(
-                "decisions", out_uri(decide, "decisions"), "/opt/ml/processing/input"
-            )
-        ],
-        outputs=[step_output("apply-limits", "summary", "/opt/ml/processing/output")],
-    ),
+    lambda_func=Lambda(function_arn=APPLY_LIMITS_ARN),
+    inputs={
+        "decisions_uri": f"s3://{BUCKET}/decisions",
+        "staged_uri": f"s3://{BUCKET}/staged",
+    },
+    outputs=[LambdaOutput("applied", LambdaOutputTypeEnum.Integer)],
+    depends_on=[decide],
 )
 
 pipeline = Pipeline(
     name="batch-credit-limits",
-    steps=[shortlist, train, score, decide, apply_limits],
+    steps=[shortlist, train, score, decide, apply_limits_step],
     sagemaker_session=sess,
 )
 

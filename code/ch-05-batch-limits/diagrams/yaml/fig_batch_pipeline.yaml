@@ -45,11 +45,34 @@ Diagram:
     Pipeline:
       Type: AWS::Diagram::Resource
       Preset: "Amazon SageMaker AI"
-      Title: "SageMaker pipeline\nbatch credit limits"
+      Title: "SageMaker Pipeline"
+      Direction: vertical
+      Children: [StepShortlist, StepTrain, StepScore, StepDecide, StepApply]
+
+    StepShortlist:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "shortlist (Processing)"
+    StepTrain:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "train (Training)"
+    StepScore:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "score (Processing)"
+    StepDecide:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Lambda"
+      Title: "decide (Lambda)"
+    StepApply:
+      Type: AWS::Diagram::Resource
+      Preset: "AWS Lambda"
+      Title: "apply-limits (Lambda)"
 
     Data:
       Type: AWS::Diagram::VerticalStack
-      Children: [Redshift, Bucket, Sns]
+      Children: [Redshift, Bucket, Sns, CloudWatch]
     Redshift:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Redshift"
@@ -60,9 +83,17 @@ Diagram:
     Sns:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Simple Notification Service (Amazon SNS)"
-      Title: "SNS\nfailure alerts"
+      Title: "SNS\nrun summary + failures"
+    CloudWatch:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon CloudWatch"
+      Title: "CloudWatch\nper-decision counts"
 
   Links:
+    - {Source: StepShortlist, SourcePosition: S, Target: StepTrain, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: StepTrain, SourcePosition: S, Target: StepScore, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: StepScore, SourcePosition: S, Target: StepDecide, TargetPosition: N, TargetArrowHead: {Type: Open}}
+    - {Source: StepDecide, SourcePosition: S, Target: StepApply, TargetPosition: N, TargetArrowHead: {Type: Open}}
     - {Source: Schedule, SourcePosition: E, Target: Pipeline, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Developer, SourcePosition: S, Target: Git, TargetPosition: N, TargetArrowHead: {Type: Open}}
     - {Source: Git, SourcePosition: S, Target: CodeBuild, TargetPosition: N, TargetArrowHead: {Type: Open}}
@@ -71,3 +102,4 @@ Diagram:
     - {Source: Pipeline, SourcePosition: E, Target: Redshift, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Pipeline, SourcePosition: E, Target: Bucket, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Pipeline, SourcePosition: E, Target: Sns, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Pipeline, SourcePosition: E, Target: CloudWatch, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
