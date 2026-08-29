@@ -45,6 +45,8 @@ Conditions:
     - !Ref DeployWarehouse
     - "true"
 
+Transform: AWS::Serverless-2016-10-31
+
 Resources:
   BatchBucket:
     DeletionPolicy: Delete
@@ -150,6 +152,9 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ch05-*
               - Effect: Allow
                 Action:
                   - s3:GetObject
@@ -427,6 +432,36 @@ Resources:
         - !Ref EndpointSg
     Condition: HasWarehouse
 
+  SnsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sns
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !Ref EndpointSg
+    Condition: HasWarehouse
+
+  MonitoringEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.monitoring
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref SubnetA
+        - !Ref SubnetB
+        - !Ref SubnetC
+      SecurityGroupIds:
+        - !Ref EndpointSg
+    Condition: HasWarehouse
+
   LogsEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -511,6 +546,109 @@ Resources:
         - !GetAtt WarehouseSg.GroupId
     Condition: HasWarehouse
 
+  # The limit write as a Lambda step: the outline's shape, and the one step of the
+  # run that is a short transaction rather than a container's worth of work. It goes
+  # through the Redshift Data API, so it needs no VPC attachment and no driver.
+  # decide is rules over one row at a time: no model, no dataframe, so it needs no
+  # container. Its role only reads and writes the batch bucket.
+  DecideRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: decide
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub ${BatchBucket.Arn}/*
+    Condition: HasWarehouse
+
+  DecideFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: python-uv
+    Properties:
+      FunctionName: ch05-decide
+      Handler: decide.handler
+      Runtime: python3.12
+      Role: !GetAtt DecideRole.Arn
+      CodeUri: lambda/decide/
+      Timeout: 300
+      MemorySize: 1024
+    Condition: HasWarehouse
+
+  ApplyLimitsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: apply
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub ${BatchBucket.Arn}/*
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref Alerts
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+    Condition: HasWarehouse
+
+  ApplyLimitsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: python-uv
+    Properties:
+      FunctionName: ch05-apply-limits
+      Handler: handler.handler
+      Runtime: python3.12
+      Role: !GetAtt ApplyLimitsRole.Arn
+      CodeUri: lambda/apply_limits/
+      Timeout: 300
+      MemorySize: 1024
+      VpcConfig:
+        SubnetIds:
+          - !Ref SubnetA
+          - !Ref SubnetB
+          - !Ref SubnetC
+        SecurityGroupIds:
+          - !Ref JobSg
+      Environment:
+        Variables:
+          WAREHOUSE_DSN: !Sub
+            - postgresql://analyst:${Password}@${Host}:5439/portfolio?sslmode=require
+            - Password: !Sub '{{resolve:secretsmanager:${WarehouseSecret}:SecretString:password}}'
+              Host: !GetAtt PortfolioWorkgroup.Workgroup.Endpoint.Address
+          TOPIC_ARN: !Ref Alerts
+          METRIC_NAMESPACE: ch05/batch
+    Condition: HasWarehouse
+
 Outputs:
   BatchBucketName:
     Value: !Ref BatchBucket
@@ -554,4 +692,14 @@ Outputs:
   CopyRoleArn:
     Description: IAM role for the Redshift COPY-from-S3 seed
     Value: !GetAtt CopyRole.Arn
+    Condition: HasWarehouse
+
+  ApplyLimitsFunctionArn:
+    Description: the Lambda the pipeline's apply step invokes (PIPELINE_MODE=aws)
+    Value: !GetAtt ApplyLimitsFunction.Arn
+    Condition: HasWarehouse
+
+  DecideFunctionArn:
+    Description: the Lambda the pipeline's decide step invokes
+    Value: !GetAtt DecideFunction.Arn
     Condition: HasWarehouse

@@ -4,4 +4,4 @@ version = 0.1
 stack_name = "ch05-batch-limits"
 resolve_s3 = true
 region = "us-east-1"
-capabilities = "CAPABILITY_IAM"
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"

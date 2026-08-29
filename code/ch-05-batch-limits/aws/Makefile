@@ -21,6 +21,7 @@ lint:
 
 # the whole stack in one command, incl. the warehouse and its self-contained VPC. The warehouse bills per second, so `make teardown` when done.
 deploy:
+	sam build --beta-features
 	sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
 		--parameter-overrides DeployWarehouse=true
 
@@ -54,6 +55,8 @@ pipeline:
 	$(eval ENDPOINT := $(call output,WarehouseEndpoint))
 	$(eval SUBNETS := $(call output,JobSubnetIds))
 	$(eval JOBSG := $(call output,JobSecurityGroupId))
+	$(eval APPLY_ARN := $(call output,ApplyLimitsFunctionArn))
+	$(eval DECIDE_ARN := $(call output,DecideFunctionArn))
 	$(eval PW := $(shell aws secretsmanager get-secret-value --region $(REGION) \
 		--secret-id $(call output,WarehouseSecretArn) --query SecretString --output text \
 		| python3 -c "import sys,json;print(json.load(sys.stdin)['password'])"))
@@ -61,6 +64,7 @@ pipeline:
 		STEP_IMAGE=$(REPO):latest BATCH_BUCKET=$(BUCKET) SAGEMAKER_ROLE_ARN=$(ROLE) \
 		WAREHOUSE_DSN="postgresql://analyst:$(PW)@$(ENDPOINT):5439/portfolio?sslmode=require" \
 		NETWORK_SUBNETS=$(SUBNETS) NETWORK_SG=$(JOBSG) \
+		APPLY_LIMITS_ARN=$(APPLY_ARN) DECIDE_ARN=$(DECIDE_ARN) \
 		uv run src/pipeline/pipeline.py
 
 # start one execution without waiting for the schedule
