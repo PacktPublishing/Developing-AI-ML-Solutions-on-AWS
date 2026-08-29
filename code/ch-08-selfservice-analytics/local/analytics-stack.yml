@@ -30,15 +30,26 @@ networks:
 
 services:
   redshift-local:
-    image: public.ecr.aws/oblako/redshift-local:16
+    # pinned by digest, not tag: an access tool reads the engine's catalog, so the
+    # exact build matters. This is :16 as published on 2026-08-29.
+    image: public.ecr.aws/oblako/redshift-local@sha256:2fd0e04f16d35c58ffdf9a200a1d38ce13eacc6a905391ddb110eb1ee49b64ce
     environment:
       POSTGRES_USER: bi_analyst
       POSTGRES_PASSWORD: local
       POSTGRES_DB: analytics
       POSTGRES_HOST_AUTH_METHOD: md5
     volumes:
-      - ./seed:/docker-entrypoint-initdb.d:ro
+      # mount the seed files individually: mounting ./seed over the directory would
+      # shadow the image's own init scripts, which carry the Redshift compatibility
+      # layer (svv_* views, COPY/UNLOAD, SUPER, the catalog shims access tools read)
+      - ./seed/analytics.sql:/docker-entrypoint-initdb.d/50_analytics.sql:ro
+      - ./seed/access.sql:/docker-entrypoint-initdb.d/51_access.sql:ro
       - redshift_data:/var/lib/postgresql/data
+    ports:
+      # host-only, for access tooling that speaks the Redshift wire protocol
+      # (make access-plan). The assistant never uses it; it reaches the warehouse
+      # through the Data API shim on the compose network.
+      - "127.0.0.1:5439:5439"
     healthcheck:
       # the image fronts Postgres (internal :5433) with a Redshift wire proxy
       # on :5439; probe the engine directly, the ch-01 pattern

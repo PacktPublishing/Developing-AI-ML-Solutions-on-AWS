@@ -13,13 +13,15 @@ set -euo pipefail
 # this from aws/ as ../config/provision.sh).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PII_YAML="$SCRIPT_DIR/pii_columns.yaml"
+export ACCESS_YAML="$SCRIPT_DIR/access.yaml"
 
-uv run --with boto3 python3 -u - <<'PYEOF'
+uv run --with boto3 --with pyyaml python3 -u - <<'PYEOF'
 import os
 import re
 import time
 
 import boto3
+import yaml
 
 REGION = os.environ.get("REDSHIFT_REGION") or os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 WORKGROUP = os.environ["REDSHIFT_WORKGROUP"]
@@ -50,17 +52,24 @@ def run(sql: str, label: str, ignore: tuple = ("already exists", "already attach
         time.sleep(0.5)
 
 
-# 1. The read-only accounts. bi_analyst is the named service account; on Redshift Serverless the Data API runs the container's queries as an auto-created "IAMR:<role-name>" user, so it gets the same grants and masking. Set TASK_ROLE to the stack's task role name.
+# 1. The read-only accounts. bi_analyst is the named service account; on Redshift Serverless the Data API runs the container's queries as an auto-created "IAMR:<role-name>" user, so it joins the same group and gets the same masking. Set TASK_ROLE to the stack's task role name.
 users = ["bi_analyst"]
 task_role = os.environ.get("TASK_ROLE")
 if task_role:
     users.append(f"IAMR:{task_role}")
 
+# Identity only. What each account may read lives in config/access.yaml and is
+# applied by redtape, so the grants are reviewable as code rather than buried here.
+run("CREATE GROUP analysts", "group analysts")
+
 for user in users:
     quoted = f'"{user}"'
     run(f"CREATE USER {quoted} PASSWORD DISABLE", f"user {user}")
-    run(f"GRANT USAGE ON SCHEMA analytics TO {quoted}", f"usage for {user}")
-    run(f"GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO {quoted}", f"select for {user}")
+    run(
+        f"ALTER GROUP analysts ADD USER {quoted}",
+        f"analysts member {user}",
+        ignore=("already exists", "already attached", "already a member"),
+    )
 
 # 2. Masking policies from the shared config.
 line_re = re.compile(r"^(\w+)\.(\w+)\.(\w+):\s*(\w+)\s*$")
@@ -81,5 +90,32 @@ for line in open(os.environ["PII_YAML"]):
             f"attach {policy} for {user}",
         )
 
-print("provisioned: read-only account + engine-side masking")
+# 3. The privileges, from the same file redtape plans against locally. Object names
+# there are database.schema[.table], the form redtape compares in; the leading
+# database part is dropped to make a statement Redshift will parse.
+spec = yaml.safe_load(open(os.environ["ACCESS_YAML"]))
+
+
+def unqualify(name: str) -> str:
+    """analytics.analytics.applicants -> analytics.applicants"""
+    parts = name.split(".")
+    return ".".join(parts[1:]) if len(parts) > 1 else name
+
+
+for group in spec.get("groups", []):
+    privileges = group.get("privileges") or {}
+    for obj_type, actions in privileges.items():
+        for action, names in (actions or {}).items():
+            for name in names:
+                target = unqualify(name)
+                run(
+                    # TO GROUP, not TO: Redshift has real groups, and a bare TO
+                    # resolves as a user name and fails
+                    f"GRANT {action.upper()} ON {obj_type.upper()} {target} "
+                    f'TO GROUP "{group["name"]}"',
+                    f"{action} on {target} for {group['name']}",
+                    ignore=("already exists", "already attached"),
+                )
+
+print("provisioned: read-only account + engine-side masking + privileges")
 PYEOF
