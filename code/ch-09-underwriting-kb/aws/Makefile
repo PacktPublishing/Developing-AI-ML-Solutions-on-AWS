@@ -105,6 +105,8 @@ cases:
 # --model-id= with an equals sign: an ml-commons id can begin with a hyphen,
 # which argparse would otherwise read as another flag.
 neural:
+	@aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) >/dev/null 2>&1 \
+		|| { echo "stack $(STACK) is not deployed: run make round first"; exit 1; }
 	$(eval PW := $(shell aws secretsmanager get-secret-value --region $(REGION) \
 		--secret-id ch09-os-master --query SecretString --output text))
 	uv run --no-project neural_query.py \
