@@ -100,6 +100,16 @@ cases:
 	cd .. && PW=$$($(GETPW)); $(OSCONN) OPENSEARCH_PASSWORD="$$PW" \
 		uv run src/retrieve.py cases --deal "$(DEAL)"
 
+# neural: the neural plugin against the managed domain, where a connector lets
+# ml-commons call Bedrock for the embeddings instead of the caller doing it.
+neural:
+	$(eval PW := $(shell aws secretsmanager get-secret-value --region $(REGION) \
+		--secret-id ch09-os-master --query SecretString --output text))
+	uv run --no-project neural_connector.py \
+		--endpoint https://$(call output,DomainEndpoint) \
+		--user $(call output,MasterUserName) --password "$(PW)" \
+		--role-arn $(call output,BedrockConnectorRoleArn) --region $(REGION)
+
 teardown:
 	aws cloudformation delete-stack --region $(REGION) --stack-name $(STACK)
 	aws cloudformation wait stack-delete-complete --region $(REGION) --stack-name $(STACK)

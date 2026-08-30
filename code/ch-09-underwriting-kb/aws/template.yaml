@@ -178,6 +178,29 @@ Resources:
             Path: /{proxy+}
             Method: ANY
 
+  # The role the domain assumes to call Bedrock for the neural plugin. The model
+  # runs in Bedrock rather than inside the cluster, which is what makes this
+  # workable on a t3.small node: the connector is a reference, not a hosted model.
+  BedrockConnectorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ch09-opensearch-bedrock
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: opensearchservice.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke-embeddings
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0
+
 Outputs:
   DomainEndpoint:
     Value: !GetAtt Kb.DomainEndpoint
@@ -196,3 +219,7 @@ Outputs:
 
   MasterUserName:
     Value: !Ref MasterUserName
+
+  BedrockConnectorRoleArn:
+    Description: role the domain assumes to call Bedrock (neural plugin)
+    Value: !GetAtt BedrockConnectorRole.Arn
