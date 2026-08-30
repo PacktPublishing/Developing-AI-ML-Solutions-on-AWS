@@ -37,7 +37,7 @@ MEMOS = [
     ),
     (
         40118301,
-        "OKON LOGISTICS",
+        "KESTREL LOGISTICS",
         (
             "Requesting an increase of 4,000,000 on the existing facility. Combined "
             "exposure stays inside the single-obligor limit."
@@ -45,7 +45,7 @@ MEMOS = [
     ),
     (
         40118455,
-        "NNAMDI GROCERS",
+        "VERITY GROCERS",
         (
             "Approval to change the repayment account to another bank. New direct "
             "debit mandate confirmed by Risk before the next cycle."

@@ -34,9 +34,9 @@ FIRST_NAMES = [
     "Naomi",
     "Terrence",
     "Claire",
-    "Hassan",
+    "Halvard",
     "Yuki",
-    "Gabriel",
+    "Aurelio",
     "Rosa",
     "Malik",
     "Ingrid",
@@ -52,7 +52,7 @@ FIRST_NAMES = [
 ]
 LAST_NAMES = [
     "Delgado",
-    "Okafor",
+    "Quilter",
     "Whitfield",
     "Nakamura",
     "Brennan",
@@ -65,7 +65,7 @@ LAST_NAMES = [
     "Sandoval",
     "Kowalski",
     "Ellison",
-    "Rahman",
+    "Thorne",
     "Guerrero",
     "Ashford",
     "Tomlin",
@@ -423,7 +423,10 @@ def generate(out: Path, count: int, seed: int, messy: bool) -> list[Memo]:
     out.mkdir(parents=True, exist_ok=True)
     memos: list[Memo] = []
     for i in range(count):
-        loan_id = 34_600_000 + i
+        # 99_000_000 is deliberately outside the range any real portfolio uses:
+        # an id that looks like a plausible customer number is one somebody can
+        # mistake for a real one
+        loan_id = 99_000_000 + i
         # The mix follows a real archive rather than an even split. Amendments to
         # existing facilities dominate, and about half of everything arrives as a
         # mail trail rather than a form.
