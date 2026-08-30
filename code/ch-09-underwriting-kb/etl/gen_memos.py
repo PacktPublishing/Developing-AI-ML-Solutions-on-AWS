@@ -1,9 +1,15 @@
 """Generate a synthetic SME underwriting-memo corpus for the knowledge base.
 
-Two shapes mirror a real corpus without any real data: a structured 8-section
-credit memo (the extractable one, with a Customer Financial Snapshot table) and
-an Outlook approval thread (mostly boilerplate around a few lines of reasoning).
-All names, businesses, amounts, and identifiers are invented; amounts are in USD.
+Three shapes mirror a real corpus without any real data: a structured 8-section
+credit memo (the extractable one, with a Customer Financial Snapshot table), an
+Outlook approval thread (mostly boilerplate around a few lines of reasoning), and
+an amendment request against a facility that already exists. The third is the
+common case in a real archive, where most decisions are servicing changes rather
+than new lending: deferred principal, facility increases, security instruments,
+tenor and repayment changes, and approvals above a limit.
+
+All names, businesses, amounts, and identifiers are invented, and amounts are in
+USD.
 
 Usage:
   python gen_memos.py --out data/generated/memos --count 200 --seed 7
@@ -143,6 +149,149 @@ def _maybe_typo(rng: random.Random, text: str, messy: bool) -> str:
     return text[:i] + text[i + 1 :]
 
 
+# The amendment types an archive actually fills up with, each with what is being
+# asked for and the condition an approver usually attaches to it.
+AMENDMENTS = [
+    (
+        "DEFERRED PRINCIPAL",
+        "a {months}-month principal moratorium",
+        "Interest continues to accrue and is collected monthly.",
+    ),
+    (
+        "FACILITY INCREASE",
+        "an increase of ${amount:,} on the existing facility",
+        "Combined exposure stays inside the single-obligor limit.",
+    ),
+    (
+        "DEFERRED GUARANTOR CHEQUE",
+        "deferral of the guarantor cheque presentation by {months} month(s)",
+        "Guarantor forms remain on file and unchanged.",
+    ),
+    (
+        "CHANGE OF REPAYMENT ACCOUNT",
+        "a change of the repayment account to another bank",
+        "New direct debit mandate confirmed by Risk before the next cycle.",
+    ),
+    (
+        "TENOR EXTENSION",
+        "an extension of tenor from {tenor} to {new_tenor} months",
+        "Instalment recalculated, and the rate is unchanged.",
+    ),
+    (
+        "EXCEPTIONAL APPROVAL",
+        "an exceptional approval of ${amount:,}, above the standard limit",
+        "Approval is one-off and does not set a precedent for the sector.",
+    ),
+    (
+        "RATE CONCESSION",
+        "a rate concession to {rate}% monthly",
+        "Concession is reviewed at the next annual credit review.",
+    ),
+    (
+        "APPROVAL TO PROCEED",
+        "approval to proceed with the application",
+        "Subject to securities and repayment instruments being in place.",
+    ),
+]
+
+
+def _amendment(rng: random.Random, loan_id: int, as_thread: bool) -> Memo:
+    """Render a servicing decision on a facility that already exists.
+
+    Most of a real archive is this: not the original credit assessment, but the
+    changes made to it afterwards, each one a short request and a shorter answer.
+    """
+    name, _ = _business_name(rng)
+    sector, _, facility = rng.choice(SECTORS)
+    approver, lead, rm = rng.sample(STAFF, 3)
+    kind, asked, condition = rng.choice(AMENDMENTS)
+    months = rng.choice([1, 2, 3])
+    tenor = rng.choice([6, 9, 12])
+    fields = {
+        "months": months,
+        "amount": _money(rng, 500_000, 18_000_000),
+        "tenor": tenor,
+        "new_tenor": tenor + rng.choice([3, 6]),
+        "rate": round(rng.uniform(3.5, 5.5), 1),
+    }
+    request = asked.format(**fields)
+    exposure = _money(rng, 800_000, 20_000_000)
+    dpd = rng.choice([0, 0, 0, rng.randint(1, 29)])
+    reason = rng.choice(
+        [
+            "Receivables from two distributors now fall due a month later than planned.",
+            "A large order was delivered but payment terms were renegotiated to 60 days.",
+            "Seasonal demand moved the sales cycle out by several weeks.",
+            "The promoter reinvested collections into stock ahead of a supply increase.",
+            "A key customer settled late, and the shortfall is temporary.",
+        ]
+    )
+
+    if as_thread:
+        body = textwrap.dedent(f"""\
+            Subject: RE: {kind} - {name.upper()}
+            From: {approver} <{approver.split()[0].lower()}@example.com>
+            Date: 2026-03-04 09:55:12+01:00
+
+            Approved.
+
+                From: {lead} - Credit Risk
+                Sent: Monday, 2 March 2026 4:11 PM
+                To: {rm}; {approver}
+                Subject: RE: {kind} - {name.upper()}
+
+                No objection from Credit Policy. {condition}
+
+                    From: {rm}
+                    Sent: Monday, 2 March 2026 2:11 PM
+                    To: {lead}
+
+                    Kindly approve {request} for the customer above.
+                    {reason}
+
+                    Exposure: ${exposure:,}   Tenor: {tenor} months
+                    Days past due: {dpd}      Sector: {sector}
+                    Collateral: guarantor cheques, 2 signatories
+            """)
+        doc = f"{kind.title().replace(' ', '_')}.msg"
+        return Memo(
+            loan_id, name.upper(), doc, "msg", "2026-03-04T08:55:12+0000", body, False
+        )
+
+    body = textwrap.dedent(f"""\
+        Facility Amendment Request - {name}
+
+        1. Request
+        - Type: {kind.title()}
+        - Facility: {facility}
+        - Requesting: {request}
+
+        2. Current Position
+        Metric                                Value
+        Outstanding Exposure                  {exposure:,}
+        Original Tenor                        {tenor} months
+        Days Past Due                         {dpd}
+        Credit Bureau Status                  {rng.choice(["Satisfactory", "No adverse records"])}
+        Collateral                            Guarantor cheques, 2 signatories
+
+        3. Background
+        {reason} The promoter has serviced the facility without
+        arrears prior to this request.
+
+        4. Recommendation
+        Recommendation:
+        "I recommend approval of {request}. {condition}"
+
+        - Relationship Manager: {rm}
+        - Credit Policy: {lead}
+        - Date: {rng.randint(1, 28):02d}/{rng.randint(1, 12):02d}/2026
+        """)
+    doc = f"{kind.title().replace(' ', '_')}_Request"
+    return Memo(
+        loan_id, name.upper(), doc, "pdf", "2026-03-04T08:55:12+0000", body, True
+    )
+
+
 def _structured(rng: random.Random, loan_id: int, messy: bool) -> Memo:
     """Render the 8-section structured credit memo, the extractable shape."""
     name, promoter = _business_name(rng)
@@ -224,18 +373,18 @@ def _email_thread(rng: random.Random, loan_id: int) -> Memo:
     amount = _money(rng, 500_000, 20_000_000)
     approver, lead, rm, cc1, cc2 = rng.sample(STAFF, 5)
     body = textwrap.dedent(f"""\
-        Subject: Re: ${amount // 1_000_000}M APPROVAL IFO {name.upper()}
+        Subject: Re: ${amount // 1_000_000}M APPROVAL - {name.upper()}
         From: {approver} <{approver.split()[0].lower()}@example.com>
         Date: 2023-08-31 20:51:34+02:00
 
         Okay to process please.
         Thank you
 
-            From: {lead} - Lead, Credit Policy and Assurance
+            From: {lead} - Credit Risk
             Sent: Thursday, August 31, 2023 7:50 PM
             To: {rm}; {approver}
             Cc: {cc1}; {cc2}; SME Underwriting
-            Subject: RE: ${amount // 1_000_000}M APPROVAL IFO {name.upper()}
+            Subject: RE: ${amount // 1_000_000}M APPROVAL - {name.upper()}
 
             Approved subject to standard risk checks and all securities and
             guarantees being in place. Repayment instruments set up and confirmed
@@ -275,12 +424,16 @@ def generate(out: Path, count: int, seed: int, messy: bool) -> list[Memo]:
     memos: list[Memo] = []
     for i in range(count):
         loan_id = 34_600_000 + i
-        # roughly two-thirds structured (extractable), one-third email threads
-        m = (
-            _structured(rng, loan_id, messy)
-            if rng.random() < 0.65
-            else _email_thread(rng, loan_id)
-        )
+        # The mix follows a real archive rather than an even split. Amendments to
+        # existing facilities dominate, and about half of everything arrives as a
+        # mail trail rather than a form.
+        roll = rng.random()
+        if roll < 0.45:
+            m = _amendment(rng, loan_id, as_thread=rng.random() < 0.55)
+        elif roll < 0.80:
+            m = _structured(rng, loan_id, messy)
+        else:
+            m = _email_thread(rng, loan_id)
         fname = f"{m.loan_id}__{m.borrower.replace(' ', '_')}__{m.doc}.txt"
         (out / fname).write_text(header(m) + m.body, encoding="utf-8")
         memos.append(m)

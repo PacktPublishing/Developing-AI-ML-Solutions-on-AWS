@@ -1,12 +1,12 @@
 # /// script
-# dependencies = ["boto3", "psycopg2-binary", "ollama", "opensearch-py"]
+# dependencies = ["boto3", "ollama", "opensearch-py"]
 # ///
 """Answer questions over the memo knowledge base, grounded with citations.
 
 Two modes: ask a question about past underwriting, or assemble the most similar
 prior cases into a draft recommendation the underwriter signs off on. Both cite
 the source loan so the underwriter can trace every claim back to a memo. The
-vector store is chosen by STORE (pgvector by default, or opensearch).
+vector store is Amazon OpenSearch Service, a container locally and a domain on AWS.
 
 Usage (from the chapter root):
   PYTHONPATH=src uv run src/retrieve.py ask --query "How is DTI assessed for grocery businesses?"
@@ -18,10 +18,11 @@ import argparse
 from models import generate, get_runtime
 from stores import get_store
 
-# Headroom for the answer: a small local model (Qwen3 0.6b) spends much of its
-# budget on reasoning over the retrieved passages, so leave room for the reply.
-# Harmless on Bedrock, where the budget just caps the answer length.
-MAX_TOKENS = 1500
+# Headroom for the answer. Qwen3 is a reasoning model: it emits its thinking before
+# the reply, and Ollama counts both against the budget, so too small a number
+# returns an empty answer rather than a short one. Harmless on Bedrock, where the
+# budget just caps the answer length.
+MAX_TOKENS = 4000
 
 ASK_SYSTEM = (
     "You are a credit underwriting assistant. Answer the question using only the"

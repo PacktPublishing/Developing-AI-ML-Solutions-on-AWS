@@ -9,8 +9,8 @@ COPY --from=adapter /lambda-adapter /opt/extensions/lambda-adapter
 
 WORKDIR /app
 # Only the OpenSearch path is used in the cloud, so the image stays lean: no
-# psycopg2 (pgvector) and no ollama (local models).
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]" boto3 opensearch-py
+# no ollama (local models).
+RUN pip install --no-cache-dir fastapi "uvicorn[standard]" boto3 opensearch-py strands-agents
 
 COPY src/ ./src/
 COPY app/ ./app/

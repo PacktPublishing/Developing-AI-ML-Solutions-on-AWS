@@ -1,15 +1,14 @@
 # /// script
-# dependencies = ["boto3", "psycopg2-binary", "ollama", "opensearch-py"]
+# dependencies = ["boto3", "ollama", "opensearch-py"]
 # ///
 """Embed the synthetic memo corpus into the vector store, one chunk per row.
 
 Reads the memos written by gen_memos.py, splits each into chunks, embeds them
-through the model seam, and loads them into the selected store (pgvector or
-OpenSearch) for retrieval with citations back to the source loan.
+through the model seam, and loads them into the OpenSearch index for retrieval
+with citations back to the source loan.
 
 Usage:
-  make seed                 # pgvector, the default store
-  STORE=opensearch make seed
+  make seed                 # embed the corpus into OpenSearch
 """
 
 import argparse

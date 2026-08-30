@@ -1,29 +1,11 @@
 name: ch09-kb
 
 services:
-  vectors:
-    # Postgres with pgvector: the local vector store for the memo knowledge base.
-    # On AWS this is Amazon Aurora PostgreSQL with the same extension; the
-    # retrieval SQL does not change.
-    image: pgvector/pgvector:pg16
-    environment:
-      - POSTGRES_USER=underwriter
-      - POSTGRES_PASSWORD=underwriter
-      - POSTGRES_DB=underwriting
-    ports:
-      - "5545:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U underwriter -d underwriting"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
   search:
-    # OpenSearch with the k-NN plugin: the second local vector store. On AWS this
+    # OpenSearch with the k-NN plugin: the local vector store. On AWS this
     # is Amazon OpenSearch Service with the same knn_vector mapping. Security is
     # off for the local single node, so the client talks plain HTTP on 9200.
     # Started only when asked: `make up STORE=opensearch`.
-    profiles: ["opensearch"]
     image: opensearchproject/opensearch:2.17.1
     environment:
       - discovery.type=single-node
@@ -50,7 +32,6 @@ services:
     # OpenSearch Dashboards: the local search UI, the same one Amazon OpenSearch
     # Service hosts on the domain. Security is off to match the local engine, so
     # it connects over plain HTTP. Open http://localhost:5601 once it is up.
-    profiles: ["opensearch"]
     image: opensearchproject/opensearch-dashboards:2.17.1
     environment:
       - 'OPENSEARCH_HOSTS=["http://search:9200"]'
@@ -60,26 +41,3 @@ services:
     depends_on:
       search:
         condition: service_healthy
-
-  s3proxy:
-    # Local S3 for the S3 Vectors stand-in: the shim keeps each vector as one S3
-    # object here, exactly as S3 Vectors keeps vectors in a vector bucket. On AWS
-    # this is the real S3 Vectors service. Started only when STORE=s3vectors.
-    profiles: ["s3vectors"]
-    image: andrewgaul/s3proxy:latest
-    environment:
-      - S3PROXY_ENDPOINT=http://0.0.0.0:9000
-      - S3PROXY_AUTHORIZATION=aws-v2-or-v4
-      - S3PROXY_IDENTITY=local
-      - S3PROXY_CREDENTIAL=localsecret
-      - JCLOUDS_PROVIDER=filesystem
-      - JCLOUDS_FILESYSTEM_BASEDIR=/data
-    ports:
-      - "9000:9000"
-    healthcheck:
-      # S3Proxy answers an unauthenticated GET / with 403; curl without -f still
-      # exits 0 once the server responds, which is all readiness needs here.
-      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:9000 || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20

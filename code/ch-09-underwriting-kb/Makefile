@@ -1,4 +1,4 @@
-.PHONY: up gen seed ask cases app all down lint test diagrams
+.PHONY: neural up gen seed ask cases app all down lint test diagrams
 
 # the whole local flow in one command: the vector store, the synthetic corpus, the embeddings,
 # and a case-retrieval query. make down when done.
@@ -15,13 +15,9 @@ export PYTHONPATH := $(SRC)
 
 COMPOSE := docker compose -f local/kb-stack.yml
 
-# STORE selects the vector store: pgvector (default), opensearch, or s3vectors.
-# pgvector runs in the default compose services; the others sit behind a compose
+# The OpenSearch node and Dashboards sit behind a compose
 # profile named after the store, started only when that store is selected.
-export STORE ?= pgvector
-PROFILE := $(if $(filter pgvector,$(STORE)),,--profile $(STORE))
 
-# S3 Vectors runs on a local S3Proxy-backed shim in local mode (with BEDROCK_LOCAL).
 export S3VECTORS_LOCAL ?= $(BEDROCK_LOCAL)
 export S3_ENDPOINT ?= http://localhost:9000
 
@@ -42,13 +38,13 @@ Q ?= How is DTI assessed for a grocery business?
 DEAL ?= A logistics firm seeks a 500,000 US dollar working-capital loan for six months.
 
 up:
-	$(COMPOSE) $(PROFILE) up -d --wait
+	$(COMPOSE) up -d --wait
 
 # gen: write the synthetic memo corpus (reproducible from the seed)
 gen:
 	uv run etl/gen_memos.py --out data/generated/memos --count $(COUNT) --seed $(SEED) --messy
 
-# seed: embed the generated memos into the selected store (STORE=pgvector|opensearch)
+# seed: embed the generated memos into the OpenSearch index
 seed:
 	uv run etl/embed_memos.py --memos data/generated/memos
 
@@ -64,17 +60,23 @@ app:
 	uv run app/main.py
 
 down:
-	$(COMPOSE) --profile opensearch --profile s3vectors down -v
+	$(COMPOSE) down -v
 
 lint:
 	uvx ruff format etl/*.py src/*.py
 	uvx ruff check etl/*.py src/*.py
 
-# Unit test: a pgvector round-trip that generates a small corpus, embeds it with
+# Unit test: an OpenSearch round-trip that generates a small corpus, embeds it with
 # a deterministic stub, and searches it. Provisions its own container with
 # docker-py and needs no cloud.
 test:
-	uv run --with pytest --with psycopg2-binary --with boto3 --with docker pytest tests/ -q
+	uv run --with pytest --with boto3 --with opensearch-py pytest tests/ -q
+
+# neural: let the cluster embed instead of embedding first. Registers a pretrained
+# model inside OpenSearch, indexes memo text through an ingest pipeline, and runs a
+# neural query that carries text rather than a vector. Needs `make up` first.
+neural:
+	uv run --no-project local/neural_search.py
 
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS icons fetched at render time, custom icons from shared assets/diagrams/).
 # Icon PNGs are re-rendered from SVG at ICON_HEIGHT (needs rsvg-convert); WIDTH sets output pixel width (0 = awsdac native).

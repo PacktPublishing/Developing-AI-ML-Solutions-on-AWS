@@ -1,14 +1,13 @@
 """OpenSearch store: a local container, Amazon OpenSearch Service on AWS.
 
-Same interface as the pgvector store (reset / add / finalize / search) so the
+The store interface (reset / add / finalize / search) the chapter uses, so the
 embed step and retrieval do not care which backend is behind them.
 """
 
 import os
 
-from opensearchpy import OpenSearch, helpers
-
 from models import embed
+from opensearchpy import OpenSearch, helpers
 
 INDEX = "memo_chunks"
 
@@ -125,8 +124,8 @@ class OpenSearchStore:
         hits = []
         for h in resp["hits"]["hits"]:
             src = h["_source"]
-            # lucene cosinesimil maps cosine c to score (1 + c) / 2; invert to a
-            # cosine similarity so the number matches the pgvector store's
+            # lucene cosinesimil maps cosine c to score (1 + c) / 2, so invert it
+            # and hand the caller a cosine similarity on its own scale
             similarity = 2 * h["_score"] - 1
             hits.append((src["loan_id"], src["borrower"], src["content"], similarity))
         return hits

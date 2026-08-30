@@ -1,0 +1,42 @@
+# Ingestion: how a memo becomes something the index can answer from. Each memo is
+# split into overlapping chunks, each chunk is embedded through the model seam,
+# and the vector is written to memo_chunks beside the text and the loan id that
+# makes a citation possible. The loan id travels the whole way, which is what lets
+# an answer point back at the memo it came from.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Memos, Chunker, Embedder, Index]
+
+    Memos:
+      Type: AWS::Diagram::Resource
+      Preset: "Data table"
+      Title: "memo corpus\nloan_id + text"
+
+    Chunker:
+      Type: AWS::Diagram::Resource
+      Preset: "LambdaCoin"
+      Title: "chunk\noverlapping windows"
+
+    Embedder:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "embed\none vector per chunk"
+
+    Index:
+      Type: AWS::Diagram::Resource
+      Preset: "OpenSearch"
+      Title: "memo_chunks\nknn_vector + text + loan_id"
+
+  Links:
+    - {Source: Memos, SourcePosition: E, Target: Chunker, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Chunker, SourcePosition: E, Target: Embedder, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Embedder, SourcePosition: E, Target: Index, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
