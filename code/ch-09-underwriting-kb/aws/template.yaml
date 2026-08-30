@@ -201,6 +201,201 @@ Resources:
                 Action: bedrock:InvokeModel
                 Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0
 
+  # ---------------------------------------------------------------------------
+  # the neural plugin, as infrastructure. AWS ships a console integration that
+  # does this, but it is launched by hand and still leaves you to map the role in
+  # Dashboards, so the whole setup lives here instead: one custom resource that
+  # maps the role, creates the connector, registers the model, and builds the
+  # ingest pipeline. Its outputs are the ids an index needs.
+  # ---------------------------------------------------------------------------
+  NeuralProviderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: configure-neural-search
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: es:ESHttp*
+                Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/ch09-kb/*
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ch09-os-master*
+
+              # the connector carries a roleArn, and passing it is what needs this
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt BedrockConnectorRole.Arn
+
+  NeuralProvider:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 900
+      Role: !GetAtt NeuralProviderRole.Arn
+      Code:
+
+        # Inline so cfnresponse comes from the runtime. No requests: urllib and
+        # botocore's signer are both already present.
+        ZipFile: |
+          import base64
+          import json
+          import urllib.request
+
+          import boto3
+          import cfnresponse
+          from botocore.auth import SigV4Auth
+          from botocore.awsrequest import AWSRequest
+
+          CONNECTOR = "bedrock-titan-embeddings"
+          MODEL = "bedrock-titan-embed"
+
+
+          def _call(url, method, body, headers):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(url, data=data, method=method)
+              for key, value in headers.items():
+                  req.add_header(key, value)
+              with urllib.request.urlopen(req) as resp:
+                  raw = resp.read().decode()
+              return json.loads(raw) if raw else {}
+
+
+          def basic(url, method, body, user, password):
+              """Call the domain as the master user, which owns security config."""
+              token = base64.b64encode(f"{user}:{password}".encode()).decode()
+              return _call(url, method, body, {
+                  "Content-Type": "application/json",
+                  "Authorization": f"Basic {token}",
+              })
+
+
+          def signed(url, method, body, region):
+              """Call the domain as this Lambda's IAM role, which is what PassRole sees."""
+              data = json.dumps(body) if body is not None else None
+              aws = AWSRequest(method=method, url=url, data=data,
+                               headers={"Content-Type": "application/json"})
+              creds = boto3.Session().get_credentials().get_frozen_credentials()
+              SigV4Auth(creds, "es", region).add_auth(aws)
+              return _call(url, method, body, dict(aws.headers))
+
+
+          def wait(host, task_id, region):
+              """Poll one ml-commons task to completion."""
+              import time
+              for _ in range(120):
+                  task = signed(f"{host}/_plugins/_ml/tasks/{task_id}", "GET", None, region)
+                  if task.get("state") == "COMPLETED":
+                      return task
+                  if task.get("state") == "FAILED":
+                      raise RuntimeError(f"ml task failed: {task.get('error')}")
+                  time.sleep(5)
+              raise RuntimeError("ml task did not finish")
+
+
+          def handler(event, context):
+              props = event["ResourceProperties"]
+              host = "https://" + props["DomainEndpoint"]
+              region = props["Region"]
+              try:
+                  if event["RequestType"] == "Delete":
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, CONNECTOR)
+                      return
+
+                  secret = boto3.client("secretsmanager").get_secret_value(
+                      SecretId=props["MasterSecret"])["SecretString"]
+                  user = props["MasterUser"]
+                  role_arn = boto3.client("sts").get_caller_identity()["Arn"]
+                  role_arn = role_arn.replace(":sts:", ":iam:").replace(
+                      ":assumed-role/", ":role/").rsplit("/", 1)[0]
+
+                  # PUT, not PATCH: a PATCH here returns 200 and changes nothing
+                  basic(f"{host}/_plugins/_security/api/rolesmapping/ml_full_access",
+                        "PUT", {"backend_roles": [role_arn]}, user, secret)
+
+                  basic(f"{host}/_cluster/settings", "PUT", {"persistent": {
+                      "plugins.ml_commons.only_run_on_ml_node": False,
+                      "plugins.ml_commons.model_access_control_enabled": False,
+                      "plugins.ml_commons.trusted_connector_endpoints_regex": [
+                          "^https://bedrock-runtime\\..*[a-z0-9-]\\.amazonaws\\.com/.*$"],
+                  }}, user, secret)
+
+                  model_id = props["EmbedModel"]
+                  created = signed(f"{host}/_plugins/_ml/connectors/_create", "POST", {
+                      "name": CONNECTOR,
+                      "description": "Titan text embeddings for the memo index",
+                      "version": 1,
+                      "protocol": "aws_sigv4",
+                      "credential": {"roleArn": props["ConnectorRoleArn"]},
+                      "parameters": {
+                          "region": region,
+                          "service_name": "bedrock",
+                          "dimensions": int(props["Dimension"]),
+                          "normalize": True,
+                      },
+                      "actions": [{
+                          "action_type": "predict",
+                          "method": "POST",
+                          "url": f"https://bedrock-runtime.{region}.amazonaws.com/model/{model_id}/invoke",
+                          "headers": {"content-type": "application/json"},
+                          # the pre-process function fills inputText; naming it
+                          # anything else fails at ingest, not here
+                          "request_body": '{"inputText": "${parameters.inputText}", "dimensions": ${parameters.dimensions}, "normalize": ${parameters.normalize}}',
+                          "pre_process_function": "connector.pre_process.bedrock.embedding",
+                          "post_process_function": "connector.post_process.bedrock.embedding",
+                      }],
+                  }, region)
+                  connector_id = created["connector_id"]
+
+                  registered = signed(f"{host}/_plugins/_ml/models/_register", "POST", {
+                      "name": MODEL,
+                      "function_name": "remote",
+                      "description": "Titan embeddings through the connector",
+                      "connector_id": connector_id,
+                  }, region)
+                  ml_model = wait(host, registered["task_id"], region)["model_id"]
+
+                  deployed = signed(
+                      f"{host}/_plugins/_ml/models/{ml_model}/_deploy", "POST", None, region)
+                  wait(host, deployed["task_id"], region)
+
+                  basic(f"{host}/_ingest/pipeline/memo-embed", "PUT", {
+                      "description": "embed memo chunks through Bedrock on the way in",
+                      "processors": [{"text_embedding": {
+                          "model_id": ml_model,
+                          "field_map": {"content": "embedding"}}}],
+                  }, user, secret)
+
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS,
+                                   {"ModelId": ml_model, "ConnectorId": connector_id},
+                                   connector_id)
+              except Exception as exc:  # surface the reason in the stack event
+                  cfnresponse.send(event, context, cfnresponse.FAILED,
+                                   {"Error": str(exc)[:900]}, CONNECTOR)
+
+  NeuralModel:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt NeuralProvider.Arn
+      DomainEndpoint: !GetAtt Kb.DomainEndpoint
+      Region: !Ref AWS::Region
+      MasterUser: !Ref MasterUserName
+      MasterSecret: ch09-os-master
+      ConnectorRoleArn: !GetAtt BedrockConnectorRole.Arn
+      EmbedModel: amazon.titan-embed-text-v2:0
+      Dimension: 1024
+
 Outputs:
   DomainEndpoint:
     Value: !GetAtt Kb.DomainEndpoint
@@ -223,3 +418,7 @@ Outputs:
   BedrockConnectorRoleArn:
     Description: role the domain assumes to call Bedrock (neural plugin)
     Value: !GetAtt BedrockConnectorRole.Arn
+
+  NeuralModelId:
+    Description: ml-commons model id for the neural query
+    Value: !GetAtt NeuralModel.ModelId

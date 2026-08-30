@@ -62,6 +62,11 @@ Resources:
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub ${SourceBucket.Arn}/*
+              # CodeBuild lists the bucket before it downloads the source, so
+              # GetObject alone fails the DOWNLOAD_SOURCE phase on a cold build
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt SourceBucket.Arn
 
   BuildProject:
     Type: AWS::CodeBuild::Project
