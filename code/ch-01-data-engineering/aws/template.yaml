@@ -344,6 +344,7 @@ Resources:
               metadata:
                 image: postgres:16
                 container_name: af-metadata
+                restart: unless-stopped
                 environment:
                   - POSTGRES_USER=airflow
                   - POSTGRES_PASSWORD=airflow
@@ -358,6 +359,7 @@ Resources:
               # the DAG's target warehouse (redshift-local), separate from metadata
               warehouse:
                 image: public.ecr.aws/oblako/redshift-local:16
+                restart: unless-stopped
                 environment:
                   - POSTGRES_USER=loader
                   - POSTGRES_PASSWORD=loader
@@ -366,6 +368,7 @@ Resources:
               airflow:
                 image: apache/airflow:3.3.0
                 command: standalone
+                restart: unless-stopped
                 environment:
                   - AIRFLOW__CORE__LOAD_EXAMPLES=False
                   - AIRFLOW__CORE__EXECUTOR=LocalExecutor
