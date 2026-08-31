@@ -340,7 +340,7 @@ Resources:
               cat > /opt/af/warehouse.env <<EOF
             WAREHOUSE_USER=$WU
             WAREHOUSE_PASSWORD=$WP
-            WAREHOUSE_DSN=postgresql://$WU:$WP@${WarehouseHost}:5439/bureau
+            WAREHOUSE_DSN=postgresql://$WU:$WP@${WarehouseHost}:5439/bureau?sslmode=require
             DESTINATION__REDSHIFT__CREDENTIALS__HOST=${WarehouseHost}
             DESTINATION__REDSHIFT__CREDENTIALS__USERNAME=$WU
             DESTINATION__REDSHIFT__CREDENTIALS__PASSWORD=$WP
