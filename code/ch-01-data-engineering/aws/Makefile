@@ -19,7 +19,12 @@ SRC_BUCKET ?= ch01-src-$(ACCOUNT)
 SRC_KEY := ch01-source-$(RUN_STAMP).tar.gz
 airflow-deploy:
 	@aws s3api head-bucket --bucket $(SRC_BUCKET) 2>/dev/null || aws s3 mb s3://$(SRC_BUCKET)
-	cd .. && git archive --format=tar.gz -o /tmp/$(SRC_KEY) HEAD:code/ch-01-data-engineering
+	# from the repository root: git resolves <rev>:<path> against the working
+	# directory in a subdirectory, and answers an empty archive rather than an error
+	cd $$(git rev-parse --show-toplevel) && git archive --format=tar.gz \
+		-o /tmp/$(SRC_KEY) HEAD:code/ch-01-data-engineering
+	@test "$$(tar tzf /tmp/$(SRC_KEY) | wc -l)" -gt 10 \
+		|| { echo "source archive is empty; commit the chapter before deploying"; exit 1; }
 	aws s3 cp /tmp/$(SRC_KEY) s3://$(SRC_BUCKET)/$(SRC_KEY)
 	sam deploy --no-fail-on-empty-changeset \
 		--parameter-overrides AllowedCidr=$$(curl -4 -s ifconfig.me)/32 \
