@@ -176,7 +176,13 @@ def write_sagemaker(features: pa.Table) -> None:
             + [
                 {
                     "FeatureName": "event_time",
-                    "ValueAsString": row["event_time"].isoformat(),
+                    # SageMaker accepts only yyyy-MM-ddTHH:mm:ssZ and
+                    # yyyy-MM-ddTHH:mm:ss.SSSZ here: milliseconds, and the zone.
+                    # isoformat() gives microseconds and no zone, and is rejected.
+                    "ValueAsString": row["event_time"].strftime("%Y-%m-%dT%H:%M:%S.%f")[
+                        :-3
+                    ]
+                    + "Z",
                 }
             ],
         )
