@@ -12,9 +12,18 @@ RUN_STAMP := $(shell date +%Y-%m-%d)
 # WAREHOUSE=local (free tier: redshift-local on the instance) or serverless (also provisions Redshift Serverless; pass SUBNETS across >= 3 AZs).
 WAREHOUSE ?= local
 SUBNETS ?=
+# The instance runs the chapter's own scripts and the same DAG file as the local
+# stack, so the source ships with the deploy. git archive packages what is
+# committed, which keeps working-tree files and local credentials out of the tarball.
+SRC_BUCKET ?= ch01-src-$(ACCOUNT)
+SRC_KEY := ch01-source-$(RUN_STAMP).tar.gz
 airflow-deploy:
+	@aws s3api head-bucket --bucket $(SRC_BUCKET) 2>/dev/null || aws s3 mb s3://$(SRC_BUCKET)
+	cd .. && git archive --format=tar.gz -o /tmp/$(SRC_KEY) HEAD:code/ch-01-data-engineering
+	aws s3 cp /tmp/$(SRC_KEY) s3://$(SRC_BUCKET)/$(SRC_KEY)
 	sam deploy --no-fail-on-empty-changeset \
 		--parameter-overrides AllowedCidr=$$(curl -4 -s ifconfig.me)/32 \
+		SourceUri=s3://$(SRC_BUCKET)/$(SRC_KEY) \
 		WarehouseMode=$(WAREHOUSE) $(if $(SUBNETS),WorkgroupSubnetIds=$(SUBNETS),)
 
 # Airflow 3 standalone generates the admin password on the instance; fetch it
@@ -32,7 +41,7 @@ airflow-password:
 # S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
 # backup bucket (read from the stack outputs) before sam delete tears it down.
 airflow-delete:
-	@for KEY in BackupBucket OfflineBucket; do \
+	@for KEY in BackupBucket OfflineBucket RawBucket; do \
 		BUCKET=$$(aws cloudformation describe-stacks --stack-name ch01-airflow \
 		--query "Stacks[0].Outputs[?OutputKey=='$$KEY'].OutputValue" \
 		--output text 2>/dev/null); \

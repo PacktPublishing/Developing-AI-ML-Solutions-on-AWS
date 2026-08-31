@@ -1,10 +1,13 @@
 """The full nightly pipeline orchestrated by Airflow, end to end.
 
 Stage the raw bureau files, load them with dlt, build the dbt marts, test them, then
-ingest the result into the feature store (Iceberg offline + DynamoDB online). The same
-scripts `make run/dbt-run/features` run, now wired as a DAG against the lakehouse stack.
+ingest the result into the feature store. The same file runs on the laptop and on the
+EC2 deployment: every target is read from the environment, so the local stack falls
+back to the defaults below and the deployed stack overrides them with Redshift
+Serverless, real S3, and a SageMaker feature group.
 """
 
+import os
 from datetime import datetime
 
 from airflow.providers.standard.operators.bash import BashOperator
@@ -36,13 +39,30 @@ ENV = {
     "DBT_PROFILES_DIR": "/work/src/bureau-elt/dbt",
     "DATE": "2026-08-16",
 }
+# the deployed stack sets these in the container; anything it sets wins, so one DAG
+# file serves both without a mode flag
+ENV.update({k: os.environ[k] for k in list(ENV) if os.environ.get(k)})
+# the local-only settings: S3Proxy's endpoint, its dummy credentials, and the
+# self-signed certificate redshift-local presents. On the deployed stack none of
+# them is set, so they come out and the SDK falls back to the instance role, real
+# S3, and the public certificate authorities.
+if not os.environ.get("AWS_ENDPOINT_URL"):
+    for key in (
+        "AWS_ENDPOINT_URL",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "SSL_CERT_FILE",
+    ):
+        ENV.pop(key, None)
 DBT = "uvx --from dbt-core==1.12.2 --with dbt-redshift==1.11.0 dbt"
 W = "set -e; cd /work; "
 
 with DAG(
     "bureau_full_pipeline",
     start_date=datetime(2026, 1, 1),
-    schedule=None,
+    # unscheduled on the laptop, where you trigger it by hand; the deployed stack
+    # sets DAG_SCHEDULE to @daily so it runs nightly on its own
+    schedule=os.environ.get("DAG_SCHEDULE") or None,
     catchup=False,
 ) as dag:
     seed = BashOperator(

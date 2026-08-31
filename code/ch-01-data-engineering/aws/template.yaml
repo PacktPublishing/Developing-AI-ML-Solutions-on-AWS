@@ -26,6 +26,10 @@ Parameters:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
 
+  SourceUri:
+    Description: S3 URI of the packaged chapter source (set by `make airflow-deploy`); the instance unpacks it and runs the same DAG file as the local stack
+    Type: String
+
   WarehouseMode:
     Description: local runs redshift-local on the instance (free tier, mirrors the local stack); serverless provisions Amazon Redshift Serverless in this same stack and points the DAG at it (standard-plan account)
     Type: String
@@ -69,8 +73,21 @@ Resources:
             Status: Enabled
             ExpirationInDays: 30
 
+  # Where the seed step drops the raw bureau files and the load step reads them:
+  # on the laptop this is a bucket inside S3Proxy, here it is the real thing.
+  BureauRawBucket:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
   # The SageMaker Feature Store offline store (Iceberg-format Parquet lands here);
-  # only on a serverless deploy. Emptied by `make airflow-delete` before stack delete.
+  # emptied by `make airflow-delete` before the stack is torn down.
   FeatureStoreOfflineBucket:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
@@ -81,7 +98,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-    Condition: UseServerless
 
   # The role the feature group assumes to write the offline store and register its
   # Glue catalog table (distinct from the EC2 instance role).
@@ -113,7 +129,6 @@ Resources:
                 Resource:
                   - !GetAtt FeatureStoreOfflineBucket.Arn
                   - !Sub ${FeatureStoreOfflineBucket.Arn}/*
-    Condition: UseServerless
 
   AirflowInstanceRole:
     Type: AWS::IAM::Role
@@ -135,6 +150,33 @@ Resources:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub ${BackupBucket.Arn}/airflow-metadata/*
+        - PolicyName: source-and-raw-objects
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+
+              # the packaged chapter source, unpacked at boot
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub
+                  - arn:aws:s3:::${Rest}
+                  - Rest: !Select
+                      - 1
+                      - !Split
+                        - s3://
+                        - !Ref SourceUri
+
+              # the raw bureau drops the seed step writes and the load step reads
+              - Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !GetAtt BureauRawBucket.Arn
+                  - !Sub ${BureauRawBucket.Arn}/*
         - PolicyName: feature-store-ingest
           PolicyDocument:
             Version: "2012-10-17"
@@ -270,143 +312,30 @@ Resources:
             curl -sL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
               -o /usr/local/lib/docker/cli-plugins/docker-compose
             chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-            mkdir -p /opt/af/dags
-            cat > /opt/af/dags/bureau_pipeline.py <<'DAG'
-            """The nightly bureau pipeline as a DAG: stage raw bureau reports,
-            transform them into the credit-profile mart, then gate on a data
-            quality check. The same shape the chapter runs locally, orchestrated
-            here against the warehouse (redshift-local or Redshift Serverless)."""
-            import json
-            import os
-            from datetime import datetime
-
-            import boto3
-            import redshift_connector
-            from airflow.providers.standard.operators.python import PythonOperator
-            from airflow.sdk import DAG
-
-
-            STAGE = """
-            create table if not exists bureau_reports (applicant_id int, state varchar(2), score int, tradeline_count int, total_balance int, delinquent_count int);
-            truncate bureau_reports;
-            insert into bureau_reports values
-                (10001, 'CA', 712, 7, 172317, 0), (10002, 'TX', 668, 4, 63563, 1),
-                (10003, 'NY', 741, 5, 90210, 0), (10004, 'CA', 590, 9, 210004, 3),
-                (10005, 'TX', 805, 2, 15000, 0);
-            """
-            TRANSFORM = """
-            drop table if exists applicant_credit_profile;
-            create table applicant_credit_profile as
-                select applicant_id, score, state, tradeline_count, total_balance, delinquent_count
-                from bureau_reports;
-            """
-
-
-            def connect():
-                """Connect with redshift-connector, the driver the dbt-redshift adapter
-                uses. On Redshift Serverless the credentials come from Secrets Manager;
-                on redshift-local it is the loader user over a self-signed cert, so TLS
-                verification is off."""
-                if os.environ.get("WAREHOUSE_SECRET_ARN"):
-                    secret = json.loads(
-                        boto3.client("secretsmanager").get_secret_value(
-                            SecretId=os.environ["WAREHOUSE_SECRET_ARN"]
-                        )["SecretString"]
-                    )
-                    return redshift_connector.connect(
-                        host=os.environ["WAREHOUSE_HOST"], port=5439, database="bureau",
-                        user=secret["username"], password=secret["password"],
-                    )
-                return redshift_connector.connect(
-                    host="warehouse", port=5439, database="bureau",
-                    user="loader", password="loader", ssl=False,
-                )
-
-
-            def run_sql(sql):
-                """Run each statement in the block against the target warehouse."""
-                with connect() as conn, conn.cursor() as cur:
-                    for statement in (s.strip() for s in sql.split(";") if s.strip()):
-                        cur.execute(statement)
-                    conn.commit()
-
-
-            def check_profile():
-                """Data-quality gate: the credit-profile mart must not be empty."""
-                with connect() as conn, conn.cursor() as cur:
-                    cur.execute("select count(*) from applicant_credit_profile")
-                    if not cur.fetchone()[0]:
-                        raise ValueError("applicant_credit_profile is empty")
-
-
-            def ingest_feature_store():
-                """Ingest the mart into the SageMaker Feature Store, creating the
-                feature group (same schema as the chapter demo) on the first run.
-                Both stores are enabled: the online store for low-latency serving
-                lookups, the offline store (S3, Iceberg-format) for training queries."""
-                import datetime as _dt
-                import time as _t
-
-                fg = os.environ["FEATURE_GROUP"]
-                sm = boto3.client("sagemaker")
-                try:
-                    sm.describe_feature_group(FeatureGroupName=fg)
-                except Exception:
-                    sm.create_feature_group(
-                        FeatureGroupName=fg,
-                        RecordIdentifierFeatureName="applicant_id",
-                        EventTimeFeatureName="event_time",
-                        FeatureDefinitions=[
-                            {"FeatureName": "applicant_id", "FeatureType": "Integral"},
-                            {"FeatureName": "score", "FeatureType": "Integral"},
-                            {"FeatureName": "state", "FeatureType": "String"},
-                            {"FeatureName": "tradeline_count", "FeatureType": "Integral"},
-                            {"FeatureName": "total_balance", "FeatureType": "Integral"},
-                            {"FeatureName": "delinquent_count", "FeatureType": "Integral"},
-                            {"FeatureName": "event_time", "FeatureType": "String"},
-                        ],
-                        OnlineStoreConfig={"EnableOnlineStore": True},
-                        OfflineStoreConfig={
-                            "S3StorageConfig": {"S3Uri": os.environ["OFFLINE_S3_URI"]}
-                        },
-                        RoleArn=os.environ["FEATURE_STORE_ROLE_ARN"],
-                    )
-                    for _ in range(60):
-                        if sm.describe_feature_group(FeatureGroupName=fg)["FeatureGroupStatus"] == "Created":
-                            break
-                        _t.sleep(5)
-                runtime = boto3.client("sagemaker-featurestore-runtime")
-                now = _dt.datetime.now(_dt.timezone.utc).isoformat()
-                with connect() as conn, conn.cursor() as cur:
-                    cur.execute(
-                        "select applicant_id, score, state, tradeline_count,"
-                        " total_balance, delinquent_count from applicant_credit_profile"
-                    )
-                    rows = cur.fetchall()
-                for aid, score, state, tc, tb, dc in rows:
-                    runtime.put_record(
-                        FeatureGroupName=fg,
-                        Record=[
-                            {"FeatureName": "applicant_id", "ValueAsString": str(aid)},
-                            {"FeatureName": "score", "ValueAsString": str(score)},
-                            {"FeatureName": "state", "ValueAsString": str(state)},
-                            {"FeatureName": "tradeline_count", "ValueAsString": str(tc)},
-                            {"FeatureName": "total_balance", "ValueAsString": str(tb)},
-                            {"FeatureName": "delinquent_count", "ValueAsString": str(dc)},
-                            {"FeatureName": "event_time", "ValueAsString": now},
-                        ],
-                    )
-                print(f"ingested {len(rows)} records to feature group {fg}")
-
-
-            with DAG("bureau_pipeline", start_date=datetime(2026, 1, 1),
-                     schedule="@daily", catchup=False) as dag:
-                stage = PythonOperator(task_id="stage", python_callable=run_sql, op_args=[STAGE])
-                transform = PythonOperator(task_id="transform", python_callable=run_sql, op_args=[TRANSFORM])
-                check = PythonOperator(task_id="check", python_callable=check_profile)
-                ingest = PythonOperator(task_id="ingest", python_callable=ingest_feature_store)
-                stage >> transform >> check >> ingest
-            DAG
+            # Unpack the chapter source: the deployed stack runs the same scripts and
+            # the same DAG file as the laptop, so nothing here is a cloud-only copy.
+            mkdir -p /opt/af/work
+            aws s3 cp ${SourceUri} /opt/af/src.tar.gz
+            tar xzf /opt/af/src.tar.gz -C /opt/af/work
+            chown -R 50000:0 /opt/af/work
+            # Warehouse credentials: on a serverless deploy they come from the
+            # generated secret, so the DAG never carries them. A local deploy leaves
+            # the file empty and the DAG's redshift-local defaults stand.
+            : > /opt/af/warehouse.env
+            if [ -n "${SecretArn}" ]; then
+              SECRET=$(aws secretsmanager get-secret-value --secret-id ${SecretArn} \
+                --query SecretString --output text)
+              WU=$(echo "$SECRET" | python3 -c 'import sys,json;print(json.load(sys.stdin)["username"])')
+              WP=$(echo "$SECRET" | python3 -c 'import sys,json;print(json.load(sys.stdin)["password"])')
+              cat > /opt/af/warehouse.env <<EOF
+            WAREHOUSE_USER=$WU
+            WAREHOUSE_PASSWORD=$WP
+            WAREHOUSE_DSN=postgresql://$WU:$WP@${WarehouseHost}:5439/bureau
+            DESTINATION__REDSHIFT__CREDENTIALS__HOST=${WarehouseHost}
+            DESTINATION__REDSHIFT__CREDENTIALS__USERNAME=$WU
+            DESTINATION__REDSHIFT__CREDENTIALS__PASSWORD=$WP
+            EOF
+            fi
             cat > /opt/af/compose.yml <<'YML'
             services:
               # Airflow's own metadata store: real Postgres, so the scheduler can run
@@ -451,13 +380,20 @@ Resources:
                   - FEATURE_GROUP=${FeatureGroup}
                   - OFFLINE_S3_URI=${OfflineS3Uri}
                   - FEATURE_STORE_ROLE_ARN=${FeatureStoreRoleArn}
-                  # the bureau DAG needs redshift-connector (the warehouse driver, same
-                  # as dbt-redshift) and boto3 (read the secret); install at container start
-                  - _PIP_ADDITIONAL_REQUIREMENTS=redshift-connector boto3
+                  # the raw landing zone the seed and load steps use
+                  - RAW_BUCKET=${RawBucket}
+                  - WAREHOUSE_SSLMODE=require
+                  # nightly on the deployed stack; unscheduled on the laptop
+                  - DAG_SCHEDULE=@daily
+                  # uv runs the chapter's scripts and uvx runs dbt, exactly as locally
+                  - _PIP_ADDITIONAL_REQUIREMENTS=uv
+                env_file:
+                  - /opt/af/warehouse.env
                 ports:
                   - "8080:8080"
                 volumes:
-                  - /opt/af/dags:/opt/airflow/dags
+                  - /opt/af/work:/work
+                  - /opt/af/work/local/airflow-dags:/opt/airflow/dags
                 depends_on:
                   metadata:
                     condition: service_healthy
@@ -487,18 +423,11 @@ Resources:
               - UseServerless
               - !GetAtt WarehouseWorkgroup.Workgroup.Endpoint.Address
               - ""
-            FeatureGroup: !If
-              - UseServerless
-              - applicant-credit-profile-fg
-              - ""
-            OfflineS3Uri: !If
-              - UseServerless
-              - !Sub s3://${FeatureStoreOfflineBucket}/offline/
-              - ""
-            FeatureStoreRoleArn: !If
-              - UseServerless
-              - !GetAtt FeatureStoreRole.Arn
-              - ""
+            FeatureGroup: applicant-credit-profile-fg
+            OfflineS3Uri: !Sub s3://${FeatureStoreOfflineBucket}/offline/
+            FeatureStoreRoleArn: !GetAtt FeatureStoreRole.Arn
+            RawBucket: !Ref BureauRawBucket
+            SourceUri: !Ref SourceUri
 
 Outputs:
   AirflowUrl:
@@ -512,7 +441,10 @@ Outputs:
   OfflineBucket:
     Description: S3 bucket holding the SageMaker Feature Store offline store
     Value: !Ref FeatureStoreOfflineBucket
-    Condition: UseServerless
+
+  RawBucket:
+    Description: S3 bucket holding the raw bureau drops the DAG seeds and loads
+    Value: !Ref BureauRawBucket
 
   WarehouseEndpoint:
     Description: Redshift Serverless workgroup endpoint the DAG targets
