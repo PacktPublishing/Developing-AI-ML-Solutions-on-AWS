@@ -382,7 +382,6 @@ Resources:
                   - FEATURE_STORE_ROLE_ARN=${FeatureStoreRoleArn}
                   # the raw landing zone the seed and load steps use
                   - RAW_BUCKET=${RawBucket}
-                  - WAREHOUSE_SSLMODE=require
                   # nightly on the deployed stack; unscheduled on the laptop
                   - DAG_SCHEDULE=@daily
                   # uv runs the chapter's scripts and uvx runs dbt, exactly as locally

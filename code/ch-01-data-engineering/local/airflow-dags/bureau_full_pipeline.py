@@ -26,7 +26,7 @@ ENV = {
     "WAREHOUSE_USER": "loader",
     "WAREHOUSE_PASSWORD": "loader",
     "WAREHOUSE_SSLMODE": "verify-ca",
-    "SSL_CERT_FILE": "/work/oblako-bundle.pem",
+    "SSL_CERT_FILE": "/tmp/ca-bundle.pem",
     # dlt's redshift destination reads these; in-container the warehouse is a
     # service name, not localhost
     "DESTINATION__REDSHIFT__CREDENTIALS__HOST": "warehouse",
@@ -42,19 +42,25 @@ ENV = {
 # the deployed stack sets these in the container; anything it sets wins, so one DAG
 # file serves both without a mode flag
 ENV.update({k: os.environ[k] for k in list(ENV) if os.environ.get(k)})
-# the local-only settings: S3Proxy's endpoint, its dummy credentials, and the
-# self-signed certificate redshift-local presents. On the deployed stack none of
-# them is set, so they come out and the SDK falls back to the instance role, real
-# S3, and the public certificate authorities.
+# S3Proxy's endpoint and its dummy credentials are local-only. On the deployed
+# stack none of them is set, so they come out and the SDK falls back to the
+# instance role against real S3. The trust bundle is built per run either way.
 if not os.environ.get("AWS_ENDPOINT_URL"):
-    for key in (
-        "AWS_ENDPOINT_URL",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "SSL_CERT_FILE",
-    ):
+    for key in ("AWS_ENDPOINT_URL", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
         ENV.pop(key, None)
 DBT = "uvx --from dbt-core==1.12.2 --with dbt-redshift==1.11.0 dbt"
+# redshift-local mints a fresh certificate every time it starts, so the trust
+# bundle is rebuilt before dbt connects rather than kept on disk: certifi's roots,
+# plus the warehouse's own certificate when the warehouse is that container. Real
+# Redshift chains to a public root and needs only the first half. This is the
+# certs target from the chapter Makefile, which dbt-run and dbt-test depend on.
+CERTS = (
+    "uv run --with certifi python -c "
+    "\"import certifi, shutil; shutil.copy(certifi.where(), '/tmp/ca-bundle.pem')\" && "
+    'if [ "$WAREHOUSE_HOST" = warehouse ]; then '
+    "openssl s_client -starttls postgres -connect warehouse:5439 </dev/null 2>/dev/null "
+    "| openssl x509 -outform pem >> /tmp/ca-bundle.pem; fi; "
+)
 W = "set -e; cd /work; "
 
 with DAG(
@@ -82,6 +88,7 @@ with DAG(
         append_env=True,
         env=ENV,
         bash_command=W
+        + CERTS
         + DBT
         + " run --project-dir src/bureau-elt/dbt --target-path /tmp/dbt_t --log-path /tmp/dbt_l",
     )
@@ -90,6 +97,7 @@ with DAG(
         append_env=True,
         env=ENV,
         bash_command=W
+        + CERTS
         + DBT
         + " test --project-dir src/bureau-elt/dbt --target-path /tmp/dbt_t --log-path /tmp/dbt_l",
     )
