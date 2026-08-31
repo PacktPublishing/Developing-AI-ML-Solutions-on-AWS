@@ -1,4 +1,4 @@
-.PHONY: iam airflow-deploy airflow-password airflow-delete lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
+.PHONY: iam airflow-deploy airflow-password airflow-delete empty-buckets lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
 
 S3TABLES_ARN ?= arn:aws:s3tables:us-east-1:$(ACCOUNT):bucket/ch01-lake
 
@@ -46,6 +46,16 @@ airflow-password:
 # S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
 # backup bucket (read from the stack outputs) before sam delete tears it down.
 airflow-delete:
+	@$(MAKE) --no-print-directory empty-buckets
+	# The feature store's offline half flushes on its own schedule, so a bucket
+	# emptied a moment ago can hold fresh Parquet by the time CloudFormation
+	# reaches it, and the stack delete fails on the non-empty bucket. Empty,
+	# wait for the flush, then empty again.
+	@sleep 45
+	@$(MAKE) --no-print-directory empty-buckets
+	sam delete --no-prompts
+
+empty-buckets:
 	@for KEY in BackupBucket OfflineBucket RawBucket; do \
 		BUCKET=$$(aws cloudformation describe-stacks --stack-name ch01-airflow \
 		--query "Stacks[0].Outputs[?OutputKey=='$$KEY'].OutputValue" \
@@ -54,7 +64,6 @@ airflow-delete:
 			echo "emptying s3://$$BUCKET"; aws s3 rm "s3://$$BUCKET" --recursive; \
 		fi; \
 	done
-	sam delete --no-prompts
 
 check-account:
 	@echo "account: $(ACCOUNT)  lake bucket: $(LAKE_BUCKET)"
