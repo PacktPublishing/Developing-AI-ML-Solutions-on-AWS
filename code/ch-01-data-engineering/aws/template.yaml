@@ -292,6 +292,16 @@ Resources:
       ImageId: !Ref LatestAmiId
       InstanceType: !Ref InstanceType
       IamInstanceProfile: !Ref AirflowInstanceProfile
+
+      # The AL2023 default root volume is 8 GB, and the three container images
+      # alone come to about 3 GB before uv caches dbt and pyarrow on top. 30 GB is
+      # what the free tier allows for EBS.
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            DeleteOnTermination: true
       SubnetId: !If
         - HasSubnet
         - !Ref SubnetId
