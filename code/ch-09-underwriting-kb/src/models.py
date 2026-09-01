@@ -19,8 +19,11 @@ EMBED_MODEL = os.environ.get("EMBED_MODEL", "amazon.titan-embed-text-v2:0")
 BEDROCK_REGION = os.environ.get("BEDROCK_REGION", "us-east-1")
 EMBED_DIM = int(os.environ.get("EMBED_DIM", "1024"))
 
-# qwen3:0.6b is the smallest Qwen3; point OLLAMA_TEXT_MODEL at a larger tag for better local output.
-OLLAMA_TEXT_MODEL = os.environ.get("OLLAMA_TEXT_MODEL", "qwen3:0.6b")
+# qwen3:4b is the smallest tag that calls tools reliably: at 0.6b the agent
+# answers that the statement is unavailable rather than calling read_case, so
+# retrieval still works but the agent does not. Point at a larger tag for better
+# prose; pull with `ollama pull qwen3:4b`.
+OLLAMA_TEXT_MODEL = os.environ.get("OLLAMA_TEXT_MODEL", "qwen3:4b")
 OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "mxbai-embed-large")
 
 

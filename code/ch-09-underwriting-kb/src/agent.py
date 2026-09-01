@@ -9,8 +9,7 @@ tool the agent calls instead of something the model is asked to work out.
 
 Usage (from the chapter root):
   PYTHONPATH=src uv run src/agent.py --ask \
-      "Customer earns 90,000 a month with 12,000 of existing repayments. \
-       What can we lend over 12 months at 18%, and have we done similar before?"
+      "Review CASE-20260000 for a 12 month facility at 18 percent."
 """
 
 import argparse
@@ -24,11 +23,14 @@ from strands import Agent, tool
 from strands.models import BedrockModel
 
 SYSTEM = (
-    "You are a credit underwriting assistant. You have two kinds of help: past"
-    " memos, which you must cite by loan id in square brackets, and an"
+    "You are a credit underwriting assistant. You have three kinds of help: the"
+    " applicant's uploaded bank statement, past memos, which you must cite by loan"
+    " id in square brackets, and an"
     " affordability calculator. Never compute a debt-to-income ratio or an"
     " instalment yourself, always call the tool, because the underwriter checks"
-    " these numbers. The debt-to-income ceiling is credit policy and comes from"
+    " these numbers. When the underwriter names a case reference, read the"
+    " statement first and use the income and existing repayments it returns"
+    " rather than any figure quoted in the question. The debt-to-income ceiling is credit policy and comes from"
     " configuration, so never choose one yourself and always report the ceiling"
     " the tool returns. Recommend an amount and say what it assumes. Do not make the"
     " final approve or decline decision, that is the underwriter's call. Write in"
@@ -38,9 +40,36 @@ SYSTEM = (
 
 @tool
 def search_memos(query: str, k: int = 5) -> str:
-    """Search past underwriting memos and return passages tagged by loan id."""
-    hits = get_store().search(get_runtime(), query, k=k)
+    """Search past underwriting memos and return passages tagged by loan id.
+
+    Only the archive of decided cases is searched, never the document under
+    review, so a submission cannot come back as its own precedent.
+    """
+    hits = get_store().search(get_runtime(), query, k=k, source="corpus")
     return _context(hits)
+
+
+# -------------------------------------------------------------------------------
+# Tool to read the applicant's uploaded bank statement
+# -------------------------------------------------------------------------------
+@tool
+def read_case(case_id: str) -> dict:
+    """Return the figures parsed from the applicant's uploaded bank statement.
+
+    The income and existing repayments come from totalling the statement at
+    upload, not from reading the text, so the affordability tools are given
+    figures rather than an impression of them.
+    """
+    doc = get_store().read_submission(case_id)
+    if not doc:
+        return {"error": f"no statement uploaded for {case_id}"}
+    return {
+        "case_id": doc["case_id"],
+        "holder": doc["holder"],
+        "monthly_income": doc["monthly_income"],
+        "existing_repayments": doc["existing_repayments"],
+        "months_covered": doc["months"],
+    }
 
 
 # -------------------------------------------------------------------------------
@@ -121,7 +150,7 @@ def build_agent() -> Agent:
     """Build the agent with the memo search and the two affordability tools."""
     return Agent(
         model=build_model(),
-        tools=[search_memos, assess_affordability, recommend_amount],
+        tools=[search_memos, read_case, assess_affordability, recommend_amount],
         system_prompt=SYSTEM,
         callback_handler=None,
     )

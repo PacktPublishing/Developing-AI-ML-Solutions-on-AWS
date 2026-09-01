@@ -1,4 +1,4 @@
-.PHONY: neural up gen seed ask cases app all down lint test diagrams
+.PHONY: neural up gen seed ask cases app all down lint test diagrams statements review
 
 # the whole local flow in one command: the vector store, the synthetic corpus, the embeddings,
 # and a case-retrieval query. make down when done.
@@ -39,6 +39,15 @@ DEAL ?= A logistics firm seeks a 500,000 US dollar working-capital loan for six 
 
 up:
 	$(COMPOSE) up -d --wait
+
+# statements: the synthetic bank statement PDFs an underwriter uploads for review
+statements:
+	uv run etl/gen_statements.py --out data/generated/statements --count 12 --seed 11
+
+# review: upload one statement and let the agent review it against the archive
+CASE ?= CASE-20260000
+review: statements
+	uv run --with pdfplumber src/review.py --case $(CASE)
 
 # gen: write the synthetic memo corpus (reproducible from the seed)
 gen:

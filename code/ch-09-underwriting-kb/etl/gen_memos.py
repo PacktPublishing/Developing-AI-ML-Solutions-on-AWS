@@ -421,6 +421,10 @@ def generate(out: Path, count: int, seed: int, messy: bool) -> list[Memo]:
     """Write `count` synthetic memos to `out` and return their metadata."""
     rng = random.Random(seed)
     out.mkdir(parents=True, exist_ok=True)
+    # clear the directory first: a regenerated corpus must replace the previous
+    # one, not sit beside it, or a reseed indexes both id ranges at once
+    for stale in out.glob("*.txt"):
+        stale.unlink()
     memos: list[Memo] = []
     for i in range(count):
         # 99_000_000 is deliberately outside the range any real portfolio uses:
