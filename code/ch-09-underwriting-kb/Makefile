@@ -79,7 +79,8 @@ lint:
 # a deterministic stub, and searches it. Provisions its own container with
 # docker-py and needs no cloud.
 test:
-	uv run --with pytest --with boto3 --with opensearch-py pytest tests/ -q
+	uv run --with pytest --with boto3 --with opensearch-py --with pdfplumber \
+		--with reportlab pytest tests/ -q
 
 # neural: let the cluster embed instead of embedding first. Registers a pretrained
 # model inside OpenSearch, indexes memo text through an ingest pipeline, and runs a
