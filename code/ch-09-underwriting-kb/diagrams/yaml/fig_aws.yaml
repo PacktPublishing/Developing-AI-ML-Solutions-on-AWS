@@ -1,5 +1,8 @@
-# The retrieval round on AWS: the same FastAPI app runs unchanged as a container
-# Lambda behind API Gateway. It embeds and generates with Amazon Bedrock and retrieves
+# The retrieval round on AWS: the same FastAPI app runs unchanged in Lambda,
+# packaged as a container image, behind API Gateway. The Lambda Web Adapter (a
+# Lambda extension in the image) starts uvicorn and forwards each invocation to
+# it over HTTP, so there is no handler and no Mangum glue and the CMD is the one
+# that runs locally. It embeds and generates with Amazon Bedrock and retrieves
 # from an Amazon OpenSearch Service domain (with Dashboards). The one thing that moves
 # between worlds is the embeddings/generation seam and the store endpoint. The
 # Strands agent runs inside the same container, reaching Bedrock and the domain
@@ -35,7 +38,7 @@ Diagram:
     Lambda:
       Type: AWS::Diagram::Resource
       Preset: "LambdaCoin"
-      Title: "container Lambda\nWeb Adapter"
+      Title: "AWS Lambda\n(container image)"
       Direction: vertical
       Children: [LambdaApp, Agent]
     LambdaApp:
