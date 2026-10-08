@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["pandas", "scikit-learn", "catboost"]
+# dependencies = ["pandas", "scikit-learn", "catboost", "numpy"]
 # ///
 """Train the CatBoost fraud classifier the streaming consumer scores with.
 
@@ -18,10 +18,12 @@ Usage:
 import json
 import os
 
+import numpy as np
 import pandas as pd
 import sklearn
 from catboost import CatBoostClassifier
 from sklearn.metrics import average_precision_score, make_scorer, roc_auc_score
+from calibration import REVIEW_CUT, to_fpr, to_score
 from sklearn.model_selection import TunedThresholdClassifierCV
 
 sklearn.set_config(enable_metadata_routing=True)
@@ -64,29 +66,48 @@ def main() -> None:
         random_seed=6,
         verbose=0,
     )
-    model.fit(train[features], train[TARGET])
+    # The classifier is fitted below, inside the threshold search, so that the
+    # threshold, the calibration and the shipped model all refer to one fit.
 
     # Threshold by business value on held-out training rows: price each outcome and keep the
     # operating point worth the most. Frozen and shipped; the consumer never re-derives it.
+    # The holdout is chronological, the earlier three quarters of the training window to fit
+    # and the latest quarter to score candidates on. A float cv would shuffle instead, which
+    # would let later behaviour inform the fitting half and undo has_time above.
+    cut = int(len(train) * 0.75)
+    split = [(np.arange(cut), np.arange(cut, len(train)))]
     business_scorer = make_scorer(business_metric).set_score_request(amount=True)
     tuned_model = TunedThresholdClassifierCV(
         estimator=model,
         scoring=business_scorer,
+        cv=split,
+        refit=False,  # keep the classifier fitted on the earlier three quarters
         thresholds=100,
         n_jobs=-1,
-        random_state=6,
     )
-    tuned_model.set_params(cv=0.75).fit(
-        train[features], train[TARGET], amount=train[AMOUNT]
-    )
+    tuned_model.fit(train[features], train[TARGET], amount=train[AMOUNT])
     threshold = float(tuned_model.best_threshold_)
 
-    test_scores = model.predict_proba(test[features])[:, 1]
+    # The endpoint serves a 0-1000 score, not a probability, so the calibration ships
+    # beside the model. Its reference has to come from rows the classifier did not fit
+    # on: scores on its own training rows are overconfident, so their percentiles would
+    # make a cut look safer than it is. Calibrate on the held-back quarter and carry the
+    # business threshold onto that same scale.
+    valid = train.iloc[cut:]
+    valid_proba = tuned_model.predict_proba(valid[features])[:, 1]
+    legit = np.sort(valid_proba[valid[TARGET].to_numpy() == 0])
+    block_cut = int(to_score([threshold], legit)[0])
+
+    test_scores = tuned_model.predict_proba(test[features])[:, 1]
     blocked = test_scores >= threshold
     caught = int((blocked & (test[TARGET] == 1)).sum())
     frauds = int((test[TARGET] == 1).sum())
     value = business_metric(
         test[TARGET].to_numpy(), blocked.astype(int), test[AMOUNT].to_numpy()
+    )
+    print(
+        f"score threshold {block_cut} (from probability {threshold:.4f}), "
+        f"a {to_fpr(block_cut):.1%} false-alarm rate by construction"
     )
     print(f"test ROC AUC {roc_auc_score(test[TARGET], test_scores):.3f}")
     print(f"test PR  AUC {average_precision_score(test[TARGET], test_scores):.3f}")
@@ -98,10 +119,21 @@ def main() -> None:
     )
 
     os.makedirs(f"{CHAPTER_DIR}/artifacts", exist_ok=True)
-    model.save_model(f"{CHAPTER_DIR}/artifacts/model.cbm")
+    # ship the classifier the threshold and the calibration refer to
+    tuned_model.estimator_.save_model(f"{CHAPTER_DIR}/artifacts/model.cbm")
+    np.save(f"{CHAPTER_DIR}/artifacts/calibration.npy", legit)
     with open(f"{CHAPTER_DIR}/artifacts/model_meta.json", "w") as f:
-        json.dump({"features": features, "threshold": threshold}, f, indent=2)
-    print("saved artifacts/model.cbm and artifacts/model_meta.json")
+        json.dump(
+            {
+                "features": features,
+                "probability_threshold": threshold,
+                "block_cut": block_cut,
+                "review_cut": REVIEW_CUT,
+            },
+            f,
+            indent=2,
+        )
+    print("saved artifacts/model.cbm, calibration.npy and model_meta.json")
 
 
 if __name__ == "__main__":

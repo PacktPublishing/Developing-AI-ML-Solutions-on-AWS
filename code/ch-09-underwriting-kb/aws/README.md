@@ -1,9 +1,9 @@
-# ch-09 on AWS: the knowledge base on OpenSearch Service
+# ch-09 on AWS: underwriting knowledge base
 
 The cloud round provisions one managed store — an Amazon OpenSearch Service
-domain — and uses **OpenSearch Dashboards** as the search UI. Aurora pgvector and
-S3 Vectors stay local; the same `opensearch_store` code indexes and queries the
-domain, only the endpoint and auth change.
+domain — and uses **OpenSearch Dashboards** as the search UI. The same
+`opensearch_store` code indexes and queries the domain, and only the endpoint
+and the auth change.
 
 ## Run it
 

@@ -60,7 +60,7 @@ def deploy_local() -> None:
     with open(f"{CHAPTER_DIR}/artifacts/model_meta.json") as f:
         features = json.load(f)["features"]
     sample = {name: 0.0 for name in features}
-    schema = SchemaBuilder(sample_input=sample, sample_output={"scores": [0.0]})
+    schema = SchemaBuilder(sample_input=sample, sample_output={"scores": [0]})
 
     builder = ModelBuilder(
         image_uri=IMAGE_URI,
@@ -100,7 +100,7 @@ def deploy_serverless() -> None:
     #    into /opt/ml/model, exactly where the local runs mount artifacts/.
     tar_path = "/tmp/ch06-model.tar.gz"
     with tarfile.open(tar_path, "w:gz") as tar:
-        for fname in ("model.cbm", "model_meta.json"):
+        for fname in ("model.cbm", "model_meta.json", "calibration.npy"):
             tar.add(os.path.join(CHAPTER_DIR, "artifacts", fname), arcname=fname)
             print("packed", fname)
 

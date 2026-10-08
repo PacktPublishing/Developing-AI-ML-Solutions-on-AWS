@@ -1,0 +1,59 @@
+# Who calls the embedding model. Above, the chapter's shape: the app embeds the
+# question with Bedrock and sends a vector to OpenSearch. Below, the neural
+# plugin: the app sends text, and the domain calls Bedrock itself through a
+# registered connector, at ingest time and at query time. The index is the same
+# knn_vector field either way; what moves is the caller.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children: [ClientSide, NeuralSide]
+
+    ClientSide:
+      Type: AWS::Diagram::Resource
+      Direction: horizontal
+      Title: "client-side embedding (this chapter)"
+      Children: [AppA, BedrockA, IndexA]
+    AppA:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "app\nsends a vector"
+    BedrockA:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "Bedrock\nembed"
+    IndexA:
+      Type: AWS::Diagram::Resource
+      Preset: "OpenSearch"
+      Title: "knn_vector\nk-NN query"
+
+    NeuralSide:
+      Type: AWS::Diagram::Resource
+      Direction: horizontal
+      Title: "neural plugin"
+      Children: [AppB, IndexB, BedrockB]
+    AppB:
+      Type: AWS::Diagram::Resource
+      Preset: "FastAPI"
+      Title: "app\nsends text"
+    IndexB:
+      Type: AWS::Diagram::Resource
+      Preset: "OpenSearch"
+      Title: "knn_vector\nneural query"
+    BedrockB:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "Bedrock\nvia ml-commons connector"
+
+  Links:
+    - {Source: AppA, SourcePosition: E, Target: BedrockA, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: BedrockA, SourcePosition: E, Target: IndexA, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: AppB, SourcePosition: E, Target: IndexB, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: IndexB, SourcePosition: E, Target: BedrockB, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

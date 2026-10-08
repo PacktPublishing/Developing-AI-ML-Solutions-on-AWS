@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
 Description: |
-  Streaming fraud detection on AWS: the cloud counterpart of the chapter's local stack. Transactions flow through a Kinesis stream into a Lambda consumer, the consumer scores each event against the SageMaker Serverless Inference endpoint and writes blocks to DynamoDB, and every decision goes onward through a second stream to Data Firehose, which stages batches to S3 and, when a warehouse is configured, issues the COPY into Redshift.
+  Streaming fraud detection on AWS: the cloud counterpart of the chapter's local stack. Transactions flow through a Kinesis stream into a Lambda consumer, the consumer scores each event against the SageMaker Serverless Inference endpoint, bands the 0-1000 score it returns, and writes blocks to DynamoDB, and every decision goes onward through a second stream to Data Firehose, which stages batches to S3 and, when a warehouse is configured, issues the COPY into Redshift.
   The scoring endpoint itself is deployed separately (deploy.py) because it needs the container image pushed first; this stack creates the ECR repository the image lands in and the execution role the endpoint runs as.
   Every stateful resource is deliberately disposable: chapter data is synthetic and reproducible, so `make teardown` should leave nothing behind and nothing to pay for.
 
@@ -11,11 +11,17 @@ Parameters:
     Type: String
     Default: fraud-scoring
 
-  ScoreThreshold:
+  BlockCut:
     Description: |
-      The operating threshold frozen at training time; copy it from artifacts/model_meta.json. The endpoint returns a probability; the consumer owns the block-or-pass decision, same as the local run.
+      The block cut on the 0-1000 score, frozen at training time; copy block_cut from artifacts/model_meta.json. The endpoint returns the score; the consumer owns the banding, same as the local run.
     Type: String
-    Default: "0.04"
+    Default: "955"
+
+  ReviewCut:
+    Description: |
+      The review cut on the 0-1000 score: scores at or above it and below the block cut go to an analyst after the payment completes. Copy review_cut from artifacts/model_meta.json.
+    Type: String
+    Default: "700"
 
   EnableWarehouse:
     Description: |
@@ -246,7 +252,8 @@ Resources:
       Environment:
         Variables:
           ENDPOINT_NAME: !Ref EndpointName
-          SCORE_THRESHOLD: !Ref ScoreThreshold
+          BLOCK_CUT: !Ref BlockCut
+          REVIEW_CUT: !Ref ReviewCut
           BLOCKS_TABLE: !Ref BlockedTransactions
           DECISIONS_STREAM: !Ref DecisionsStream
       Events:

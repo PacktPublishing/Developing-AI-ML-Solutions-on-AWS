@@ -1,7 +1,9 @@
 # The local half of the pair: the same shape as fig_aws with the local stand-ins
-# swapped in. The FastAPI ask/cases app embeds the question and the memos with
-# Ollama instead of Bedrock and retrieves the nearest chunks from an OpenSearch
-# container instead of a managed domain. Dashboards comes up on 5601 either way.
+# swapped in. The FastAPI app embeds the question and the memos with Ollama instead
+# of Bedrock and retrieves the nearest chunks from an OpenSearch container instead
+# of a managed domain. Dashboards comes up on 5601 either way. /agent hands the
+# question to the Strands agent, which searches the memos and runs the DTI
+# arithmetic as tools rather than asking the model to do the sums.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -25,7 +27,7 @@ Diagram:
       Preset: AWSCloudNoLogo
       Direction: horizontal
       Title: "Local cloud (Docker Compose)"
-      Children: [AppCol, Backends]
+      Children: [AppCol, AgentCol, Backends]
 
     AppCol:
       Type: AWS::Diagram::VerticalStack
@@ -34,6 +36,13 @@ Diagram:
       Type: AWS::Diagram::Resource
       Preset: "FastAPI"
       Title: "FastAPI app\nuvicorn"
+    AgentCol:
+      Type: AWS::Diagram::VerticalStack
+      Children: [Agent]
+    Agent:
+      Type: AWS::Diagram::Resource
+      Preset: "Strands"
+      Title: "Strands agent"
     Backends:
       Type: AWS::Diagram::VerticalStack
       Children: [Ollama, Store]
@@ -48,5 +57,6 @@ Diagram:
 
   Links:
     - {Source: Underwriter, SourcePosition: E, Target: App, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: App, SourcePosition: E, Target: Ollama, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: App, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: App, SourcePosition: E, Target: Agent, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Agent, SourcePosition: E, Target: Ollama, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Agent, SourcePosition: E, Target: Store, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

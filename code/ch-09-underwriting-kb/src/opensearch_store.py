@@ -1,14 +1,13 @@
 """OpenSearch store: a local container, Amazon OpenSearch Service on AWS.
 
-Same interface as the pgvector store (reset / add / finalize / search) so the
+The store interface (reset / add / finalize / search) the chapter uses, so the
 embed step and retrieval do not care which backend is behind them.
 """
 
 import os
 
-from opensearchpy import OpenSearch, helpers
-
 from models import embed
+from opensearchpy import OpenSearch, helpers
 
 INDEX = "memo_chunks"
 
@@ -56,6 +55,15 @@ class OpenSearchStore:
                 "settings": {"index.knn": True},
                 "mappings": {
                     "properties": {
+                        # corpus chunks are past decisions; submission chunks are the
+                        # document under review, kept apart so one cannot cite the other
+                        "source": {"type": "keyword"},
+                        "case_id": {"type": "keyword"},
+                        # the figures the statement parser recovered, carried with
+                        # the document so the agent reads them back from the index
+                        "monthly_income": {"type": "double"},
+                        "existing_repayments": {"type": "double"},
+                        "months": {"type": "integer"},
                         "loan_id": {"type": "long"},
                         "borrower": {"type": "keyword"},
                         "chunk_index": {"type": "integer"},
@@ -81,11 +89,17 @@ class OpenSearchStore:
         chunk_index: int,
         content: str,
         vector: list[float],
+        source: str = "corpus",
+        case_id: str = "",
+        meta: dict | None = None,
     ) -> None:
         """Buffer one embedded chunk for bulk indexing."""
         self._buffer.append(
             {
                 "_index": INDEX,
+                "source": source,
+                "case_id": case_id,
+                **(meta or {}),
                 "loan_id": loan_id,
                 "borrower": borrower,
                 "chunk_index": chunk_index,
@@ -111,22 +125,101 @@ class OpenSearchStore:
         self.client.indices.refresh(index=INDEX)
 
     def search(
-        self, runtime, query: str, k: int = 5
+        self, runtime, query: str, k: int = 5, source: str = "corpus"
     ) -> list[tuple[int, str, str, float]]:
-        """Return the k nearest chunks as (loan_id, borrower, content, similarity)."""
+        """Return the k nearest chunks as (loan_id, borrower, content, similarity).
+
+        The filter defaults to the corpus so a document under review is never
+        returned as a precedent for itself.
+        """
         vector = embed(runtime, [query])[0]
+        knn = {"vector": vector, "k": k}
+        if source:
+            knn["filter"] = {"term": {"source": source}}
         resp = self.client.search(
             index=INDEX,
-            body={
-                "size": k,
-                "query": {"knn": {"embedding": {"vector": vector, "k": k}}},
-            },
+            body={"size": k, "query": {"knn": {"embedding": knn}}},
         )
         hits = []
         for h in resp["hits"]["hits"]:
             src = h["_source"]
-            # lucene cosinesimil maps cosine c to score (1 + c) / 2; invert to a
-            # cosine similarity so the number matches the pgvector store's
+            # lucene cosinesimil maps cosine c to score (1 + c) / 2, so invert it
+            # and hand the caller a cosine similarity on its own scale
             similarity = 2 * h["_score"] - 1
             hits.append((src["loan_id"], src["borrower"], src["content"], similarity))
         return hits
+
+    # ---------------------------------------------------------------------------
+    # The document under review
+    # ---------------------------------------------------------------------------
+    def index_submission(
+        self,
+        runtime,
+        case_id: str,
+        holder: str,
+        chunks: list[str],
+        meta: dict | None = None,
+    ) -> int:
+        """Embed and index one uploaded document, with the figures parsed from it."""
+        vectors = embed(runtime, chunks)
+        for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+            self.add(
+                0,
+                holder,
+                i,
+                chunk,
+                vector,
+                source="submission",
+                case_id=case_id,
+                meta=meta,
+            )
+        self.finalize()
+        return len(chunks)
+
+    def read_submission(self, case_id: str) -> dict:
+        """Return the uploaded document: its parsed figures and its text."""
+        resp = self.client.search(
+            index=INDEX,
+            body={
+                "size": 100,
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"term": {"source": "submission"}},
+                            {"term": {"case_id": case_id}},
+                        ]
+                    }
+                },
+                "sort": [{"chunk_index": "asc"}],
+            },
+        )
+        hits = [h["_source"] for h in resp["hits"]["hits"]]
+        if not hits:
+            return {}
+        first = hits[0]
+        return {
+            "case_id": case_id,
+            "holder": first.get("borrower", ""),
+            "monthly_income": first.get("monthly_income"),
+            "existing_repayments": first.get("existing_repayments"),
+            "months": first.get("months"),
+            "text": "\n\n".join(h["content"] for h in hits),
+        }
+
+    def drop_submission(self, case_id: str) -> int:
+        """Delete an uploaded document once the review is done."""
+        resp = self.client.delete_by_query(
+            index=INDEX,
+            body={
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"term": {"source": "submission"}},
+                            {"term": {"case_id": case_id}},
+                        ]
+                    }
+                }
+            },
+            refresh=True,
+        )
+        return resp.get("deleted", 0)

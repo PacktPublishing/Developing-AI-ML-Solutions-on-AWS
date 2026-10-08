@@ -1,10 +1,14 @@
 # /// script
-# dependencies = ["fastapi", "uvicorn[standard]", "boto3", "psycopg2-binary", "ollama", "opensearch-py"]
+# dependencies = ["fastapi", "uvicorn[standard]", "python-multipart", "pdfplumber", "boto3", "ollama", "opensearch-py", "strands-agents"]
 # ///
 """The underwriter app: one FastAPI service for the UI and the retrieval API.
 
-GET / serves the ask/recommend page; POST /ask and POST /cases run the grounded
-retrieval from retrieve.py and return {answer, sources}. The same app runs under
+GET / serves the ask/recommend page; POST /upload takes an applicant's bank
+statement, totals it, and indexes it as the document under review; POST /ask and
+POST /cases run the grounded
+retrieval from retrieve.py and return {answer, sources}. POST /agent answers a
+question that needs arithmetic as well as recall, by handing it to the Strands
+agent with the memo search and the affordability tools. The same app runs under
 uvicorn locally and, unchanged, in a Lambda container via the Lambda Web Adapter;
 only the store endpoint and credentials differ.
 
@@ -13,12 +17,16 @@ Usage:
 """
 
 import os
+import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI
+from agent import build_agent
+from fastapi import FastAPI, UploadFile
+from models import get_runtime
 from pydantic import BaseModel
-
 from retrieve import ask_result, cases_result
+from statements import submit
+from stores import get_store
 
 app = FastAPI(title="Underwriting knowledge base")
 STATIC = Path(__file__).parent / "static"
@@ -36,6 +44,12 @@ class CasesBody(BaseModel):
 
     deal: str
     k: int = 5
+
+
+class AgentBody(BaseModel):
+    """A question that may need affordability arithmetic as well as retrieval."""
+
+    query: str
 
 
 class Source(BaseModel):
@@ -64,15 +78,54 @@ def cases(body: CasesBody) -> Answer:
     return Answer(**cases_result(body.deal, body.k))
 
 
+@app.post("/agent")
+def agent(body: AgentBody) -> dict[str, str]:
+    """Answer with the agent, which may call the memo search and the DTI tools."""
+    return {"answer": str(build_agent()(body.query))}
+
+
+@app.post("/upload")
+async def upload(file: UploadFile) -> dict:
+    """Take an applicant's bank statement, total it, and index it for review.
+
+    The figures are parsed here, once, and stored with the document, so the
+    agent later reads them back from OpenSearch instead of adding up a table.
+    """
+    suffix = Path(file.filename or "statement.pdf").suffix or ".pdf"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    try:
+        summary = submit(tmp_path, get_store(), get_runtime())
+    finally:
+        os.unlink(tmp_path)
+    return {
+        "case_id": summary.case_id,
+        "holder": summary.holder,
+        "monthly_income": summary.monthly_income,
+        "existing_repayments": summary.existing_repayments,
+        "months_covered": summary.months,
+        "transactions": summary.transactions,
+    }
+
+
+@app.delete("/upload/{case_id}")
+def drop(case_id: str) -> dict[str, int]:
+    """Remove an uploaded statement once its review is done."""
+    return {"deleted": get_store().drop_submission(case_id)}
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, bool | str]:
     """Report which store the app is serving, for a quick liveness check."""
-    return {"ok": True, "store": os.environ.get("STORE", "pgvector")}
+    return {"ok": True, "store": "opensearch"}
 
 
+# -------------------------------------------------------------------------------
 # Serve the frontend build: FastAPI checks the path operations above first and
 # falls back to these files, so /ask and /cases win and everything else (a React
 # build or this single page) is served with SPA fallback -- no extra glue.
+# -------------------------------------------------------------------------------
 app.frontend("/", directory=str(STATIC))
 
 

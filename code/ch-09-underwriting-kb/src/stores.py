@@ -1,29 +1,14 @@
-"""The vector-store seam: one interface, three backends, selected by STORE.
+"""The vector-store seam: one interface, one backend.
 
-STORE=pgvector (default) uses Postgres with pgvector; STORE=opensearch uses an
-OpenSearch knn_vector index; STORE=s3vectors uses Amazon S3 Vectors. All expose
-reset / add / finalize / search, so the embed step and retrieval are identical
-whichever store is behind them.
+The store is Amazon OpenSearch Service, an OpenSearch container locally and a
+managed domain on AWS. The seam stays a function rather than an import so the
+embed step and the retrieval code name the store in one place, and so a reader
+swapping in another backend has one thing to change.
 """
-
-import os
 
 
 def get_store():
-    """Return the vector store selected by the STORE environment variable."""
-    backend = os.environ.get("STORE", "pgvector")
-    if backend == "opensearch":
-        from opensearch_store import OpenSearchStore
+    """Return the vector store the chapter uses."""
+    from opensearch_store import OpenSearchStore
 
-        return OpenSearchStore()
-    if backend == "s3vectors":
-        from s3vectors_store import S3VectorsStore
-
-        return S3VectorsStore()
-    if backend == "pgvector":
-        from pgvector_store import PgVectorStore
-
-        return PgVectorStore()
-    raise ValueError(
-        f"unknown STORE={backend!r}; use pgvector, opensearch, or s3vectors"
-    )
+    return OpenSearchStore()
