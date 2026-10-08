@@ -14,6 +14,9 @@ which the pool then resets on return instead of poisoning every later request.
 
 import os
 
+# psycopg 3 here, where Chapter 3's store uses psycopg2: the pool has to mint a fresh
+# IAM token for each connection it opens, and psycopg2's pool fixes its credentials
+# once when it is built, which a 15-minute token outlives.
 import psycopg
 from psycopg_pool import ConnectionPool
 
