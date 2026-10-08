@@ -93,13 +93,12 @@ def main() -> None:
     # on: scores on its own training rows are overconfident, so their percentiles would
     # make a cut look safer than it is. Calibrate on the held-back quarter and carry the
     # business threshold onto that same scale.
-    fitted = tuned_model.estimator_
     valid = train.iloc[cut:]
-    valid_proba = fitted.predict_proba(valid[features])[:, 1]
+    valid_proba = tuned_model.predict_proba(valid[features])[:, 1]
     legit = np.sort(valid_proba[valid[TARGET].to_numpy() == 0])
     block_cut = int(to_score([threshold], legit)[0])
 
-    test_scores = fitted.predict_proba(test[features])[:, 1]
+    test_scores = tuned_model.predict_proba(test[features])[:, 1]
     blocked = test_scores >= threshold
     caught = int((blocked & (test[TARGET] == 1)).sum())
     frauds = int((test[TARGET] == 1).sum())
@@ -121,7 +120,7 @@ def main() -> None:
 
     os.makedirs(f"{CHAPTER_DIR}/artifacts", exist_ok=True)
     # ship the classifier the threshold and the calibration refer to
-    fitted.save_model(f"{CHAPTER_DIR}/artifacts/model.cbm")
+    tuned_model.estimator_.save_model(f"{CHAPTER_DIR}/artifacts/model.cbm")
     np.save(f"{CHAPTER_DIR}/artifacts/calibration.npy", legit)
     with open(f"{CHAPTER_DIR}/artifacts/model_meta.json", "w") as f:
         json.dump(
