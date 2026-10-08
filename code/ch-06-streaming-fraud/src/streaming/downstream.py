@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS fraud_decisions (
     user_id        VARCHAR(16),
     merchant_id    VARCHAR(16),
     amount_usd     NUMERIC(12, 2),
-    score          DOUBLE PRECISION,
-    decision       VARCHAR(8),
+    score          INTEGER,
+    decision       VARCHAR(12),
     event_time     TIMESTAMP,
     latency_ms     DOUBLE PRECISION
 )

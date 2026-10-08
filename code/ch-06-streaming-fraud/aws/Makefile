@@ -42,7 +42,7 @@ seed-warehouse:
 	$(eval SECRET := $(call output,WarehouseSecretArn))
 	@ID=$$(aws redshift-data execute-statement --region $(REGION) \
 		--workgroup-name $(WG) --database fraud --secret-arn $(SECRET) \
-		--sql "CREATE TABLE IF NOT EXISTS fraud_decisions (transaction_id VARCHAR(32), user_id VARCHAR(16), merchant_id VARCHAR(16), amount_usd NUMERIC(12,2), score DOUBLE PRECISION, decision VARCHAR(8), event_time TIMESTAMP, latency_ms DOUBLE PRECISION)" \
+		--sql "CREATE TABLE IF NOT EXISTS fraud_decisions (transaction_id VARCHAR(32), user_id VARCHAR(16), merchant_id VARCHAR(16), amount_usd NUMERIC(12,2), score INTEGER, decision VARCHAR(12), event_time TIMESTAMP, latency_ms DOUBLE PRECISION)" \
 		--query Id --output text); \
 		while S=$$(aws redshift-data describe-statement --region $(REGION) --id $$ID --query Status --output text); \
 			[ "$$S" = "SUBMITTED" ] || [ "$$S" = "PICKED" ] || [ "$$S" = "STARTED" ]; do sleep 1; done; \

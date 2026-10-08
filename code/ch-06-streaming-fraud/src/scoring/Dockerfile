@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir \
     "gunicorn>=21.2"
 
 WORKDIR /opt/program
-COPY serve.py entrypoint.sh ./
+COPY serve.py calibration.py entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
 ENV PYTHONUNBUFFERED=1 \

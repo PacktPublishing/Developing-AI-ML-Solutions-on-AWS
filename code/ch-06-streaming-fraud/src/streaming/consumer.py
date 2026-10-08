@@ -5,18 +5,18 @@
 """Score the transaction stream and block the transactions that look like fraud.
 
 Read transactions off the stream, score each against the model, and act on the
-decision in two places. DynamoDB holds blocks only, keyed by transaction id:
-the block lands first because that write is the product. The decisions stream
-then gets every scored record, blocked or passed, for the analytics pipeline.
-Fast path first, analytics second; the order in the loop body is the
-architecture.
+decision in two places. The endpoint returns a 0-1000 score, and two cuts band
+it into approve, investigate, or block. DynamoDB holds blocks only, keyed by
+transaction id: the block lands first because that write is the product. The
+decisions stream then gets every scored record, whatever its band, for the
+analytics pipeline. Fast path first, analytics second; the order in the loop
+body is the architecture.
 
 The model sits behind the SageMaker serving contract, never in-process: the
 consumer calls invoke_endpoint through boto3's sagemaker-runtime client, the
 local serving container (`make serve`) or the same image behind Serverless
-Inference, and only the endpoint URL changes. The threshold comparison stays
-on the consumer side; the endpoint returns a probability, the consumer owns
-the decision.
+Inference, and only the endpoint URL changes. The banding stays on the consumer
+side; the endpoint returns a score, the consumer owns the decision.
 
 Usage:
   uv run streaming/consumer.py
@@ -59,10 +59,11 @@ def ensure_table(dynamodb):
 
 def main() -> None:
     """Drain the transactions stream, scoring every record as it arrives."""
-    # The training-serving contract: the threshold ships with the model and
-    # is never re-derived here. The feature columns live server-side.
+    # The training-serving contract: the cuts ship with the model and are never
+    # re-derived here. The feature columns and the calibration live server-side.
     with open("artifacts/model_meta.json") as f:
-        threshold = json.load(f)["threshold"]
+        meta = json.load(f)
+    block_cut, review_cut = meta["block_cut"], meta["review_cut"]
 
     kinesis = kinesis_client()
     ensure_stream(kinesis, TRANSACTIONS_STREAM)
@@ -70,7 +71,7 @@ def main() -> None:
     table = ensure_table(dynamodb_resource())
     runtime = sagemaker_runtime_client()
 
-    scored, blocked, latencies = 0, 0, []
+    scored, blocked, flagged, latencies = 0, 0, 0, []
     for txn in iter_records(kinesis, TRANSACTIONS_STREAM):
         t = time.perf_counter()
         response = runtime.invoke_endpoint(
@@ -79,17 +80,25 @@ def main() -> None:
             Body=json.dumps(txn),
         )
         score = json.loads(response["Body"].read())["scores"][0]
-        decision = "block" if score >= threshold else "pass"
+        # The banding of src/scoring/calibration.py, applied here so the loop
+        # carries no dependency on the scoring package. Ordered, first match wins.
+        if score >= block_cut:
+            decision = "block"
+        elif score >= review_cut:
+            decision = "investigate"
+        else:
+            decision = "approve"
         latency_ms = (time.perf_counter() - t) * 1000
 
-        # The fast path: only fraud gets written. The processor looks up the id;
-        # a block stops the payment, a miss lets it through.
+        # The fast path: only a block gets written. The processor looks up the id;
+        # a block stops the payment, a miss lets it through, which is what an
+        # investigate does too: the case is reviewed after the payment completes.
         if decision == "block":
             table.put_item(
                 Item={
                     "transaction_id": txn["transaction_id"],
                     "user_id": txn["user_id"],
-                    "score": Decimal(f"{score:.6f}"),
+                    "score": int(score),
                     "latency_ms": Decimal(f"{latency_ms:.3f}"),
                 }
             )
@@ -103,7 +112,7 @@ def main() -> None:
                     "user_id": txn["user_id"],
                     "merchant_id": txn["merchant_id"],
                     "amount_usd": txn["amount_usd"],
-                    "score": round(score, 6),
+                    "score": int(score),
                     "decision": decision,
                     "event_time": txn["event_time"],
                     "latency_ms": round(latency_ms, 3),
@@ -113,6 +122,7 @@ def main() -> None:
         )
         scored += 1
         blocked += decision == "block"
+        flagged += decision == "investigate"
         latencies.append(latency_ms)
 
     if not scored:
@@ -123,7 +133,10 @@ def main() -> None:
         if len(latencies) >= 20
         else max(latencies)
     )
-    print(f"scored {scored}, blocked {blocked} ({blocked / scored:.2%})")
+    print(
+        f"scored {scored}, blocked {blocked} ({blocked / scored:.2%}), "
+        f"sent {flagged} to review ({flagged / scored:.2%})"
+    )
     print(f"endpoint latency p50={statistics.median(latencies):.1f}ms p95={p95:.1f}ms")
 
 
