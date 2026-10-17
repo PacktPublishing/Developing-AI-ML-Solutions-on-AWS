@@ -8,9 +8,9 @@ FROM python:3.12-slim
 COPY --from=adapter /lambda-adapter /opt/extensions/lambda-adapter
 
 WORKDIR /app
-# Only the OpenSearch path is used in the cloud, so the image stays lean: no
-# no ollama (local models).
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]" boto3 opensearch-py strands-agents
+# The app's inline dependencies minus ollama, which only the local models use.
+RUN pip install --no-cache-dir fastapi "uvicorn[standard]" python-multipart pdfplumber \
+    boto3 opensearch-py strands-agents
 
 COPY src/ ./src/
 COPY app/ ./app/
