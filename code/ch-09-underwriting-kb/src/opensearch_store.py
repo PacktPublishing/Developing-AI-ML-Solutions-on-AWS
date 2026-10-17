@@ -10,6 +10,54 @@ from models import embed
 from opensearchpy import OpenSearch, helpers
 
 INDEX = "memo_chunks"
+PIPELINE = "memo-hybrid"
+
+# What a search reads by default: the decided cases and the credit policy, never
+# a document under review.
+ARCHIVE = ("corpus", "policy")
+
+
+def scope(filters: dict | None = None, sources: tuple[str, ...] = ARCHIVE) -> dict:
+    """Return the filter a search runs under.
+
+    Policy applies to every deal, so it is always in scope. The filters narrow
+    only the precedent: sector, an exposure range, and how recent the decision is.
+    """
+    filters = filters or {}
+    cases: list[dict] = [{"terms": {"source": [s for s in sources if s != "policy"]}}]
+    if filters.get("sector"):
+        cases.append({"term": {"sector": filters["sector"]}})
+    exposure = {
+        op: filters[key]
+        for op, key in (("gte", "min_exposure"), ("lte", "max_exposure"))
+        if filters.get(key) is not None
+    }
+    if exposure:
+        cases.append({"range": {"exposure_usd": exposure}})
+    if filters.get("since"):
+        cases.append({"range": {"decided": {"gte": filters["since"]}}})
+    should = [{"bool": {"filter": cases}}]
+    if "policy" in sources:
+        should.append({"term": {"source": "policy"}})
+    return {"bool": {"should": should, "minimum_should_match": 1}}
+
+
+def query_body(
+    vector: list[float], text: str, k: int, where: dict, hybrid: bool
+) -> dict:
+    """Return the search body: k-NN alone, or k-NN beside a keyword match."""
+    knn = {"knn": {"embedding": {"vector": vector, "k": k, "filter": where}}}
+    if not hybrid:
+        return {"size": k, "query": knn}
+    # the keyword half reads the title too, which carries the loan id and the
+    # borrower, the exact tokens an embedding blurs into its neighbours
+    keyword = {
+        "bool": {
+            "must": {"multi_match": {"query": text, "fields": ["title^2", "content"]}},
+            "filter": where,
+        }
+    }
+    return {"size": k, "query": {"hybrid": {"queries": [keyword, knn]}}}
 
 
 def client() -> OpenSearch:
@@ -49,10 +97,32 @@ class OpenSearchStore:
         """Drop and recreate the knn_vector index at width `dim`."""
         if self.client.indices.exists(index=INDEX):
             self.client.indices.delete(index=INDEX)
+        # the search pipeline puts the BM25 and cosine scores on one scale before
+        # combining them. Equal weights: at 0.3 for the keyword half a loan id was
+        # outvoted by passages that merely read alike (make eval shows the gap)
+        self.client.transport.perform_request(
+            "PUT",
+            f"/_search/pipeline/{PIPELINE}",
+            body={
+                "phase_results_processors": [
+                    {
+                        "normalization-processor": {
+                            "normalization": {"technique": "min_max"},
+                            "combination": {
+                                "technique": "arithmetic_mean",
+                                "parameters": {"weights": [0.5, 0.5]},
+                            },
+                        }
+                    }
+                ]
+            },
+        )
         self.client.indices.create(
             index=INDEX,
             body={
-                "settings": {"index.knn": True},
+                # one shard suits a corpus this size, and keeps scores the same on the
+                # local node and the managed domain, which defaults to five
+                "settings": {"index.knn": True, "number_of_shards": 1},
                 "mappings": {
                     "properties": {
                         # corpus chunks are past decisions; submission chunks are the
@@ -66,6 +136,13 @@ class OpenSearchStore:
                         "months": {"type": "integer"},
                         "loan_id": {"type": "long"},
                         "borrower": {"type": "keyword"},
+                        # the loan-book fields the filters narrow on
+                        "sector": {"type": "keyword"},
+                        "exposure_usd": {"type": "long"},
+                        "tenor_months": {"type": "integer"},
+                        "decided": {"type": "date"},
+                        # loan id, borrower, and document name as searchable text
+                        "title": {"type": "text"},
                         "chunk_index": {"type": "integer"},
                         "content": {"type": "text"},
                         "embedding": {
@@ -102,6 +179,7 @@ class OpenSearchStore:
                 **(meta or {}),
                 "loan_id": loan_id,
                 "borrower": borrower,
+                "title": f"{loan_id or ''} {borrower}".strip(),
                 "chunk_index": chunk_index,
                 "content": content,
                 "embedding": vector,
@@ -125,28 +203,31 @@ class OpenSearchStore:
         self.client.indices.refresh(index=INDEX)
 
     def search(
-        self, runtime, query: str, k: int = 5, source: str = "corpus"
+        self,
+        runtime,
+        query: str,
+        k: int = 5,
+        filters: dict | None = None,
+        hybrid: bool = True,
+        sources: tuple[str, ...] = ARCHIVE,
     ) -> list[tuple[int, str, str, float]]:
-        """Return the k nearest chunks as (loan_id, borrower, content, similarity).
+        """Return the k best chunks as (loan_id, borrower, content, score).
 
-        The filter defaults to the corpus so a document under review is never
-        returned as a precedent for itself.
+        The scope keeps a document under review out of the results, so it is
+        never returned as a precedent for itself. With hybrid on, the score is the
+        pipeline's combined 0 to 1 score; with it off, a cosine similarity.
         """
         vector = embed(runtime, [query])[0]
-        knn = {"vector": vector, "k": k}
-        if source:
-            knn["filter"] = {"term": {"source": source}}
-        resp = self.client.search(
-            index=INDEX,
-            body={"size": k, "query": {"knn": {"embedding": knn}}},
-        )
+        body = query_body(vector, query, k, scope(filters, sources), hybrid)
+        params = {"search_pipeline": PIPELINE} if hybrid else {}
+        resp = self.client.search(index=INDEX, body=body, params=params)
         hits = []
         for h in resp["hits"]["hits"]:
             src = h["_source"]
             # lucene cosinesimil maps cosine c to score (1 + c) / 2, so invert it
             # and hand the caller a cosine similarity on its own scale
-            similarity = 2 * h["_score"] - 1
-            hits.append((src["loan_id"], src["borrower"], src["content"], similarity))
+            score = h["_score"] if hybrid else 2 * h["_score"] - 1
+            hits.append((src["loan_id"], src["borrower"], src["content"], score))
         return hits
 
     # ---------------------------------------------------------------------------

@@ -3,14 +3,15 @@
 # ///
 """Answer questions over the memo knowledge base, grounded with citations.
 
-Two modes: ask a question about past underwriting, or assemble the most similar
-prior cases into a draft recommendation the underwriter signs off on. Both cite
-the source loan so the underwriter can trace every claim back to a memo. The
-vector store is Amazon OpenSearch Service, a container locally and a domain on AWS.
+Two modes: ask a question about past underwriting and credit policy, or assemble
+the most similar prior cases into a draft recommendation the underwriter signs
+off on. Both cite the source loan or policy so the underwriter can trace every
+claim back to a document, and both can be narrowed by sector, exposure, and date.
+The store is Amazon OpenSearch Service, a container locally and a domain on AWS.
 
 Usage (from the chapter root):
   PYTHONPATH=src uv run src/retrieve.py ask --query "How is DTI assessed for grocery businesses?"
-  STORE=opensearch PYTHONPATH=src uv run src/retrieve.py ask --query "..."
+  PYTHONPATH=src uv run src/retrieve.py cases --deal "..." --sector Logistics --max-exposure 2000000
 """
 
 import argparse
@@ -24,12 +25,18 @@ from stores import get_store
 # budget just caps the answer length.
 MAX_TOKENS = 4000
 
+# Policy passages always passed to the model, beside the k best results. Past
+# memos far outnumber the policy, so without a reserved place a rule can be
+# crowded out of the top k by cases that merely mention the same amounts.
+POLICY_K = 2
+
 ASK_SYSTEM = (
     "You are a credit underwriting assistant. Answer the question using only the"
-    " memo passages provided. If the answer is not in the passages, say you"
-    " cannot find it in the knowledge base. After each claim, cite the source"
-    " loan id in square brackets. Be concise and precise. Write in plain prose"
-    " with no em dashes; use commas instead."
+    " passages provided, which are past memos and credit policy. If the answer is"
+    " not in the passages, say you cannot find it in the knowledge base. After"
+    " each claim, cite the source loan id or policy id in square brackets. Be"
+    " concise and precise. Write in plain prose with no em dashes; use commas"
+    " instead."
 )
 
 CASES_SYSTEM = (
@@ -42,9 +49,14 @@ CASES_SYSTEM = (
 )
 
 
+def _ref(loan_id: int, borrower: str) -> str:
+    """Return the citation tag: the loan id, or the policy id a policy is stored under."""
+    return str(loan_id) if loan_id else borrower
+
+
 def _context(hits: list[tuple[int, str, str, float]]) -> str:
-    """Render retrieved memo chunks as citation-tagged context passages."""
-    return "\n\n".join(f"[{loan_id}] {content}" for loan_id, _, content, _ in hits)
+    """Render retrieved chunks as citation-tagged context passages."""
+    return "\n\n".join(f"[{_ref(lid, who)}] {content}" for lid, who, content, _ in hits)
 
 
 def _sources_list(hits: list[tuple[int, str, str, float]]) -> list[dict]:
@@ -56,11 +68,20 @@ def _sources_list(hits: list[tuple[int, str, str, float]]) -> list[dict]:
 
 
 def _respond(
-    system: str, header: str, body: str, text: str, k: int, empty: str
+    system: str,
+    header: str,
+    body: str,
+    text: str,
+    k: int,
+    empty: str,
+    filters: dict | None = None,
 ) -> dict:
     """Retrieve, generate a grounded answer, and return {answer, sources}."""
     runtime = get_runtime()
-    hits = get_store().search(runtime, text, k=k)
+    store = get_store()
+    hits = store.search(runtime, text, k=k, filters=filters)
+    rules = store.search(runtime, text, k=POLICY_K, sources=("policy",))
+    hits += [h for h in rules if h[:3] not in {x[:3] for x in hits}]
     if not hits:
         return {"answer": empty, "sources": []}
     user = f"{header}: {text}\n\n{body}:\n{_context(hits)}"
@@ -68,19 +89,20 @@ def _respond(
     return {"answer": answer, "sources": _sources_list(hits)}
 
 
-def ask_result(query: str, k: int = 5) -> dict:
-    """Answer a question grounded in the k nearest memo chunks: {answer, sources}."""
+def ask_result(query: str, k: int = 5, filters: dict | None = None) -> dict:
+    """Answer a question grounded in the k best chunks: {answer, sources}."""
     return _respond(
         ASK_SYSTEM,
         "Question",
-        "Memo passages",
+        "Passages",
         query,
         k,
         "I cannot find anything relevant in the knowledge base.",
+        filters,
     )
 
 
-def cases_result(deal: str, k: int = 5) -> dict:
+def cases_result(deal: str, k: int = 5, filters: dict | None = None) -> dict:
     """Assemble the k most similar prior cases into a recommendation: {answer, sources}."""
     return _respond(
         CASES_SYSTEM,
@@ -89,6 +111,7 @@ def cases_result(deal: str, k: int = 5) -> dict:
         deal,
         k,
         "I cannot find comparable cases in the knowledge base.",
+        filters,
     )
 
 
@@ -96,18 +119,21 @@ def _format(result: dict) -> str:
     """Render a structured result as the answer followed by a Sources line."""
     if not result["sources"]:
         return result["answer"]
-    cited = ", ".join(f"{s['loan_id']} {s['borrower']}" for s in result["sources"])
+    cited = ", ".join(
+        f"{s['loan_id']} {s['borrower']}" if s["loan_id"] else s["borrower"]
+        for s in result["sources"]
+    )
     return f"{result['answer']}\n\n> Sources: {cited}"
 
 
-def ask(query: str, k: int = 5) -> str:
-    """Answer a question grounded in the k nearest memo chunks, with citations."""
-    return _format(ask_result(query, k))
+def ask(query: str, k: int = 5, filters: dict | None = None) -> str:
+    """Answer a question grounded in the k best chunks, with citations."""
+    return _format(ask_result(query, k, filters))
 
 
-def cases(deal: str, k: int = 5) -> str:
+def cases(deal: str, k: int = 5, filters: dict | None = None) -> str:
     """Assemble the k most similar prior cases into a draft recommendation."""
-    return _format(cases_result(deal, k))
+    return _format(cases_result(deal, k, filters))
 
 
 def main() -> None:
@@ -116,17 +142,27 @@ def main() -> None:
     sub = p.add_subparsers(dest="mode", required=True)
     a = sub.add_parser("ask", help="answer a question with citations")
     a.add_argument("--query", required=True)
-    a.add_argument("--k", type=int, default=5)
     c = sub.add_parser(
         "cases", help="assemble similar prior cases into a recommendation"
     )
     c.add_argument("--deal", required=True)
-    c.add_argument("--k", type=int, default=5)
+    for cmd in (a, c):
+        cmd.add_argument("--k", type=int, default=5)
+        cmd.add_argument("--sector")
+        cmd.add_argument("--min-exposure", type=int)
+        cmd.add_argument("--max-exposure", type=int)
+        cmd.add_argument("--since", help="decision date, YYYY-MM-DD")
     args = p.parse_args()
+    filters = {
+        "sector": args.sector,
+        "min_exposure": args.min_exposure,
+        "max_exposure": args.max_exposure,
+        "since": args.since,
+    }
     if args.mode == "ask":
-        print(ask(args.query, args.k))
+        print(ask(args.query, args.k, filters))
     else:
-        print(cases(args.deal, args.k))
+        print(cases(args.deal, args.k, filters))
 
 
 if __name__ == "__main__":

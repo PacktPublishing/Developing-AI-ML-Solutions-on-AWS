@@ -121,6 +121,11 @@ class Memo:
     uploaded: str
     body: str
     has_figures: bool
+    # the loan-book fields a document system carries beside each file; a mail
+    # trail often has no sector or tenor, so those can be blank
+    sector: str = ""
+    exposure_usd: int = 0
+    tenor_months: int = 0
 
 
 def _money(rng: random.Random, lo: int, hi: int) -> int:
@@ -255,7 +260,16 @@ def _amendment(rng: random.Random, loan_id: int, as_thread: bool) -> Memo:
             """)
         doc = f"{kind.title().replace(' ', '_')}.msg"
         return Memo(
-            loan_id, name.upper(), doc, "msg", "2026-03-04T08:55:12+0000", body, False
+            loan_id,
+            name.upper(),
+            doc,
+            "msg",
+            "2026-03-04T08:55:12+0000",
+            body,
+            False,
+            sector,
+            exposure,
+            tenor,
         )
 
     body = textwrap.dedent(f"""\
@@ -288,7 +302,16 @@ def _amendment(rng: random.Random, loan_id: int, as_thread: bool) -> Memo:
         """)
     doc = f"{kind.title().replace(' ', '_')}_Request"
     return Memo(
-        loan_id, name.upper(), doc, "pdf", "2026-03-04T08:55:12+0000", body, True
+        loan_id,
+        name.upper(),
+        doc,
+        "pdf",
+        "2026-03-04T08:55:12+0000",
+        body,
+        True,
+        sector,
+        exposure,
+        tenor,
     )
 
 
@@ -363,7 +386,16 @@ def _structured(rng: random.Random, loan_id: int, messy: bool) -> Memo:
         """)
     doc = "SME_MEMO"
     return Memo(
-        loan_id, name.upper(), doc, "pdf", "2026-04-13T14:53:23+0000", body, True
+        loan_id,
+        name.upper(),
+        doc,
+        "pdf",
+        "2026-04-13T14:53:23+0000",
+        body,
+        True,
+        sector,
+        amount,
+        tenor,
     )
 
 
@@ -403,17 +435,27 @@ def _email_thread(rng: random.Random, loan_id: int) -> Memo:
         """)
     doc = f"Re_{amount // 1_000_000}M_APPROVAL.msg"
     return Memo(
-        loan_id, name.upper(), doc, "msg", "2023-08-31T18:54:59+0000", body, False
+        loan_id,
+        name.upper(),
+        doc,
+        "msg",
+        "2023-08-31T18:54:59+0000",
+        body,
+        False,
+        exposure_usd=amount,
     )
 
 
 def header(m: Memo) -> str:
-    """Return the 4-line file header prepended to every memo body."""
+    """Return the file header prepended to every memo body."""
     return (
         f"# loan_id: {m.loan_id}\n"
         f"# borrower: {m.borrower}\n"
         f"# document: {m.doc}\n"
-        f"# type: {m.doc_type}   uploaded: {m.uploaded}\n" + "-" * 72 + "\n\n"
+        f"# type: {m.doc_type}   uploaded: {m.uploaded}\n"
+        f"# sector: {m.sector}\n"
+        f"# exposure_usd: {m.exposure_usd}\n"
+        f"# tenor_months: {m.tenor_months}\n" + "-" * 72 + "\n\n"
     )
 
 

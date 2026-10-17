@@ -12,6 +12,11 @@ agent with the memo search and the affordability tools. The same app runs under
 uvicorn locally and, unchanged, in a Lambda container via the Lambda Web Adapter;
 only the store endpoint and credentials differ.
 
+On AWS, API Gateway lets a request through only with a token from the
+underwriters' Cognito user pool, and every answer is written to the audit log
+with the underwriter who asked. GET / and GET /auth-config stay open so the page
+can load and sign the underwriter in.
+
 Usage:
   STORE=opensearch BEDROCK_LOCAL=1 PYTHONPATH=src uv run app/main.py
 """
@@ -21,7 +26,8 @@ import tempfile
 from pathlib import Path
 
 from agent import build_agent
-from fastapi import FastAPI, UploadFile
+from audit import record, underwriter
+from fastapi import FastAPI, Header, UploadFile
 from models import get_runtime
 from pydantic import BaseModel
 from retrieve import ask_result, cases_result
@@ -32,14 +38,29 @@ app = FastAPI(title="Underwriting knowledge base")
 STATIC = Path(__file__).parent / "static"
 
 
-class AskBody(BaseModel):
+class Scope(BaseModel):
+    """Optional filters that narrow the precedent; policy always stays in scope."""
+
+    sector: str | None = None
+    min_exposure: int | None = None
+    max_exposure: int | None = None
+    since: str | None = None  # decision date, YYYY-MM-DD
+
+    def filters(self) -> dict:
+        """Return the filters as the store's search expects them."""
+        return self.model_dump(
+            include={"sector", "min_exposure", "max_exposure", "since"}
+        )
+
+
+class AskBody(Scope):
     """A question for the knowledge base."""
 
     query: str
     k: int = 5
 
 
-class CasesBody(BaseModel):
+class CasesBody(Scope):
     """A new deal to compare against prior cases."""
 
     deal: str
@@ -53,39 +74,54 @@ class AgentBody(BaseModel):
 
 
 class Source(BaseModel):
-    """One cited loan."""
+    """One cited loan, or a policy (loan_id 0, borrower holds the policy id)."""
 
     loan_id: int
     borrower: str
 
 
 class Answer(BaseModel):
-    """A grounded answer plus the loans it cites."""
+    """A grounded answer plus the loans and policies it cites."""
 
     answer: str
     sources: list[Source]
 
 
+def _cited(result: dict) -> list:
+    """Return the loan or policy ids an answer cited, for the audit line."""
+    return [s["loan_id"] or s["borrower"] for s in result["sources"]]
+
+
 @app.post("/ask")
-def ask(body: AskBody) -> Answer:
-    """Answer a question, grounded in the nearest memos, with citations."""
-    return Answer(**ask_result(body.query, body.k))
+def ask(body: AskBody, authorization: str | None = Header(None)) -> Answer:
+    """Answer a question, grounded in memos and policy, with citations."""
+    result = ask_result(body.query, body.k, body.filters())
+    record(
+        underwriter(authorization), "ask", body.query, _cited(result), body.filters()
+    )
+    return Answer(**result)
 
 
 @app.post("/cases")
-def cases(body: CasesBody) -> Answer:
+def cases(body: CasesBody, authorization: str | None = Header(None)) -> Answer:
     """Assemble the most similar prior cases into a draft recommendation."""
-    return Answer(**cases_result(body.deal, body.k))
+    result = cases_result(body.deal, body.k, body.filters())
+    record(
+        underwriter(authorization), "cases", body.deal, _cited(result), body.filters()
+    )
+    return Answer(**result)
 
 
 @app.post("/agent")
-def agent(body: AgentBody) -> dict[str, str]:
+def agent(body: AgentBody, authorization: str | None = Header(None)) -> dict[str, str]:
     """Answer with the agent, which may call the memo search and the DTI tools."""
-    return {"answer": str(build_agent()(body.query))}
+    answer = str(build_agent()(body.query))
+    record(underwriter(authorization), "agent", body.query, [])
+    return {"answer": answer}
 
 
 @app.post("/upload")
-async def upload(file: UploadFile) -> dict:
+async def upload(file: UploadFile, authorization: str | None = Header(None)) -> dict:
     """Take an applicant's bank statement, total it, and index it for review.
 
     The figures are parsed here, once, and stored with the document, so the
@@ -99,6 +135,7 @@ async def upload(file: UploadFile) -> dict:
         summary = submit(tmp_path, get_store(), get_runtime())
     finally:
         os.unlink(tmp_path)
+    record(underwriter(authorization), "upload", summary.case_id, [])
     return {
         "case_id": summary.case_id,
         "holder": summary.holder,
@@ -110,9 +147,18 @@ async def upload(file: UploadFile) -> dict:
 
 
 @app.delete("/upload/{case_id}")
-def drop(case_id: str) -> dict[str, int]:
+def drop(case_id: str, authorization: str | None = Header(None)) -> dict[str, int]:
     """Remove an uploaded statement once its review is done."""
+    record(underwriter(authorization), "drop", case_id, [])
     return {"deleted": get_store().drop_submission(case_id)}
+
+
+@app.get("/auth-config")
+def auth_config() -> dict[str, str]:
+    """Tell the page where to sign in; empty locally, where the app runs open."""
+    client_id = os.environ.get("COGNITO_CLIENT_ID", "")
+    region = os.environ.get("AWS_REGION", "") if client_id else ""
+    return {"client_id": client_id, "region": region}
 
 
 @app.get("/healthz")

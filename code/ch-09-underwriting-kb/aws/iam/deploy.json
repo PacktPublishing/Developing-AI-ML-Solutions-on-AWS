@@ -190,6 +190,37 @@
       "Effect": "Allow",
       "Action": "logs:*",
       "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch09*"
+    },
+    {
+      "Sid": "CognitoCreate",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:CreateUserPool"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CognitoUnderwriters",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:DeleteUserPool",
+        "cognito-idp:DescribeUserPool",
+        "cognito-idp:UpdateUserPool",
+        "cognito-idp:GetUserPoolMfaConfig",
+        "cognito-idp:SetUserPoolMfaConfig",
+        "cognito-idp:CreateUserPoolClient",
+        "cognito-idp:DeleteUserPoolClient",
+        "cognito-idp:DescribeUserPoolClient",
+        "cognito-idp:UpdateUserPoolClient",
+        "cognito-idp:AdminCreateUser",
+        "cognito-idp:AdminGetUser",
+        "cognito-idp:AdminSetUserPassword",
+        "cognito-idp:AdminDeleteUser",
+        "cognito-idp:TagResource",
+        "cognito-idp:UntagResource",
+        "cognito-idp:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/*"
     }
   ]
 }

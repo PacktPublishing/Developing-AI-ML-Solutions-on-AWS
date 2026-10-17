@@ -22,7 +22,8 @@ of reasoning.
 ```
 make up                       # the local OpenSearch node and Dashboards
 make gen                      # write the synthetic memo corpus (reproducible from --seed)
-BEDROCK_LOCAL=1 make seed      # embed the memos into the store via Ollama
+BEDROCK_LOCAL=1 make seed      # embed the memos and the credit policy via Ollama
+BEDROCK_LOCAL=1 make eval      # how often the right memo or policy is in the top 5
 BEDROCK_LOCAL=1 make ask  Q="How is DTI assessed for a grocery business?"
 BEDROCK_LOCAL=1 make cases DEAL="A logistics firm seeks a 500,000 dollar working-capital loan"
 make statements               # the synthetic bank statement PDFs to review
@@ -30,8 +31,8 @@ BEDROCK_LOCAL=1 make review CASE=CASE-20260000
 make down                     # tear it down
 ```
 
-`make ask` retrieves the nearest memo chunks and answers the question grounded in
-them, citing each claim's source loan; `make cases` gathers the most similar
+`make ask` retrieves the best memo and policy chunks and answers the question
+grounded in them, citing each claim's source loan or policy id; `make cases` gathers the most similar
 prior cases into a draft recommendation the underwriter signs off on. Unset
 `BEDROCK_LOCAL` to run the embeddings and generation on Amazon Bedrock instead.
 `make review` is the underwriter's own loop: it uploads an applicant's bank
@@ -55,6 +56,24 @@ Amazon OpenSearch Service hosts on the domain, so the browser experience is
 identical locally and on AWS. Open Discover on the `memo_chunks` index, or run a
 k-NN query in Dev Tools.
 
+Retrieval is hybrid: a keyword match over the chunk text and a `title` field
+(loan id and borrower) runs beside the k-NN query, and a search pipeline combines
+the two scores. The keyword half finds what an embedding blurs, a loan number or a
+borrower's name, and `make eval` scores k-NN alone against hybrid on questions
+built from the corpus. The two closest policy passages always reach the model,
+so a rule cannot be crowded out by cases that mention the same amounts.
+
+Each memo carries its loan-book fields (sector, exposure, tenor, decision date),
+so a question or a deal can be narrowed: `retrieve.py cases --sector Logistics
+--max-exposure 2000000`, or the filters on the page. Policy stays in scope
+whatever the filters.
+
+On AWS the app sits behind a Cognito user pool: API Gateway rejects a request
+without an underwriter's token before it reaches the Lambda, and every answer is
+written as one JSON line, with the underwriter who asked and the ids it cited, to
+the `/ch09/underwriter-app` log group. Locally the app runs open and the audit
+line prints to the terminal.
+
 ## Layout
 
 - `etl/gen_memos.py`: the synthetic-memo generator, two shapes, `--messy` for
@@ -62,6 +81,10 @@ k-NN query in Dev Tools.
 - `etl/embed_memos.py`: chunk each memo and embed it into the index
 - `etl/gen_statements.py`: synthetic bank statement PDFs, with a manifest of the
   figures each one encodes so the parser can be checked against them
+- `etl/evaluate.py`: retrieval against questions whose right answer is known,
+  k-NN alone against hybrid
+- `data/policy/`: the synthetic credit policy (DTI, amendments, security and
+  approval limits), invented for illustration
 - `src/models.py`: the model seam — one Bedrock-shaped interface, Ollama behind it
 - `src/stores.py`: the store seam — one function naming the backend
 - `src/opensearch_store.py`: the OpenSearch backend — local container, Amazon
@@ -70,6 +93,7 @@ k-NN query in Dev Tools.
 - `src/affordability.py`: the DTI arithmetic the agent calls as a tool
 - `src/statements.py`: read an uploaded statement PDF, total it, and index it
 - `src/review.py`: upload one statement and print the agent's review of it
+- `src/audit.py`: the audit line, and the underwriter read from the token
 - `src/agent.py`: the Strands agent, memo search plus the statement and the
   affordability tools
 - `local/kb-stack.yml`: the compose stack — the OpenSearch node and Dashboards
@@ -77,6 +101,8 @@ k-NN query in Dev Tools.
   is up
 - `tests/test_affordability.py`: the instalment, the ratio, and its inverse
 - `tests/test_statements.py`: the parser against the generator's own manifest
+- `tests/test_scope.py`: what a search may read, the hybrid query, and the
+  underwriter read from a token
 
 ## AWS services and local stand-ins
 

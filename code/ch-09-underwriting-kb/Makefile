@@ -1,4 +1,4 @@
-.PHONY: neural up gen seed ask cases app all down lint test diagrams statements review
+.PHONY: neural up gen seed ask cases app all down lint test diagrams statements review eval
 
 # the whole local flow in one command: the vector store, the synthetic corpus, the embeddings,
 # and a case-retrieval query. make down when done.
@@ -55,7 +55,11 @@ gen:
 
 # seed: embed the generated memos into the OpenSearch index
 seed:
-	uv run etl/embed_memos.py --memos data/generated/memos
+	uv run etl/embed_memos.py --memos data/generated/memos --policy data/policy
+
+# eval: how often the right memo or policy is in the top 5, k-NN alone against hybrid
+eval:
+	uv run etl/evaluate.py --memos data/generated/memos
 
 ask:
 	uv run src/retrieve.py ask --query "$(Q)"
@@ -72,8 +76,8 @@ down:
 	$(COMPOSE) down -v
 
 lint:
-	uvx ruff format etl/*.py src/*.py
-	uvx ruff check etl/*.py src/*.py
+	uvx ruff format etl/*.py src/*.py app/*.py aws/*.py
+	uvx ruff check etl/*.py src/*.py app/*.py aws/*.py
 
 # Unit test: an OpenSearch round-trip that generates a small corpus, embeds it with
 # a deterministic stub, and searches it. Provisions its own container with

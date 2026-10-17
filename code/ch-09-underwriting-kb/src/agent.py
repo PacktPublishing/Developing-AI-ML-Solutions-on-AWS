@@ -40,12 +40,12 @@ SYSTEM = (
 
 @tool
 def search_memos(query: str, k: int = 5) -> str:
-    """Search past underwriting memos and return passages tagged by loan id.
+    """Search past memos and credit policy, passages tagged by loan or policy id.
 
-    Only the archive of decided cases is searched, never the document under
-    review, so a submission cannot come back as its own precedent.
+    Only decided cases and policy are searched, never the document under review,
+    so a submission cannot come back as its own precedent.
     """
-    hits = get_store().search(get_runtime(), query, k=k, source="corpus")
+    hits = get_store().search(get_runtime(), query, k=k)
     return _context(hits)
 
 

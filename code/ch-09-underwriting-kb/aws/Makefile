@@ -1,8 +1,8 @@
-.PHONY: iam secret build-setup source image deploy gen seed url ask cases round teardown
+.PHONY: iam secret build-setup source image deploy gen seed url ask cases user app-ask eval round teardown
 
 # the whole AWS round in one command (run make iam once first, as the account admin): the app
-# image via CodeBuild, the OpenSearch domain and app, then seed the corpus and run a query.
-# make teardown when done.
+# image via CodeBuild, the OpenSearch domain and app, then seed the corpus, check retrieval,
+# and ask the deployed app as a signed-in underwriter. make teardown when done.
 round:
 	$(MAKE) build-setup
 	$(MAKE) source
@@ -10,7 +10,9 @@ round:
 	$(MAKE) deploy
 	$(MAKE) gen
 	$(MAKE) seed
-	$(MAKE) cases
+	$(MAKE) eval
+	$(MAKE) user
+	$(MAKE) app-ask
 
 REGION := us-east-1
 STACK := ch09-underwriting-kb
@@ -85,7 +87,20 @@ gen:
 
 seed:
 	cd .. && PW=$$($(GETPW)); $(OSCONN) OPENSEARCH_PASSWORD="$$PW" \
-		uv run etl/embed_memos.py --memos data/generated/memos
+		uv run etl/embed_memos.py --memos data/generated/memos --policy data/policy
+
+# eval: how often the right memo or policy is in the top 5, k-NN alone against hybrid
+eval:
+	cd .. && PW=$$($(GETPW)); $(OSCONN) OPENSEARCH_PASSWORD="$$PW" \
+		uv run etl/evaluate.py --memos data/generated/memos
+
+# user: an underwriter in the user pool, password generated into Secrets Manager
+user:
+	uv run --no-project underwriter.py add
+
+# app-ask: the deployed app, called the way the page calls it, with a signed-in token
+app-ask:
+	uv run --no-project underwriter.py call ask '{"query": "$(Q)"}'
 
 url:
 	@echo "Dashboards: $(call output,DashboardsURL)"
@@ -121,6 +136,7 @@ teardown:
 	aws cloudformation delete-stack --region $(REGION) --stack-name $(BUILD_STACK)
 	aws cloudformation wait stack-delete-complete --region $(REGION) --stack-name $(BUILD_STACK)
 	-aws secretsmanager delete-secret --secret-id $(SECRET) --region $(REGION) --force-delete-without-recovery
+	-aws secretsmanager delete-secret --secret-id ch09-underwriter --region $(REGION) --force-delete-without-recovery
 	@echo "torn down"
 
 # -------------------------------------------------------------------------------
