@@ -237,6 +237,9 @@ Resources:
 
           # the page reads this from /auth-config to sign the underwriter in
           COGNITO_CLIENT_ID: !Ref UnderwriterClient
+
+          # the app checks the token against this pool too, after API Gateway has
+          COGNITO_ISSUER: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${Underwriters}
       Events:
 
         # the page and its sign-in settings load before anyone has a token

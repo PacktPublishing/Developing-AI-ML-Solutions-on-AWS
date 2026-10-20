@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["fastapi", "uvicorn[standard]", "python-multipart", "pdfplumber", "boto3", "ollama", "opensearch-py", "strands-agents"]
+# dependencies = ["fastapi", "uvicorn[standard]", "python-multipart", "pdfplumber", "boto3", "ollama", "opensearch-py", "strands-agents", "pyjwt[crypto]"]
 # ///
 """The underwriter app: one FastAPI service for the UI and the retrieval API.
 
@@ -12,10 +12,10 @@ agent with the memo search and the affordability tools. The same app runs under
 uvicorn locally and, unchanged, in a Lambda container via the Lambda Web Adapter;
 only the store endpoint and credentials differ.
 
-On AWS, API Gateway lets a request through only with a token from the
+Every route but the page and its sign-in settings needs a token from the
 underwriters' Cognito user pool, and every answer is written to the audit log
-with the underwriter who asked. GET / and GET /auth-config stay open so the page
-can load and sign the underwriter in.
+with the underwriter who asked. On AWS, API Gateway checks the token first and
+the app checks it again; locally the pool is cognito-shim and only the app checks.
 
 Usage:
   STORE=opensearch BEDROCK_LOCAL=1 PYTHONPATH=src uv run app/main.py
@@ -24,10 +24,11 @@ Usage:
 import os
 import tempfile
 from pathlib import Path
+from typing import Annotated
 
 from agent import build_agent
 from audit import record, underwriter
-from fastapi import FastAPI, Header, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 from models import get_runtime
 from pydantic import BaseModel
 from retrieve import ask_result, cases_result
@@ -87,41 +88,48 @@ class Answer(BaseModel):
     sources: list[Source]
 
 
+def signed_in(authorization: Annotated[str | None, Header()] = None) -> str:
+    """Return the underwriter behind the request, or answer 401 before any work."""
+    try:
+        return underwriter(authorization)
+    except PermissionError as err:
+        raise HTTPException(status_code=401, detail="Unauthorized") from err
+
+
+Underwriter = Annotated[str, Depends(signed_in)]
+
+
 def _cited(result: dict) -> list:
     """Return the loan or policy ids an answer cited, for the audit line."""
     return [s["loan_id"] or s["borrower"] for s in result["sources"]]
 
 
 @app.post("/ask")
-def ask(body: AskBody, authorization: str | None = Header(None)) -> Answer:
+def ask(body: AskBody, who: Underwriter) -> Answer:
     """Answer a question, grounded in memos and policy, with citations."""
     result = ask_result(body.query, body.k, body.filters())
-    record(
-        underwriter(authorization), "ask", body.query, _cited(result), body.filters()
-    )
+    record(who, "ask", body.query, _cited(result), body.filters())
     return Answer(**result)
 
 
 @app.post("/cases")
-def cases(body: CasesBody, authorization: str | None = Header(None)) -> Answer:
+def cases(body: CasesBody, who: Underwriter) -> Answer:
     """Assemble the most similar prior cases into a draft recommendation."""
     result = cases_result(body.deal, body.k, body.filters())
-    record(
-        underwriter(authorization), "cases", body.deal, _cited(result), body.filters()
-    )
+    record(who, "cases", body.deal, _cited(result), body.filters())
     return Answer(**result)
 
 
 @app.post("/agent")
-def agent(body: AgentBody, authorization: str | None = Header(None)) -> dict[str, str]:
+def agent(body: AgentBody, who: Underwriter) -> dict[str, str]:
     """Answer with the agent, which may call the memo search and the DTI tools."""
     answer = str(build_agent()(body.query))
-    record(underwriter(authorization), "agent", body.query, [])
+    record(who, "agent", body.query, [])
     return {"answer": answer}
 
 
 @app.post("/upload")
-async def upload(file: UploadFile, authorization: str | None = Header(None)) -> dict:
+async def upload(file: UploadFile, who: Underwriter) -> dict:
     """Take an applicant's bank statement, total it, and index it for review.
 
     The figures are parsed here, once, and stored with the document, so the
@@ -135,7 +143,7 @@ async def upload(file: UploadFile, authorization: str | None = Header(None)) -> 
         summary = submit(tmp_path, get_store(), get_runtime())
     finally:
         os.unlink(tmp_path)
-    record(underwriter(authorization), "upload", summary.case_id, [])
+    record(who, "upload", summary.case_id, [])
     return {
         "case_id": summary.case_id,
         "holder": summary.holder,
@@ -143,25 +151,31 @@ async def upload(file: UploadFile, authorization: str | None = Header(None)) -> 
         "existing_repayments": summary.existing_repayments,
         "months_covered": summary.months,
         "transactions": summary.transactions,
+        "balance_breaks": summary.balance_breaks,
     }
 
 
 @app.delete("/upload/{case_id}")
-def drop(case_id: str, authorization: str | None = Header(None)) -> dict[str, int]:
+def drop(case_id: str, who: Underwriter) -> dict[str, int]:
     """Remove an uploaded statement once its review is done."""
-    record(underwriter(authorization), "drop", case_id, [])
+    record(who, "drop", case_id, [])
     return {"deleted": get_store().drop_submission(case_id)}
 
 
 @app.get("/auth-config")
 def auth_config() -> dict[str, str]:
-    """Tell the page where to sign in; empty locally, where the app runs open."""
+    """Tell the page where to sign in; empty when the app runs open."""
     client_id = os.environ.get("COGNITO_CLIENT_ID", "")
-    region = os.environ.get("AWS_REGION", "") if client_id else ""
-    return {"client_id": client_id, "region": region}
+    if not client_id:
+        return {"client_id": "", "endpoint": ""}
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+    endpoint = os.environ.get(
+        "COGNITO_ENDPOINT", f"https://cognito-idp.{region}.amazonaws.com/"
+    )
+    return {"client_id": client_id, "endpoint": endpoint}
 
 
-@app.get("/healthz")
+@app.get("/healthz", dependencies=[Depends(signed_in)])
 def healthz() -> dict[str, bool | str]:
     """Report which store the app is serving, for a quick liveness check."""
     return {"ok": True, "store": "opensearch"}

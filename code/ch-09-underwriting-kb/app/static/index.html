@@ -98,8 +98,8 @@
           out.innerHTML = "";
         }),
       );
-      // Sign-in: on AWS the API only answers with a token from the underwriters'
-      // Cognito user pool. Locally /auth-config is empty and the page runs open.
+      // Sign-in: the API only answers with a token from the underwriters' Cognito
+      // user pool; /auth-config says where it is (cognito-shim locally, AWS in the cloud).
       let auth = {};
       let token = sessionStorage.getItem("idToken") || "";
       function show(signedIn) {
@@ -112,7 +112,7 @@
       async function signIn() {
         const msg = document.getElementById("loginmsg");
         msg.textContent = "";
-        const r = await fetch(`https://cognito-idp.${auth.region}.amazonaws.com/`, {
+        const r = await fetch(auth.endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
           body: JSON.stringify({

@@ -1,4 +1,4 @@
-.PHONY: neural up gen seed ask cases app all down lint test diagrams statements review eval
+.PHONY: neural up gen seed ask cases app all down lint test diagrams statements review eval auth call
 
 # the whole local flow in one command: the vector store, the synthetic corpus, the embeddings,
 # and a case-retrieval query. make down when done.
@@ -32,13 +32,22 @@ export PGUSER ?= underwriter
 export PGPASSWORD ?= underwriter
 export PGDATABASE ?= underwriting
 
+# The underwriters' user pool on the local Cognito (local/cognito): fixed ids, so the
+# app, the page, and underwriter.py agree without reading them back. The password
+# is local-only and meets the template's policy (12 characters, upper, lower,
+# number, symbol).
+export COGNITO_ENDPOINT := http://localhost:9229
+export COGNITO_POOL_ID := us-east-1_ch09Local
+export COGNITO_CLIENT_ID := ch09underwriterapplocal000
+export UNDERWRITER_PASSWORD ?= Local-underwriter-1!
+
 COUNT ?= 200
 SEED ?= 7
 Q ?= How is DTI assessed for a grocery business?
 DEAL ?= A logistics firm seeks a 500,000 US dollar working-capital loan for six months.
 
 up:
-	$(COMPOSE) up -d --wait
+	$(COMPOSE) up -d --build --wait
 
 # statements: the synthetic bank statement PDFs an underwriter uploads for review
 statements:
@@ -69,8 +78,19 @@ cases:
 
 # app: the FastAPI ask/recommend UI over the selected store, on http://localhost:8080.
 # The same app image deploys to Lambda; here it runs under uvicorn.
+# The app requires a signed-in underwriter (`make auth` creates one).
 app:
-	uv run app/main.py
+	COGNITO_ISSUER=$(COGNITO_ENDPOINT)/$(COGNITO_POOL_ID) uv run app/main.py
+
+# auth: the underwriter in the local pool, with a permanent password
+auth:
+	uv run --no-project aws/underwriter.py add
+
+# call: POST to the local app as the underwriter, or without a token (NO_TOKEN=1)
+ROUTE ?= ask
+BODY ?= {"query": "$(Q)"}
+call:
+	uv run --no-project aws/underwriter.py call $(ROUTE) '$(BODY)' $(if $(NO_TOKEN),--no-token)
 
 down:
 	$(COMPOSE) down -v
@@ -84,7 +104,7 @@ lint:
 # docker-py and needs no cloud.
 test:
 	uv run --with pytest --with boto3 --with opensearch-py --with pdfplumber \
-		--with reportlab pytest tests/ -q
+		--with reportlab --with "pyjwt[crypto]" --with pyyaml --with cryptography pytest tests/ -q
 
 # neural: let the cluster embed instead of embedding first. Registers a pretrained
 # model inside OpenSearch, indexes memo text through an ingest pipeline, and runs a

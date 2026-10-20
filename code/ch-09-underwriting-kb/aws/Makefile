@@ -137,6 +137,7 @@ teardown:
 	aws cloudformation wait stack-delete-complete --region $(REGION) --stack-name $(BUILD_STACK)
 	-aws secretsmanager delete-secret --secret-id $(SECRET) --region $(REGION) --force-delete-without-recovery
 	-aws secretsmanager delete-secret --secret-id ch09-underwriter --region $(REGION) --force-delete-without-recovery
+	-aws logs delete-log-group --log-group-name /aws/codebuild/$(REPO)-build --region $(REGION)
 	@echo "torn down"
 
 # -------------------------------------------------------------------------------

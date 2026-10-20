@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("pdfplumber")
 pytest.importorskip("reportlab")
 
-from statements import chunks_for, summarise
+from statements import Transaction, chunks_for, mask, reconcile, summarise
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -67,3 +67,43 @@ def test_chunks_lead_with_the_figures_and_group_by_month(corpus):
     assert len(chunks) == summary.months + 1
     for chunk in chunks[1:]:
         assert chunk.startswith("Transactions for ")
+
+
+def test_chunks_carry_the_case_not_the_holder(corpus):
+    """What is embedded names the case; the holder's name stays out of it."""
+    out, rows = corpus
+    summary, chunks = chunks_for(out / rows[0]["file"])
+    text = "\n".join(chunks)
+    assert summary.case_id in chunks[0]
+    for part in summary.holder.split():
+        assert part not in text
+
+
+def test_mask_keeps_what_the_affordability_check_reads():
+    """Names, card numbers, and emails go; the facility and amounts stay."""
+    line = mask(
+        "TRANSFER FROM ELENA BRENNAN 4929 1234 5678 9012 elena@example.com",
+        "Elena Brennan",
+    )
+    assert line == "TRANSFER FROM [HOLDER] [NUMBER] [EMAIL]"
+    kept = mask("LOAN REPAYMENT  FACILITY 4471", "Elena Brennan")
+    assert kept == "LOAN REPAYMENT  FACILITY 4471"
+
+
+def test_generated_statements_reconcile(corpus):
+    """Every row of a clean statement follows from the one before it."""
+    out, rows = corpus
+    for row in rows:
+        assert summarise(out / row["file"]).balance_breaks == []
+
+
+def test_a_misread_amount_breaks_the_running_balance():
+    """A dropped digit shows up as the row whose balance no longer follows."""
+    rows = [
+        Transaction("2026-03-01", "SALARY", 0, 85_000, 120_000),
+        Transaction("2026-03-03", "LOAN REPAYMENT", 3_400, 0, 82_600),
+        Transaction("2026-03-06", "FUEL STATION", 100, 0, 82_500),
+    ]
+    breaks = reconcile(rows)
+    assert len(breaks) == 1
+    assert breaks[0].startswith("2026-03-03 LOAN REPAYMENT")

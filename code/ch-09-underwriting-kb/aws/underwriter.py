@@ -4,7 +4,9 @@
 """Create an underwriter in the user pool, and call the deployed app as one.
 
 The password is generated into Secrets Manager and read back from there, so it is
-never typed, echoed, or passed on a command line.
+never typed, echoed, or passed on a command line. With COGNITO_ENDPOINT set, the
+same commands run against the local Cognito (local/cognito) and the local app
+instead, with the pool and client ids and the password from the environment.
 
 Usage:
   uv run --no-project underwriter.py add
@@ -13,6 +15,7 @@ Usage:
 """
 
 import argparse
+import os
 import urllib.error
 import urllib.request
 
@@ -22,10 +25,17 @@ REGION = "us-east-1"
 STACK = "ch09-underwriting-kb"
 SECRET = "ch09-underwriter"
 USERNAME = "underwriter1"
+LOCAL = os.environ.get("COGNITO_ENDPOINT")
 
 
 def outputs() -> dict[str, str]:
     """Return the app stack's outputs by key."""
+    if LOCAL:
+        return {
+            "UserPoolId": os.environ["COGNITO_POOL_ID"],
+            "UserPoolClientId": os.environ["COGNITO_CLIENT_ID"],
+            "AppUrl": os.environ.get("APP_URL", "http://localhost:8080"),
+        }
     cfn = boto3.client("cloudformation", region_name=REGION)
     stack = cfn.describe_stacks(StackName=STACK)["Stacks"][0]
     return {o["OutputKey"]: o["OutputValue"] for o in stack["Outputs"]}
@@ -33,6 +43,8 @@ def outputs() -> dict[str, str]:
 
 def password() -> str:
     """Return the underwriter's password, generating it on first use."""
+    if LOCAL:
+        return os.environ["UNDERWRITER_PASSWORD"]
     sm = boto3.client("secretsmanager", region_name=REGION)
     try:
         return sm.get_secret_value(SecretId=SECRET)["SecretString"]
@@ -44,10 +56,24 @@ def password() -> str:
         return value
 
 
+def cognito():
+    """Return a client for the user pool: cognito-shim locally, Cognito on AWS."""
+    if LOCAL:
+        # the local pool checks no credentials, so none of the real ones are sent
+        return boto3.client(
+            "cognito-idp",
+            region_name=REGION,
+            endpoint_url=LOCAL,
+            aws_access_key_id="local",
+            aws_secret_access_key="local",
+        )
+    return boto3.client("cognito-idp", region_name=REGION)
+
+
 def add() -> None:
     """Create the underwriter with a permanent password, so sign-in needs no reset."""
     pool = outputs()["UserPoolId"]
-    idp = boto3.client("cognito-idp", region_name=REGION)
+    idp = cognito()
     try:
         idp.admin_create_user(
             UserPoolId=pool, Username=USERNAME, MessageAction="SUPPRESS"
@@ -62,7 +88,7 @@ def add() -> None:
 
 def token(client_id: str) -> str:
     """Sign in as the underwriter and return the ID token API Gateway checks."""
-    idp = boto3.client("cognito-idp", region_name=REGION)
+    idp = cognito()
     resp = idp.initiate_auth(
         ClientId=client_id,
         AuthFlow="USER_PASSWORD_AUTH",
@@ -81,7 +107,7 @@ def call(route: str, body: str, signed: bool) -> None:
         f"{out['AppUrl']}/{route}", data=body.encode(), headers=headers, method="POST"
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=180) as resp:
             status, reply = resp.status, resp.read().decode()
     except urllib.error.HTTPError as err:
         status, reply = err.code, err.read().decode()

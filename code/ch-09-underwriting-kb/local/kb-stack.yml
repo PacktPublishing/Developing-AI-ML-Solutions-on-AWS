@@ -41,3 +41,18 @@ services:
     depends_on:
       search:
         condition: service_healthy
+
+  cognito:
+    # the underwriters' user pool, from source (./cognito): the cognito-idp calls the
+    # chapter makes and the pool's JWKS, so the page signs in and the app checks
+    # tokens as on AWS. Its password policy and auth flows are read from the
+    # template. Users are in memory, so `make down` clears them.
+    build: ./cognito
+    environment:
+      - COGNITO_POOL_ID=us-east-1_ch09Local
+      - COGNITO_CLIENT_ID=ch09underwriterapplocal000
+      - PUBLIC_URL=http://localhost:9229
+    volumes:
+      - ../aws/template.yaml:/stack/template.yaml:ro
+    ports:
+      - "9229:9229"

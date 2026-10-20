@@ -20,7 +20,8 @@ of reasoning.
 ## Run it locally
 
 ```
-make up                       # the local OpenSearch node and Dashboards
+make up                       # OpenSearch, Dashboards, and the local Cognito
+make auth                     # underwriter1 in the local user pool
 make gen                      # write the synthetic memo corpus (reproducible from --seed)
 BEDROCK_LOCAL=1 make seed      # embed the memos and the credit policy via Ollama
 BEDROCK_LOCAL=1 make eval      # how often the right memo or policy is in the top 5
@@ -28,6 +29,8 @@ BEDROCK_LOCAL=1 make ask  Q="How is DTI assessed for a grocery business?"
 BEDROCK_LOCAL=1 make cases DEAL="A logistics firm seeks a 500,000 dollar working-capital loan"
 make statements               # the synthetic bank statement PDFs to review
 BEDROCK_LOCAL=1 make review CASE=CASE-20260000
+BEDROCK_LOCAL=1 make app      # the page on http://localhost:8080, sign-in required
+make call                     # POST /ask as underwriter1; NO_TOKEN=1 expects a 401
 make down                     # tear it down
 ```
 
@@ -45,7 +48,11 @@ own precedent, and `--keep` aside it is deleted once the review is done.
 Totalling the statement is arithmetic, so it is a parser and not a prompt: the
 agent reads the income and existing repayments back out of the index rather than
 adding up a table it retrieved. That is the same rule the affordability tool
-follows, and for the same reason.
+follows, and for the same reason. The parser also checks the running balance,
+row by row, and lists any row whose balance does not follow from the one before;
+`read_case` returns that list, and the agent reports it before any figure. What
+is indexed is masked: the case id stands in for the holder's name, and long
+numbers and email addresses are replaced.
 
 Expect terse answers on a small local model, and note that tool calling needs
 Qwen3 4b or larger: at 0.6b the agent replies that the statement is unavailable
@@ -68,11 +75,16 @@ so a question or a deal can be narrowed: `retrieve.py cases --sector Logistics
 --max-exposure 2000000`, or the filters on the page. Policy stays in scope
 whatever the filters.
 
-On AWS the app sits behind a Cognito user pool: API Gateway rejects a request
-without an underwriter's token before it reaches the Lambda, and every answer is
-written as one JSON line, with the underwriter who asked and the ids it cited, to
-the `/ch09/underwriter-app` log group. Locally the app runs open and the audit
-line prints to the terminal.
+The app sits behind a Cognito user pool. On AWS, API Gateway rejects a request
+without an underwriter's token before it reaches the Lambda, and the app checks
+the token again: signature against the pool's published keys, issuer, audience,
+expiry, and that it is an ID token. Locally the pool is `local/cognito`, a
+from-source server for the three `cognito-idp` calls the chapter makes and the
+pool's JWKS, signing RS256 tokens in Cognito's shape. It reads the password
+policy and the client's auth flows from `aws/template.yaml`, so they are the
+template's own. The app's check is the only one locally, and it is the same code. Every answer is written as one JSON line, with the underwriter who asked and
+the ids it cited, to the `/ch09/underwriter-app` log group on AWS and to the
+terminal locally.
 
 ## Layout
 

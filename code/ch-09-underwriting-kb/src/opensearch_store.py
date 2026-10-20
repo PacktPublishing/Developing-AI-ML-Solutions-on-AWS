@@ -36,7 +36,7 @@ def scope(filters: dict | None = None, sources: tuple[str, ...] = ARCHIVE) -> di
         cases.append({"range": {"exposure_usd": exposure}})
     if filters.get("since"):
         cases.append({"range": {"decided": {"gte": filters["since"]}}})
-    should = [{"bool": {"filter": cases}}]
+    should: list[dict] = [{"bool": {"filter": cases}}]
     if "policy" in sources:
         should.append({"term": {"source": "policy"}})
     return {"bool": {"should": should, "minimum_should_match": 1}}
@@ -134,6 +134,7 @@ class OpenSearchStore:
                         "monthly_income": {"type": "double"},
                         "existing_repayments": {"type": "double"},
                         "months": {"type": "integer"},
+                        "balance_breaks": {"type": "keyword"},
                         "loan_id": {"type": "long"},
                         "borrower": {"type": "keyword"},
                         # the loan-book fields the filters narrow on
@@ -284,6 +285,7 @@ class OpenSearchStore:
             "monthly_income": first.get("monthly_income"),
             "existing_repayments": first.get("existing_repayments"),
             "months": first.get("months"),
+            "balance_breaks": first.get("balance_breaks") or [],
             "text": "\n\n".join(h["content"] for h in hits),
         }
 
