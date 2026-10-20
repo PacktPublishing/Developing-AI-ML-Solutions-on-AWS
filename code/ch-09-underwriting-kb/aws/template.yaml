@@ -5,9 +5,11 @@ Description: |
   underwriter app in front of it. A single-node domain with the k-NN plugin holds
   the embedded memos; OpenSearch Dashboards is the analyst UI. The app is one
   FastAPI image (ask/recommend UI + /ask and /cases) running in a container Lambda
-  via the Lambda Web Adapter, behind API Gateway. Fine-grained access control
-  gates the domain with a master user, so the endpoint is public but every request
-  authenticates. Delete the stack when the round is done.
+  via the Lambda Web Adapter, behind API Gateway. Underwriters sign in through a
+  Cognito user pool and API Gateway rejects any request without its token; each
+  answer lands in an audit log group with the underwriter who asked. Fine-grained
+  access control gates the domain with a master user. Delete the stack when the
+  round is done.
 
 Parameters:
   MasterUserName:
@@ -145,6 +147,69 @@ Resources:
                 Action: aws-marketplace:ViewSubscriptions
                 Resource: '*'
 
+  # ---------------------------------------------------------------------------
+  # who may use the app: named underwriters in a Cognito user pool. Accounts are
+  # created by an administrator only, never by self sign-up.
+  # ---------------------------------------------------------------------------
+  Underwriters:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: ch09-underwriters
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+
+  UnderwriterClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref Underwriters
+      ClientName: ch09-underwriter-app
+
+      # a browser page holds no secret, so the client has none
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+      IdTokenValidity: 60
+      AccessTokenValidity: 60
+      TokenValidityUnits:
+        IdToken: minutes
+        AccessToken: minutes
+
+  # API Gateway checks the token before the Lambda runs, so an unauthenticated
+  # request costs nothing and never reaches the memos.
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        DefaultAuthorizer: Underwriters
+        Authorizers:
+          Underwriters:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${Underwriters}
+              audience:
+                - !Ref UnderwriterClient
+
+  # The audit trail: every answer, with the underwriter who asked and the loans
+  # it cited. Thirty days suits a demo; set it to your record-keeping rule.
+  AppLogs:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ch09/underwriter-app
+      RetentionInDays: 30
+
   App:
     Type: AWS::Serverless::Function
     Properties:
@@ -153,6 +218,9 @@ Resources:
       Role: !GetAtt AppRole.Arn
       MemorySize: 1024
       Timeout: 30 # API Gateway HTTP API caps the integration at 30s
+      LoggingConfig:
+        LogGroup: !Ref AppLogs
+        LogFormat: Text
       Environment:
         Variables:
           STORE: opensearch
@@ -166,15 +234,37 @@ Resources:
           # Generate with Claude on Bedrock (the account's enabled text model);
           # embeddings stay on Titan v2. The AppRole allows anthropic.* profiles.
           TEXT_MODEL: global.anthropic.claude-haiku-4-5-20251001-v1:0
+
+          # the page reads this from /auth-config to sign the underwriter in
+          COGNITO_CLIENT_ID: !Ref UnderwriterClient
+
+          # the app checks the token against this pool too, after API Gateway has
+          COGNITO_ISSUER: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${Underwriters}
       Events:
-        Root:
+
+        # the page and its sign-in settings load before anyone has a token
+        Page:
           Type: HttpApi
           Properties:
+            ApiId: !Ref Api
             Path: /
-            Method: ANY
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        AuthConfig:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /auth-config
+            Method: GET
+            Auth:
+              Authorizer: NONE
+
+        # everything else needs a signed-in underwriter
         Proxy:
           Type: HttpApi
           Properties:
+            ApiId: !Ref Api
             Path: /{proxy+}
             Method: ANY
 
@@ -406,7 +496,19 @@ Outputs:
 
   AppUrl:
     Description: The underwriter app (ask/cases) behind API Gateway
-    Value: !Sub https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com
+    Value: !Sub https://${Api}.execute-api.${AWS::Region}.amazonaws.com
+
+  UserPoolId:
+    Description: The underwriters' Cognito user pool
+    Value: !Ref Underwriters
+
+  UserPoolClientId:
+    Description: The app client the page and make app-ask sign in through
+    Value: !Ref UnderwriterClient
+
+  AuditLogGroup:
+    Description: The app's audit trail, one JSON line per answer
+    Value: !Ref AppLogs
 
   RagRoleArn:
     Description: Role ml-commons assumes to call Bedrock for Dashboards RAG

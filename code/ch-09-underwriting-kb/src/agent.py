@@ -30,7 +30,9 @@ SYSTEM = (
     " instalment yourself, always call the tool, because the underwriter checks"
     " these numbers. When the underwriter names a case reference, read the"
     " statement first and use the income and existing repayments it returns"
-    " rather than any figure quoted in the question. The debt-to-income ceiling is credit policy and comes from"
+    " rather than any figure quoted in the question. If the statement is not"
+    " reconciled, say so first, list the rows that break the running balance,"
+    " and treat the figures as unconfirmed. The debt-to-income ceiling is credit policy and comes from"
     " configuration, so never choose one yourself and always report the ceiling"
     " the tool returns. Recommend an amount and say what it assumes. Do not make the"
     " final approve or decline decision, that is the underwriter's call. Write in"
@@ -40,12 +42,12 @@ SYSTEM = (
 
 @tool
 def search_memos(query: str, k: int = 5) -> str:
-    """Search past underwriting memos and return passages tagged by loan id.
+    """Search past memos and credit policy, passages tagged by loan or policy id.
 
-    Only the archive of decided cases is searched, never the document under
-    review, so a submission cannot come back as its own precedent.
+    Only decided cases and policy are searched, never the document under review,
+    so a submission cannot come back as its own precedent.
     """
-    hits = get_store().search(get_runtime(), query, k=k, source="corpus")
+    hits = get_store().search(get_runtime(), query, k=k)
     return _context(hits)
 
 
@@ -58,17 +60,19 @@ def read_case(case_id: str) -> dict:
 
     The income and existing repayments come from totalling the statement at
     upload, not from reading the text, so the affordability tools are given
-    figures rather than an impression of them.
+    figures rather than an impression of them. If the running balance does not
+    reconcile, the rows that break it are listed and the figures are suspect.
     """
     doc = get_store().read_submission(case_id)
     if not doc:
         return {"error": f"no statement uploaded for {case_id}"}
     return {
         "case_id": doc["case_id"],
-        "holder": doc["holder"],
         "monthly_income": doc["monthly_income"],
         "existing_repayments": doc["existing_repayments"],
         "months_covered": doc["months"],
+        "reconciled": not doc["balance_breaks"],
+        "balance_breaks": doc["balance_breaks"],
     }
 
 

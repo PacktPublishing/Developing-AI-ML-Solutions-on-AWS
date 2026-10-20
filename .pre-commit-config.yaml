@@ -1,5 +1,6 @@
 # Pre-commit hooks for the book's code.
 #   ruff      - format and lint Python
+#   pydocstyle - check docstrings (pep257)
 #   ty        - type-check Python
 #   shfmt     - format shell scripts
 #   mbake     - format Makefiles
@@ -41,6 +42,14 @@ repos:
       - id: ruff-format
       - id: ruff-check
         args: [--fix]
+
+  # Docstrings: the pep257 convention, matching [tool.ruff.lint.pydocstyle], with
+  # D107 (__init__ docstrings) off as in ruff.
+  - repo: https://github.com/PyCQA/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args: [--convention=pep257, --add-ignore=D107]
 
   # Shell: gofmt-style formatting for *.sh. This hook downloads shfmt itself.
   - repo: https://github.com/scop/pre-commit-shfmt

@@ -27,14 +27,31 @@
       .badge { font-size: 12px; background: #eef6f0; color: var(--accent); border: 1px solid #cfe6d8; border-radius: 999px; padding: 3px 10px; }
       .spin { color: var(--muted); margin-top: 16px; }
       footer { text-align: center; color: var(--muted); font-size: 12px; margin: 28px 0; }
+      .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+      .filters label { font-weight: 500; font-size: 13px; color: var(--muted); margin-bottom: 3px; }
+      input, select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: #fff; }
+      #signin { max-width: 360px; margin: 40px auto; }
+      #signin input { margin-bottom: 10px; }
+      .who { float: right; color: #9aa4b2; font-size: 13px; cursor: pointer; }
+      [hidden] { display: none !important; }
     </style>
   </head>
   <body>
     <header>
+      <span class="who" id="who" hidden></span>
       <h1>Underwriting knowledge base</h1>
       <p>Ask about past underwriting, or assess a new deal against similar prior cases. Every answer cites its source loans.</p>
     </header>
     <main>
+      <div class="card" id="signin" hidden>
+        <label for="user">Underwriter</label>
+        <input id="user" autocomplete="username" />
+        <label for="pass">Password</label>
+        <input id="pass" type="password" autocomplete="current-password" />
+        <button class="go" id="login">Sign in</button>
+        <div id="loginmsg" class="answer empty"></div>
+      </div>
+      <div id="app" hidden>
       <div class="tabs" role="tablist">
         <div class="tab" role="tab" data-mode="ask" aria-selected="true">Ask a question</div>
         <div class="tab" role="tab" data-mode="cases" aria-selected="false">Assess a new deal</div>
@@ -42,10 +59,24 @@
       <div class="card">
         <label id="lbl" for="q">Your question</label>
         <textarea id="q" placeholder="How is DTI assessed for a grocery business?"></textarea>
+        <div class="filters">
+          <div>
+            <label for="sector">Sector</label>
+            <select id="sector">
+              <option value="">Any sector</option>
+              <option>Grocery &amp; Provisions</option><option>Logistics</option><option>Pharmacy</option>
+              <option>Building Materials</option><option>Textiles</option><option>Agro Supplies</option>
+              <option>Restaurant Supply</option><option>Auto Parts</option>
+            </select>
+          </div>
+          <div><label for="maxexp">Max exposure (USD)</label><input id="maxexp" type="number" min="0" step="100000" /></div>
+          <div><label for="since">Decided since</label><input id="since" type="date" /></div>
+        </div>
         <button class="go" id="go">Ask</button>
         <div id="out"></div>
       </div>
-      <footer>Grounded retrieval over the memo knowledge base. Not a lending decision.</footer>
+      </div>
+      <footer>Grounded retrieval over past memos and credit policy. Not a lending decision.</footer>
     </main>
     <script>
       let mode = "ask";
@@ -67,6 +98,40 @@
           out.innerHTML = "";
         }),
       );
+      // Sign-in: the API only answers with a token from the underwriters' Cognito
+      // user pool; /auth-config says where it is (cognito-shim locally, AWS in the cloud).
+      let auth = {};
+      let token = sessionStorage.getItem("idToken") || "";
+      function show(signedIn) {
+        document.getElementById("signin").hidden = signedIn;
+        document.getElementById("app").hidden = !signedIn;
+        const who = document.getElementById("who");
+        who.hidden = !(signedIn && auth.client_id);
+        if (token) who.textContent = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))["cognito:username"] + " · sign out";
+      }
+      async function signIn() {
+        const msg = document.getElementById("loginmsg");
+        msg.textContent = "";
+        const r = await fetch(auth.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+          body: JSON.stringify({
+            AuthFlow: "USER_PASSWORD_AUTH",
+            ClientId: auth.client_id,
+            AuthParameters: { USERNAME: document.getElementById("user").value, PASSWORD: document.getElementById("pass").value },
+          }),
+        });
+        const data = await r.json();
+        if (!data.AuthenticationResult) { msg.textContent = data.message || "Sign-in failed."; return; }
+        token = data.AuthenticationResult.IdToken;
+        sessionStorage.setItem("idToken", token);
+        show(true);
+      }
+      function signOut() { token = ""; sessionStorage.removeItem("idToken"); show(false); }
+      document.getElementById("login").addEventListener("click", signIn);
+      document.getElementById("who").addEventListener("click", signOut);
+      fetch("/auth-config").then((r) => r.json()).then((cfg) => { auth = cfg; show(!auth.client_id || !!token); });
+
       async function run() {
         const text = q.value.trim();
         if (!text) return;
@@ -74,10 +139,19 @@
         out.innerHTML = '<div class="spin">Searching the knowledge base and drafting an answer…</div>';
         try {
           const body = { [copy[mode].key]: text };
-          const r = await fetch("/" + mode, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          const sector = document.getElementById("sector").value;
+          const maxexp = document.getElementById("maxexp").value;
+          const since = document.getElementById("since").value;
+          if (sector) body.sector = sector;
+          if (maxexp) body.max_exposure = Number(maxexp);
+          if (since) body.since = since;
+          const headers = { "Content-Type": "application/json" };
+          if (token) headers.Authorization = "Bearer " + token;
+          const r = await fetch("/" + mode, { method: "POST", headers, body: JSON.stringify(body) });
+          if (r.status === 401) { signOut(); return; }
           const data = await r.json();
           const src = (data.sources || [])
-            .map((s) => `<span class="badge">${s.loan_id} · ${s.borrower}</span>`)
+            .map((s) => `<span class="badge">${s.loan_id ? s.loan_id + " · " + s.borrower : s.borrower}</span>`)
             .join("");
           out.innerHTML =
             `<div class="answer">${escapeHtml(data.answer || "")}</div>` +

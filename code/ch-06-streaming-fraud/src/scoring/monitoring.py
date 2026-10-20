@@ -41,7 +41,7 @@ SEED = 6
 
 
 def warehouse():
-    """Open a connection to the local warehouse (or Redshift on AWS) from the JDBC env vars."""
+    """Open a connection to the local warehouse, or Redshift on AWS, from the JDBC env vars."""
     hostport, db = WAREHOUSE_JDBC.removeprefix("jdbc:redshift://").rsplit("/", 1)
     dsn = f"postgresql://{WAREHOUSE_USER}:{WAREHOUSE_PASSWORD}@{hostport}/{db}?sslmode=disable"
     return psycopg2.connect(dsn)
