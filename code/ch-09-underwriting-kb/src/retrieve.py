@@ -16,7 +16,7 @@ Usage (from the chapter root):
 
 import argparse
 
-from models import generate, get_runtime
+from models import embed, generate, get_runtime
 from stores import get_store
 
 # Headroom for the answer. Qwen3 is a reasoning model: it emits its thinking before
@@ -60,11 +60,17 @@ def _context(hits: list[tuple[int, str, str, float]]) -> str:
 
 
 def _sources_list(hits: list[tuple[int, str, str, float]]) -> list[dict]:
-    """Return the cited loans as [{loan_id, borrower}], deduplicated, in order."""
-    seen: dict[int, str] = {}
+    """Return the cited loans and policies as [{loan_id, borrower}], in order.
+
+    Deduplicated on the citation tag: every policy is stored under loan id 0, so
+    the loan id alone would fold distinct policies into one source.
+    """
+    seen: dict[str, dict] = {}
     for loan_id, borrower, _, _ in hits:
-        seen.setdefault(loan_id, borrower)
-    return [{"loan_id": lid, "borrower": name} for lid, name in seen.items()]
+        seen.setdefault(
+            _ref(loan_id, borrower), {"loan_id": loan_id, "borrower": borrower}
+        )
+    return list(seen.values())
 
 
 def _respond(
@@ -79,8 +85,9 @@ def _respond(
     """Retrieve, generate a grounded answer, and return {answer, sources}."""
     runtime = get_runtime()
     store = get_store()
-    hits = store.search(runtime, text, k=k, filters=filters)
-    rules = store.search(runtime, text, k=POLICY_K, sources=("policy",))
+    vector = embed(runtime, [text])[0]
+    hits = store.search(runtime, text, k=k, filters=filters, vector=vector)
+    rules = store.search(runtime, text, k=POLICY_K, sources=("policy",), vector=vector)
     hits += [h for h in rules if h[:3] not in {x[:3] for x in hits}]
     if not hits:
         return {"answer": empty, "sources": []}

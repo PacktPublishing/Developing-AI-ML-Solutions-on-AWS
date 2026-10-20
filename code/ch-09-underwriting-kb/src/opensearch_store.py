@@ -211,14 +211,17 @@ class OpenSearchStore:
         filters: dict | None = None,
         hybrid: bool = True,
         sources: tuple[str, ...] = ARCHIVE,
+        vector: list[float] | None = None,
     ) -> list[tuple[int, str, str, float]]:
         """Return the k best chunks as (loan_id, borrower, content, score).
 
         The scope keeps a document under review out of the results, so it is
         never returned as a precedent for itself. With hybrid on, the score is the
-        pipeline's combined 0 to 1 score; with it off, a cosine similarity.
+        pipeline's combined 0 to 1 score; with it off, a cosine similarity. Pass
+        the query's vector when it is already embedded, to skip embedding it again.
         """
-        vector = embed(runtime, [query])[0]
+        if vector is None:
+            vector = embed(runtime, [query])[0]
         body = query_body(vector, query, k, scope(filters, sources), hybrid)
         params = {"search_pipeline": PIPELINE} if hybrid else {}
         resp = self.client.search(index=INDEX, body=body, params=params)
