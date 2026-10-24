@@ -1,12 +1,11 @@
 COMPOSE := docker compose -f local/analytics-stack.yml
 
 # awsdac renders diagrams/yaml into diagrams/png. Custom icons ship as SVG and
-# are rasterised at ICON_HEIGHT (needs rsvg-convert); WIDTH sets pixel width
+# are rendered by `make icons` at the repository root; WIDTH sets pixel width
 # (0 = awsdac native).
 AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0
-ICON_HEIGHT ?= 500
 
 .PHONY: llm local local-bedrock local-claude all local-stop diagrams lint \ test
 	access-plan access
@@ -97,9 +96,7 @@ llm:
 
 diagrams:
 	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
-	@for s in ../../assets/diagrams/icons/*.svg; do \
-		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
-	done
+	@$(MAKE) -s -C ../.. icons
 	@mkdir -p diagrams/png
 	@for f in diagrams/yaml/*.yaml; do \
 		echo "  $$f"; \

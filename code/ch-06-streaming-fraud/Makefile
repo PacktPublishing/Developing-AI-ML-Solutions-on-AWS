@@ -6,12 +6,11 @@
 # `make score`, then `make query`/`lookup`. make down when finished.
 all: up seed train serve
 
-# Custom icons live in assets/diagrams/. Icon PNGs re-render from SVG at
-# ICON_HEIGHT (needs rsvg-convert); WIDTH sets pixel width (0 = awsdac native).
+# Custom icons live in assets/diagrams/ and are rendered by `make icons` at
+# the repository root; WIDTH sets pixel width (0 = awsdac native).
 AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0
-ICON_HEIGHT ?= 500
 
 # Local credentials for the containerized services; any non-empty value works.
 # On AWS, unset the *_ENDPOINT variables and use real credentials.
@@ -100,9 +99,7 @@ clean: down
 
 diagrams:
 	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
-	@for s in ../../assets/diagrams/icons/*.svg; do \
-		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
-	done
+	@$(MAKE) -s -C ../.. icons
 	@mkdir -p diagrams/png
 	@for f in diagrams/yaml/*.yaml; do \
 		echo "  $$f"; \
