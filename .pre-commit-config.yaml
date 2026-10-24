@@ -34,6 +34,15 @@ repos:
         args: [--unsafe]
       - id: check-merge-conflict
       - id: check-added-large-files
+      # The chapters' IAM policies and Grafana dashboards are JSON, and the SAM
+      # and project configs are TOML; a malformed one fails at deploy time
+      # rather than here, which is the wrong end of the loop.
+      - id: check-json
+      - id: check-toml
+      # Chapter work happens on a branch and lands through a PR, so a commit
+      # made on main locally is a mistake every time.
+      - id: no-commit-to-branch
+        args: [--branch, main]
 
   # Python: format then lint. Rev tracks the ruff version pinned in pyproject.
   - repo: https://github.com/astral-sh/ruff-pre-commit
