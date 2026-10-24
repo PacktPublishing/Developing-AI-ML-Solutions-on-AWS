@@ -33,6 +33,24 @@ _WRITE_RE = re.compile(
     r"^\s*(INSERT|UPDATE|DELETE|DROP|CREATE|TRUNCATE|ALTER|GRANT|REVOKE|COPY|UNLOAD|CALL|MERGE)\b",
     re.IGNORECASE,
 )
+# A data-modifying CTE hides the verb behind WITH, so the opening word is SELECT.
+_CTE_WRITE_RE = re.compile(r"\bWITH\b.*?\b(INSERT|UPDATE|DELETE|MERGE)\b", re.S | re.I)
+_COMMENT_RE = re.compile(r"/\*.*?\*/|--[^\n]*", re.S)
+_STRING_RE = re.compile(r"'(?:[^']|'')*'")
+
+
+def _rejects(sql: str) -> bool:
+    """Reject anything other than a single read statement.
+
+    The verb test has to run against the statement rather than the raw string:
+    a leading comment or bracket moves the verb off position zero, and a second
+    statement after a semicolon never reaches position zero at all.
+    """
+    bare = _COMMENT_RE.sub(" ", _STRING_RE.sub("''", sql)).strip()
+    if bare.rstrip(";").count(";"):
+        return True  # more than one statement
+    bare = bare.lstrip("(").lstrip()
+    return bool(_WRITE_RE.match(bare) or _CTE_WRITE_RE.search(bare))
 
 
 def _audit(event: str, **fields: Any) -> None:
@@ -47,7 +65,7 @@ def _audit(event: str, **fields: Any) -> None:
 
 def execute_redshift_query(sql: str) -> list[dict]:
     """Run one read-only statement and return rows as dicts."""
-    if _WRITE_RE.match(sql):
+    if _rejects(sql):
         raise ValueError("read-only helper: statement rejected")
 
     client = boto3.client("redshift-data", region_name=os.environ["REDSHIFT_REGION"])

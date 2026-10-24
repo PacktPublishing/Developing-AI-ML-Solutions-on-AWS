@@ -8,7 +8,7 @@ AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0
 ICON_HEIGHT ?= 500
 
-.PHONY: llm local local-bedrock local-claude all local-stop diagrams lint \
+.PHONY: llm local local-bedrock local-claude all local-stop diagrams lint \ test
 	access-plan access
 
 # the one-command local flow: bring the whole stack up fully offline (Ollama-backed
@@ -105,3 +105,7 @@ diagrams:
 		echo "  $$f"; \
 		"$(AWSDAC)" -f "$$f" -o "diagrams/png/$$(basename $$f .yaml).png" --width $(WIDTH); \
 	done
+
+# the read-only guard and the masking layer the assistant depends on
+test:
+	uv run --with pytest --with boto3 pytest tests/ -q
