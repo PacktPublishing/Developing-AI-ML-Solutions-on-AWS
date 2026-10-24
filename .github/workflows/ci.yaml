@@ -87,7 +87,10 @@ jobs:
           - ch-02-mlops
           - ch-03-generative-ai
           - ch-04-realtime-scoring
+          - ch-05-batch-limits
+          - ch-06-streaming-fraud
           - ch-07-vision-rag
+          - ch-08-selfservice-analytics
           - ch-09-underwriting-kb
           - ch-10-conversation-classification
           - ch-11-model-monitoring

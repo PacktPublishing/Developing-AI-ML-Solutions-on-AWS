@@ -80,16 +80,14 @@ test:
 	uv run --with pytest --with catboost --with pandas --with numpy pytest tests/ -q
 
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS icons fetched at render time, custom icons from shared assets/diagrams/).
-# Icon PNGs are re-rendered from SVG at ICON_HEIGHT (needs rsvg-convert); WIDTH sets output pixel width (0 = awsdac native).
+# The shared icons come from `make icons` at the repository root; WIDTH sets
+# output pixel width (0 = awsdac native).
 AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0
-ICON_HEIGHT ?= 500
 diagrams:
 	@test -x "$(AWSDAC)" || go install github.com/awslabs/diagram-as-code/cmd/awsdac@$(AWSDAC_VERSION)
-	@for s in ../../assets/diagrams/icons/*.svg; do \
-		rsvg-convert -h $(ICON_HEIGHT) "$$s" -o "../../assets/diagrams/icons/$$(basename $$s .svg).png"; \
-	done
+	@$(MAKE) -s -C ../.. icons
 	@mkdir -p diagrams/png
 	@for f in diagrams/yaml/*.yaml; do \
 		echo "  $$f"; \
