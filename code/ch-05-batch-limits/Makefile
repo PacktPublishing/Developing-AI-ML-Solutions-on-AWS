@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f local/batch-stack.yml
 
-.PHONY: up seed run pipeline all events schedule query down clean lint diagrams
+.PHONY: up seed run pipeline all events schedule query down clean lint diagrams test
 
 # the whole local flow in one command: the warehouse and local S3, the seed, and the batch
 # pipeline in SageMaker local mode. make down when done.
@@ -87,3 +87,7 @@ diagrams:
 		echo "  $$f"; \
 		"$(AWSDAC)" -f "$$f" -o "diagrams/png/$$(basename $$f .yaml).png" --width $(WIDTH); \
 	done
+
+# the decision rules, and the two copies of them the pipeline ships
+test:
+	uv run --with pytest --with pandas --with boto3 pytest tests/ -q
