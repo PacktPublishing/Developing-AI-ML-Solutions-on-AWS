@@ -29,6 +29,11 @@ jobs:
           sudo install /tmp/rain-bin/rain /usr/local/bin/rain
           rain --version
       - name: pre-commit (ruff, ty, shfmt, shellcheck, mbake)
+        # no-commit-to-branch guards a developer's local commit; here the
+        # checkout IS main on every push to main, so the hook would fail the
+        # job by design. It has nothing to check in CI.
+        env:
+          SKIP: no-commit-to-branch
         run: uvx pre-commit run --all-files --show-diff-on-failure
 
   # Secrets, over the whole history rather than the working tree. The pre-commit
