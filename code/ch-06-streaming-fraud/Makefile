@@ -1,4 +1,4 @@
-.PHONY: all up seed train serve produce score firehose deliver lookup query diagrams down clean lint
+.PHONY: all up seed train serve produce score firehose deliver lookup query diagrams down clean lint test
 
 # bootstrap the local stack in one command: the compose services, the synthetic stream, the
 # trained scorer, and the serving container. The streaming demo itself is multi-terminal --
@@ -112,3 +112,7 @@ diagrams:
 lint:
 	uvx ruff format data/*.py src/scoring/*.py src/streaming/*.py local/firehose-local/*.py
 	uvx ruff check data/*.py src/scoring/*.py src/streaming/*.py local/firehose-local/*.py
+
+# the score scale and the bands the consumer runs on
+test:
+	uv run --with pytest --with numpy pytest tests/ -q
