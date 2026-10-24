@@ -65,6 +65,19 @@ def test_a_second_statement_is_rejected():
     assert _rejects("SELECT 1; DROP TABLE analytics.applicants")
 
 
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "/* ' */ DELETE FROM analytics.applicants WHERE y = 'a'",
+        "/* don't */ DROP TABLE analytics.applicants WHERE y = 'a'",
+        "-- ' \nDELETE FROM analytics.applicants WHERE y = 'a'",
+    ],
+)
+def test_a_quote_inside_a_comment_does_not_swallow_the_verb(sql):
+    """Strip strings before comments and a lone quote opens one that eats the */ and the verb."""
+    assert _rejects(sql)
+
+
 def test_a_leading_bracket_does_not_hide_the_verb():
     """A bracket is one more character between the start and the verb."""
     assert _rejects("(DELETE FROM analytics.applicants)")

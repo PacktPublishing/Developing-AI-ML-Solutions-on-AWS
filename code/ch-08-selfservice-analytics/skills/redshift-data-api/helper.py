@@ -35,8 +35,11 @@ _WRITE_RE = re.compile(
 )
 # A data-modifying CTE hides the verb behind WITH, so the opening word is SELECT.
 _CTE_WRITE_RE = re.compile(r"\bWITH\b.*?\b(INSERT|UPDATE|DELETE|MERGE)\b", re.S | re.I)
-_COMMENT_RE = re.compile(r"/\*.*?\*/|--[^\n]*", re.S)
-_STRING_RE = re.compile(r"'(?:[^']|'')*'")
+# Comments and string literals in one alternation, so a scan consumes them
+# left to right and whichever opens first wins. Stripping strings before
+# comments lets a lone quote inside a comment open a "string" that swallows the
+# closing */ and the verb behind it.
+_NOISE_RE = re.compile(r"/\*.*?\*/|--[^\n]*|'(?:[^']|'')*'", re.S)
 
 
 def _rejects(sql: str) -> bool:
@@ -46,7 +49,7 @@ def _rejects(sql: str) -> bool:
     a leading comment or bracket moves the verb off position zero, and a second
     statement after a semicolon never reaches position zero at all.
     """
-    bare = _COMMENT_RE.sub(" ", _STRING_RE.sub("''", sql)).strip()
+    bare = _NOISE_RE.sub(" ", sql).strip()
     if bare.rstrip(";").count(";"):
         return True  # more than one statement
     bare = bare.lstrip("(").lstrip()

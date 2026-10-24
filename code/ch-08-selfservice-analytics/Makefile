@@ -7,7 +7,7 @@ AWSDAC_VERSION := v0.22.4
 AWSDAC := $(shell go env GOPATH)/bin/awsdac
 WIDTH ?= 0
 
-.PHONY: llm local local-bedrock local-claude all local-stop diagrams lint \ test
+.PHONY: llm local local-bedrock local-claude all local-stop diagrams lint test \
 	access-plan access
 
 # the one-command local flow: bring the whole stack up fully offline (Ollama-backed
