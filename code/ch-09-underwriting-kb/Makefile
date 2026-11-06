@@ -15,22 +15,10 @@ export PYTHONPATH := $(SRC)
 
 COMPOSE := docker compose -f local/kb-stack.yml
 
-# The OpenSearch node and Dashboards sit behind a compose
-# profile named after the store, started only when that store is selected.
-
-export S3VECTORS_LOCAL ?= $(BEDROCK_LOCAL)
-export S3_ENDPOINT ?= http://localhost:9000
-
 # Bedrock is the one cloud call and uses your real AWS credentials from the
 # default chain. Set BEDROCK_LOCAL=1 to run the models on Ollama instead.
 export AWS_DEFAULT_REGION ?= us-east-1
 export BEDROCK_REGION ?= us-east-1
-
-export PGHOST ?= localhost
-export PGPORT ?= 5545
-export PGUSER ?= underwriter
-export PGPASSWORD ?= underwriter
-export PGDATABASE ?= underwriting
 
 # The underwriters' user pool on the local Cognito (local/cognito): fixed ids, so the
 # app, the page, and underwriter.py agree without reading them back. The password

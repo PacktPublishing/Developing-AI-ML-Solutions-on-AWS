@@ -2,7 +2,7 @@
 
 The running example for the MLOps chapter. A mid-sized bank is moving its credit
 scoring onto SageMaker. Its established model is a Weight-of-Evidence
-logistic-regression scorecard; a data scientist tests a monotone XGBoost
+logistic-regression scorecard; a data scientist tests a monotone CatBoost
 challenger against it, tunes it, and then has to choose how to serve the winner.
 Every model here obeys the same business rule — risk moves monotonically with
 certain features — the scorecard by construction, the challenger through
@@ -42,7 +42,7 @@ open-source tuner, `src/tuning/amt.py`); the managed search is SageMaker AMT
 make up               # start the local cloud (S3Proxy)
 make seed             # synthesize the dataset and lay out the training channels
 make train            # train the incumbent scorecard in its container
-make train-challenger # train the monotone XGBoost challenger
+make train-challenger # train the monotone CatBoost challenger
 make mlflow-train     # train both, logged to serverless MLflow (sqlite + S3Proxy)
 make mlflow-ui        # browse the runs on demand (no server runs otherwise)
 make amt              # local hyperparameter search on the challenger (Syne Tune), tracked in MLflow
@@ -88,7 +88,7 @@ The `aws/` folder reproduces each step on real AWS.
 - `local/mlflow-stack.yml`: the local cloud (S3Proxy)
 - `data/generate_applications.py`: synthetic credit data + the shared monotone spec
 - `src/scorecard/`: the incumbent WOE scorecard container (fastwoe + LogisticRegression)
-- `src/challenger/`: the monotone XGBoost challenger container
+- `src/challenger/`: the monotone CatBoost challenger container
 - `src/tuning/amt.py`: local HPO with Syne Tune (Bayesian TPE, no instance), tracked in MLflow
 - `src/serving/batch.py`, `src/serving/lambda/`, `src/serving/fargate/`: the serving options
 - `aws/`: reproduce on real AWS (SDK v3), with IAM notes
