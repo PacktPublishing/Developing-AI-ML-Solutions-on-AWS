@@ -90,7 +90,9 @@ repos:
         pass_filenames: false
       - id: mbake
         name: mbake (Makefile format)
-        entry: uvx --from mbake mbake format
+        # pinned: an unpinned mbake drifts ahead of what the repo was formatted
+        # with, and the next release reformats every Makefile in a CI --all-files run.
+        entry: uvx --from mbake==1.5.0 mbake format
         language: system
         files: (^|/)Makefile$
       - id: rain-fmt
