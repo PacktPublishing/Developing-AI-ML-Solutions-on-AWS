@@ -4,7 +4,7 @@
 # ///
 """Synthesize the chapter's credit-application dataset and its business spec.
 
-Both models (the WOE logistic-regression scorecard and the XGBoost challenger) must obey the same monotonic business rule, captured once in feature_spec.json; the target is drawn from a monotone logit so those directions genuinely hold.
+Both models (the WOE logistic-regression scorecard and the CatBoost challenger) must obey the same monotonic business rule, captured once in feature_spec.json; the target is drawn from a monotone logit so those directions genuinely hold.
 
 Usage:
   uv run data/generate_applications.py --rows 20000 --seed 7
@@ -23,7 +23,7 @@ import pandas as pd
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # The business spec. monotone: sign of the allowed feature-vs-default-probability
-# relationship (+1 up, -1 down, 0 unconstrained), XGBoost convention. Categoricals carry no direction.
+# relationship (+1 up, -1 down, 0 unconstrained), as CatBoost expects. Categoricals carry no direction.
 NUMERIC = {
     "annual_income": -1,
     "debt_to_income": +1,

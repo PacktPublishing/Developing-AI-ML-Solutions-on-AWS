@@ -119,54 +119,80 @@ with a table, a summary, and the tables it touched — the terminal in the brows
 
 ## Chapter 09 — Underwriting knowledge base
 
-*Scaffold in progress.* Policy documents, credit reports, and synthetic dossier
-memos embedded with Bedrock and stored in Aurora pgvector and S3 Vectors,
-answered with citations, with an agent that assembles similar past cases into a
-recommendation the underwriter signs off on.
+Policy documents, credit reports, and synthetic dossier memos embedded with
+Bedrock and stored in OpenSearch, so a question is answered with citations to the
+source loan or policy id and a Strands agent can assemble similar past cases into
+a recommendation the underwriter signs off on. The underwriter interface is a
+FastAPI ask/recommend app that runs under uvicorn locally and, unchanged, in a
+container Lambda behind API Gateway.
 
-- **AWS services:** Amazon Bedrock (embeddings, Converse), Amazon Aurora
-  PostgreSQL + pgvector, Amazon S3 Vectors, Amazon OpenSearch Service, AWS Lambda,
-  Amazon API Gateway
-- **Local stand-ins:** Ollama (Bedrock), pgvector Postgres (Aurora), OpenSearch in
-  a container
+![The retrieval round on AWS](ch-09-underwriting-kb/diagrams/png/fig_aws.png)
+
+- **AWS services:** Amazon Bedrock (embeddings, Converse), Amazon OpenSearch
+  Service (domain and Dashboards), Amazon Cognito, AWS Lambda (container image),
+  Amazon API Gateway (HTTP API), Amazon CloudWatch Logs
+- **Local stand-ins:** Ollama (Bedrock), an OpenSearch container with Dashboards
+  (OpenSearch Service), a from-source user pool (Cognito), uvicorn (Lambda and
+  API Gateway)
 
 ## Chapter 10 — Conversation classification
 
-*Scaffold in progress.* A Strands and Bedrock agent files each customer
-conversation into a category with zero-shot classification and routes it through
-SNS, batched over a JSONL manifest, with a labeled set keeping accuracy honest.
+The pile every support and collections team knows: thousands of conversations
+nobody has time to skim. Each one is classified into a category with zero-shot
+inference and handed to the right team through SNS, with a labeled set keeping the
+accuracy honest. The work runs as an Amazon Bedrock batch inference job: every
+conversation is one line of a JSONL manifest in S3, and Bedrock replays each
+`modelInput` against the model and writes the answers back.
+
+![The classification round on AWS](ch-10-conversation-classification/diagrams/png/fig_batch.png)
 
 - **AWS services:** Amazon Bedrock (batch inference, Converse), Amazon SNS, Amazon S3
-- **Local stand-ins:** Ollama (Bedrock), an SNS shim composed from source, a local
-  batch-inference runner
+- **Local stand-ins:** Ollama (Bedrock), a from-source batch-inference runner
+  (Bedrock batch), a from-source SNS shim delivering to a file inbox per team
+  (SNS), S3Proxy (S3)
 
 ## Chapter 11 — Monitoring
 
-*Scaffold in progress.* Online PSI monitoring of scores and features, SHAP-based
-drift in a CatBoost scorecard's feature contributions, SageMaker Model Monitor
-and Clarify for data and concept drift, and CloudWatch alerting.
+Online Population Stability Index monitoring of the scores and the features that
+drive them, binned at the model's own CatBoost split borders, SHAP attribution
+drift reported as the NDCG of the current feature ranking against the reference
+one, and CloudWatch alerting on top. SageMaker Model Monitor and Clarify are
+closed to new accounts, so the AWS round is AWS's documented replacement: a
+SageMaker Pipeline running Batch Transform into a Processing job that writes the
+Clarify-shaped artifacts and publishes the metrics the alarms watch.
 
-- **AWS services:** Amazon SageMaker Model Monitor, SageMaker Clarify, Amazon
-  CloudWatch
-- **Local stand-ins:** SageMaker Monitor/Clarify and CloudWatch shims composed from
-  source; SHAP + CatBoost run directly
+![The monitoring pipeline](ch-11-model-monitoring/diagrams/png/fig_pipeline.png)
+
+- **AWS services:** Amazon SageMaker AI (Pipelines, Batch Transform, Processing),
+  Amazon ECR, AWS CodeBuild, Amazon S3, Amazon CloudWatch (metrics and alarms)
+- **Local stand-ins:** SageMaker local mode for the training and monitoring
+  containers, S3Proxy (S3), a from-source CloudWatch shim (CloudWatch); SHAP and
+  CatBoost run directly
 
 ## Chapter 12 — Governance
 
-*Scaffold in progress.* Model cards, the model registry, and lineage for
-auditors; least-privilege IAM; and a new model shipped with champion/challenger
-rollout and an A/B test, flipped through AppConfig feature flags with no redeploy.
+Model cards, the model registry, and lineage for auditors; least-privilege IAM;
+and a new model shipped with champion/challenger rollout, flipped through
+AppConfig feature flags with no redeploy. A FastAPI gateway routes each
+application to chapter 2's WOE scorecard or its monotone CatBoost challenger by
+the `challenger_rollout` flag, whose `split` rule buckets each loan
+deterministically, so widening the rollout is a flag edit and no loan flips back.
 
-- **AWS services:** Amazon SageMaker Model Cards, SageMaker Model Registry,
-  SageMaker ML Lineage, AWS AppConfig, AWS IAM
-- **Local stand-ins:** an AppConfig flag store + rule evaluator composed from
-  source (ION-format configuration)
+![The rollout and governance stack](ch-12-model-governance/diagrams/png/fig_aws.png)
+
+- **AWS services:** AWS AppConfig (with the AppConfig agent as an ECS sidecar),
+  Amazon ECS Fargate, Amazon ECR, AWS CodeBuild, Amazon SageMaker AI (endpoints,
+  Model Cards, Model Registry, ML Lineage), AWS IAM
+- **Local stand-ins:** the published AppConfig agent image in local development
+  mode, reading an Ion feature-flag file (AppConfig); Docker Compose (Fargate);
+  chapter 2's serving containers (SageMaker endpoints); the cards, registry, and
+  lineage written as JSON (SageMaker governance)
 
 ---
 
 ## Per-chapter deploy identities
 
-Each chapter deploys with its **own** scoped IAM role — `ch01-user` … `ch08-user` —
+Each chapter deploys with its **own** scoped IAM role — `ch01-user` … `ch12-user` —
 carrying only that chapter's permissions, instead of running everything as admin.
 Piling every chapter's permissions onto one admin user hits the IAM per-user policy
 quota (the "runs out of permissions" failure); one assumable role per chapter avoids
@@ -182,9 +208,7 @@ make -C code/ch-04-realtime-scoring/aws iam    # creates ch04-user from its depl
 ```
 
 `make iam` creates `chNN-user` trusting you to `sts:AssumeRole` and attaches that
-chapter's `deploy.json` inline. Re-run it after editing the policy. (ch-08 has no
-`aws/Makefile`, so its target is `make -C
-code/ch-08-selfservice-analytics iam`.)
+chapter's `deploy.json` inline. Re-run it after editing the policy.
 
 Then add a profile for the chapter to `~/.aws/config` and deploy under it:
 
