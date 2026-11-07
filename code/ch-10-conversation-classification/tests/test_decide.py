@@ -4,6 +4,8 @@ import categories
 import pytest
 from decide import question_for, record_for, route_one
 
+META = {"run_id": "run", "model": "fake", "backend": "fake"}
+
 LABELS = [
     "Bank Accounts",
     "Cards",
@@ -15,7 +17,7 @@ LABELS = [
 class FakeDecider:
     """A decision model that answers with whatever it was handed."""
 
-    device = "fake"
+    where = "fake"
 
     def __init__(self, team: str, probabilities: dict, confidence: float):
         """Hold the answer to return and record the question that was asked."""
@@ -67,16 +69,19 @@ def test_a_team_the_dataset_does_not_use_is_not_offered():
 def test_the_answer_is_read_without_parsing_any_text():
     """The chosen team, the distribution and the confidence come back as fields."""
     decider = FakeDecider("Cards", {"Cards": 0.8, "Bank Accounts": 0.2}, 0.73)
-    team, probs, confidence = route_one(decider, "my card was declined", {"team": {}})
+    team, probs, confidence, model = route_one(
+        decider, "my card was declined", {"team": {}}
+    )
     assert (team, confidence) == ("Cards", 0.73)
     assert probs == {"Cards": 0.8, "Bank Accounts": 0.2}
+    assert model == "fake"
     assert decider.asked[0][0] == "my card was declined"
 
 
 def test_a_confident_answer_is_routed():
     """Above the threshold the team stands and the distribution is kept for scoring."""
     record = record_for(
-        {"id": "1", "label": "Cards"}, "Cards", {"Cards": 0.9}, 0.9, 0.6, "run"
+        {"id": "1", "label": "Cards"}, "Cards", {"Cards": 0.9}, 0.9, 0.6, META
     )
     assert record["pred"] == "Cards"
     assert record["probs"] == {"Cards": 0.9}
@@ -86,7 +91,7 @@ def test_a_confident_answer_is_routed():
 def test_a_close_call_is_left_for_a_person_rather_than_routed():
     """Clear predictions below the confidence threshold and record the reason."""
     record = record_for(
-        {"id": "1", "label": "Cards"}, "Cards", {"Cards": 0.3}, 0.3, 0.6, "run"
+        {"id": "1", "label": "Cards"}, "Cards", {"Cards": 0.3}, 0.3, 0.6, META
     )
     assert record["pred"] == ""
     assert record["probs"] is None
@@ -97,7 +102,7 @@ def test_a_close_call_is_left_for_a_person_rather_than_routed():
 def test_a_threshold_of_zero_routes_everything():
     """The default policy routes every conversation, however close the call."""
     record = record_for(
-        {"id": "1", "label": "Cards"}, "Cards", {"Cards": 0.11}, 0.0, 0.0, "run"
+        {"id": "1", "label": "Cards"}, "Cards", {"Cards": 0.11}, 0.0, 0.0, META
     )
     assert record["pred"] == "Cards"
 
@@ -106,3 +111,17 @@ def test_a_threshold_of_zero_routes_everything():
 def test_either_variant_asks_exactly_one_question(described):
     """Generate one choice question for either prompt variant."""
     assert list(question_for(LABELS, described=described)) == ["team"]
+
+
+def test_the_record_says_which_model_answered():
+    """Two backends write into the same file shape, so provenance travels with it.
+
+    Comparing a Strands Decider run against a Kev run later depends on the rows
+    saying which one produced them.
+    """
+    record = record_for(
+        {"id": "1", "label": "Cards"}, "Cards", {"Cards": 0.9}, 0.9, 0.0, META
+    )
+    assert record["model"] == "fake"
+    assert record["backend"] == "fake"
+    assert record["run_id"] == "run"

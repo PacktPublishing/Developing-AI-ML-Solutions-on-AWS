@@ -1,4 +1,4 @@
-.PHONY: up prepare classify decide route eval all down lint test diagrams
+.PHONY: up prepare classify decide serve-decider route eval all down lint test diagrams
 
 # the whole local flow in one command: the local S3, the datasets, the batch classification
 # (local Ollama), the routing, and the evaluation. make down when done.
@@ -15,6 +15,7 @@ export PYTHONPATH := $(CURDIR)/src
 COMPOSE := docker compose -f local/batch-stack.yml
 BUCKET ?= ch10-batch
 DATASET ?= conversations
+DECIDER_CHECKPOINT ?= StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
 # prompt variant: a (bare category names) or b (defined category borders).
 # classify also takes c (borders plus few-shot); decide takes a or b.
 VARIANT ?= a
@@ -40,14 +41,25 @@ classify:
 	uv run src/classify.py --dataset $(DATASET) --bucket $(BUCKET) --variant $(VARIANT) $(if $(LIMIT),--limit $(LIMIT),)
 
 # decide: route the same conversations with a decision model rather than an LLM.
-# DECIDER_LOCAL=1 loads the model into this process; unset it and set
-# AGENT_RUNTIME_ARN to call the AgentCore Runtime endpoint instead. THRESHOLD is
-# the confidence below which a conversation is left for a person.
-export DECIDER_LOCAL ?= 1
+# local loads the model here; http points at any System One server (Strands
+# Decider's or Kev's, they serve the same endpoint); agentcore needs
+# AGENT_RUNTIME_ARN. THRESHOLD is the confidence below which a conversation is
+# left for a person.
+export DECIDER_BACKEND ?= local
+export DECIDER_URL ?=
 THRESHOLD ?= 0
 decide:
 	uv run --with strands-decider src/decide.py --dataset $(DATASET) \
 		--variant $(VARIANT) --threshold $(THRESHOLD) $(if $(LIMIT),--limit $(LIMIT),)
+
+# serve-decider: the baseline model behind an HTTP server, so `make decide
+# DECIDER_BACKEND=http DECIDER_URL=http://127.0.0.1:8009` reaches it the same
+# way it reaches Kev or AgentCore.
+# 8009 is a common default for these servers and collides easily; override with
+# PORT= if 8019 is taken too.
+PORT ?= 8019
+serve-decider:
+	uv run --with strands-decider strands-decider serve $(DECIDER_CHECKPOINT) --port $(PORT)
 
 # route: publish each classified conversation to its team's topic (from-source SNS)
 route:

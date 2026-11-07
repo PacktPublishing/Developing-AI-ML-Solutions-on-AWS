@@ -35,14 +35,30 @@ def question_for(labels: list[str], described: bool) -> dict:
     }
 
 
-def route_one(decider, text: str, question: dict) -> tuple[str, dict, float]:
-    """Return the team, the distribution over teams, and the confidence."""
-    answer = decider.decide(text, question)["answers"]["team"]
-    return answer["choice"], answer["probabilities"], answer["confidence"]
+def route_one(decider, text: str, question: dict) -> tuple[str, dict, float, str]:
+    """Return the team, the distribution over teams, the confidence, and the model.
+
+    The model comes back from the backend rather than from configuration, so a
+    predictions file records which model actually answered. That is what lets a
+    Strands Decider run and a Kev run be compared after the fact.
+    """
+    response = decider.decide(text, question)
+    answer = response["answers"]["team"]
+    return (
+        answer["choice"],
+        answer["probabilities"],
+        answer["confidence"],
+        str(response.get("model") or "unnamed"),
+    )
 
 
 def record_for(
-    row: dict, team: str, probs: dict, confidence: float, threshold: float, run_id: str
+    row: dict,
+    team: str,
+    probs: dict,
+    confidence: float,
+    threshold: float,
+    meta: dict,
 ) -> dict:
     """Build a prediction record, clearing predictions below the confidence threshold."""
     record = {
@@ -51,7 +67,7 @@ def record_for(
         "pred": team,
         "probs": probs,
         "confidence": confidence,
-        "run_id": run_id,
+        **meta,
     }
     if confidence < threshold:
         record["pred"] = ""
@@ -94,7 +110,7 @@ def main() -> None:
     question = question_for(labels, described=a.variant == "b")
     run_id = new_run_id()
     decider = get_decider()
-    print(f"decision model on {decider.device}, variant {a.variant}, {len(rows)} rows")
+    print(f"decision model on {decider.where}, variant {a.variant}, {len(rows)} rows")
 
     out = a.out or a.data / f"{a.dataset}.predictions.jsonl"
     latencies = []
@@ -102,9 +118,10 @@ def main() -> None:
     with out.open("w", encoding="utf-8") as f:
         for row in rows:
             started = time.perf_counter()
-            team, probs, confidence = route_one(decider, row["text"], question)
+            team, probs, confidence, model = route_one(decider, row["text"], question)
             latencies.append(time.perf_counter() - started)
-            record = record_for(row, team, probs, confidence, a.threshold, run_id)
+            meta = {"run_id": run_id, "model": model, "backend": decider.where}
+            record = record_for(row, team, probs, confidence, a.threshold, meta)
             if not record["pred"]:
                 held += 1
             elif team == row["label"]:

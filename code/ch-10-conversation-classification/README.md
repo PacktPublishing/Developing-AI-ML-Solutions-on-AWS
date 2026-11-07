@@ -36,6 +36,40 @@ make eval                     # the same scoring, on a real distribution
 make decide VARIANT=b THRESHOLD=0.6   # hold the close calls back for a person
 ```
 
+### Swapping the model
+
+A decision model is an interface, not a product, so the chapter treats it as one.
+`DECIDER_BACKEND` picks where the answer comes from:
+
+| backend | what answers | needs |
+| --- | --- | --- |
+| `local` | the model in this process | nothing but the checkpoint |
+| `http` | any System One server | `DECIDER_URL` |
+| `agentcore` | an AgentCore Runtime endpoint | `AGENT_RUNTIME_ARN` |
+
+The `http` backend is the interesting one. Strands Decider and
+[Kev](https://github.com/jaredpalmer/kev) both serve `POST /v1/systemone` with
+the same request and the same response, so changing which model routes your
+conversations is changing a URL:
+
+```
+make serve-decider                                     # the baseline, port 8019
+make decide DECIDER_BACKEND=http DECIDER_URL=http://127.0.0.1:8019
+
+# or point at Kev instead, started from its own repo, and change nothing else
+#   uv run -m kev.serve --run jaredpalmer/kev-4b --port 8019
+make decide DECIDER_BACKEND=http DECIDER_URL=http://127.0.0.1:8019
+```
+
+Every prediction records the `model` that answered and the `backend` it came
+from, taken from the response rather than from configuration, so two runs remain
+comparable after the fact.
+
+TypeSafe's Jev is the one that cannot be swapped in this way. It is a hosted API
+with no released weights, so there is nothing to run behind `http` or to put in
+an AgentCore container, and the conversations would leave your account to reach
+it. The chapter uses it as a contrast, not as a backend.
+
 Locally, **Bedrock batch is a from-source shim**: `create_model_invocation_job`
 runs as a background thread that reads the JSONL shards from S3Proxy, invokes the
 model on each record through the Ollama-backed model seam, and writes `.jsonl.out`

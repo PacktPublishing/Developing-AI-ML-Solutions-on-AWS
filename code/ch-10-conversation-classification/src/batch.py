@@ -135,7 +135,9 @@ class LocalBedrockBatch:
             )
             job["totalRecordCount"] = job["processedRecordCount"]
             job["status"] = "Completed"
-        except Exception as exc:  # noqa: BLE001 - surface the failure in the job status like Bedrock
+        # The job boundary catches anything: a thread that raises here would lose
+        # the job, where the service records a Failed job and its message.
+        except Exception as exc:
             job["status"] = "Failed"
             job["message"] = str(exc)
 
