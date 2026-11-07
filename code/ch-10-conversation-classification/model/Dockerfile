@@ -33,19 +33,20 @@ ENV HF_HOME=/opt/models
 RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('${CHECKPOINT}'); snapshot_download('Qwen/Qwen3.5-2B-Base')" \
     && chmod -R a+rX /opt/models
 
-# cuda on an endpoint, cpu when local mode runs this on a machine without one.
+WORKDIR /opt/program
+COPY serve.py entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
+# cuda on an endpoint, cpu when local mode runs this where there is none.
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/program \
     CHECKPOINT=${CHECKPOINT} \
     DEVICE=cuda
 
 EXPOSE 8080
 
-# SageMaker starts a container with `docker run <image> serve`, and that
-# argument replaces CMD, so a command named serve has to exist on PATH or the
-# container exits with CannotStartContainerError and logs nothing. 0.0.0.0
-# rather than the default 127.0.0.1, because SageMaker reaches it from outside.
-RUN printf '%s\n' '#!/bin/sh' \
-    'exec strands-decider serve "$CHECKPOINT" --host 0.0.0.0 --port 8080 --device "$DEVICE"' \
-    > /usr/local/bin/serve && chmod +x /usr/local/bin/serve
-
-CMD ["serve"]
+# SageMaker starts the image as `... serve`, and that argument would replace a
+# CMD. An ENTRYPOINT takes it as an argument instead, which is why every serving
+# image in this book is started this way rather than through a command called
+# serve on PATH.
+ENTRYPOINT ["./entrypoint.sh"]

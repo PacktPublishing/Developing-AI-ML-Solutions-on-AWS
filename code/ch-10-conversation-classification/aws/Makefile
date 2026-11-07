@@ -89,7 +89,7 @@ decider-round:
 # inside its 60 second limit on the first request.
 image:
 	rm -rf /tmp/ch10-build && mkdir -p /tmp/ch10-build
-	cp ../model/Dockerfile /tmp/ch10-build/
+	cp ../model/Dockerfile ../model/serve.py ../model/entrypoint.sh /tmp/ch10-build/
 	cp buildspec.yml /tmp/ch10-build/
 	rm -f /tmp/ch10-src.zip && cd /tmp/ch10-build && zip -qr /tmp/ch10-src.zip . -x '*__pycache__*'
 	@BUCKET=$$(aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) \
