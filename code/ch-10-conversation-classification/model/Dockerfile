@@ -49,4 +49,12 @@ EXPOSE 8080
 # CMD. An ENTRYPOINT takes it as an argument instead, which is why every serving
 # image in this book is started this way rather than through a command called
 # serve on PATH.
+#
+# Overriding the base image's own ENTRYPOINT is the point here, not a detail.
+# SageMaker Distribution ships an inference server of its own, at
+# /etc/sagemaker-inference-server, which expects a handler at
+# /opt/ml/model/inference.py and ignores a CMD entirely. Either write that
+# handler and let its server call you, or take the entrypoint and run your own.
+# This runs its own, because strands-decider already serves the System One
+# contract and an inference.py would mean reimplementing the schema.
 ENTRYPOINT ["./entrypoint.sh"]
