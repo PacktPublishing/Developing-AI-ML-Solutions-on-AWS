@@ -26,6 +26,16 @@ make eval                     # accuracy, macro-F1, multiclass Brier, skill scor
 make down
 ```
 
+The same conversations route through a decision model instead, which needs no
+batch job and no S3 at all:
+
+```
+make decide VARIANT=b         # one typed question per conversation
+make route                    # the same routing, from the same predictions file
+make eval                     # the same scoring, on a real distribution
+make decide VARIANT=b THRESHOLD=0.6   # hold the close calls back for a person
+```
+
 Locally, **Bedrock batch is a from-source shim**: `create_model_invocation_job`
 runs as a background thread that reads the JSONL shards from S3Proxy, invokes the
 model on each record through the Ollama-backed model seam, and writes `.jsonl.out`
@@ -75,6 +85,75 @@ that produced a forecast, because a record with no prediction has no distributio
 to score, and scoring it as an all-zero vector used to flatter it above a wrong
 answer that at least committed to something.
 
+## The decision model
+
+[Strands Decider 2B](https://strandsagents.com/blog/introducing-strands-decider/)
+keeps a Qwen3.5-2B-Base torso, drops the text-generation head, and puts a pointer
+head of about a million parameters in its place. That head scores the options a
+question supplies in one forward pass, and a softmax over those scores is the
+answer, so a `choice` question comes back as the chosen option, a probability for
+every option, and a confidence. There is no text, which is why there is nothing to
+parse and nothing to truncate: the failure modes the batch path has to defend
+against cannot arise here.
+
+Confidence is normalised max-probability, `(N * p_max - 1) / (N - 1)`, so it means
+the same thing for three options as for ten and one `THRESHOLD` keeps holding as
+the team list grows.
+
+Two things worth knowing before building on it:
+
+- The checkpoint is Apache-2.0 and is two downloads, not one: the adapter and head
+  are about 0.235 GB, and the Qwen3.5-2B-Base torso underneath is another 4.571 GB,
+  fetched on first load. That split is why the AWS side keeps weights on a volume
+  rather than in a container image.
+- `strands-decider` is version 0.3.0 and its own description calls it an
+  experimental typed classifier. Pin it, and expect the API to move.
+
+Latency scales with the length of the state, so the sub-200 ms figures quoted for
+short tasks are not what a multi-turn transcript costs; see the numbers below.
+
+## Two routers, one question
+
+Both routers answer the same question about the same 320 conversations, briefed
+from the same definitions in `src/categories.py`. Measured on 2026-11-07, the
+decision model on an M3 laptop and the zero-shot LLM through the local batch shim:
+
+| router | accuracy | macro-F1 | Brier | Brier Index | coverage |
+| --- | --- | --- | --- | --- | --- |
+| decision model, variant b | 0.666 | 0.666 | 0.515 | 78.6% | 1.000 |
+| zero-shot LLM, variant a (Qwen3 0.6b) | 0.156 | 0.059 | 1.687 | 61.9% | 0.997 |
+
+The accuracy gap is not the interesting part, because the local LLM is a 0.6b
+model and Claude Haiku 4.5 scored 0.69 on these same conversations in the cloud
+round above. The interesting part is that a 2B model reading nothing but the
+conversation, on a laptop, with no job to submit and no answer to parse, lands
+within three points of it.
+
+Two differences matter more than the accuracy:
+
+- **Where the predictions go.** The LLM collapsed 223 of 320 conversations into
+  Bank Accounts and 96 into Investment Funds, leaving seven of the ten teams with
+  nothing at all, which is why its macro-F1 is 0.059 against an accuracy of 0.156.
+  The decision model put conversations in every queue.
+- **What the probabilities are worth.** The LLM has to be talked into emitting a
+  distribution and then checked, and on the local model it mostly fails: asked for
+  one, Qwen3 0.6b answered `1.0` for several categories at once and 50 of 60
+  records were refused. The decision model's distribution is a softmax over the
+  options, so it always sums to one and there is nothing to validate.
+
+Describing the team borders is worth about five points (62.5% to 67.5% over the
+first 40 conversations), the same direction the prompt variants move the LLM.
+
+Confidence is the part with no LLM equivalent. Holding back the conversations the
+model is least sure of trades coverage for quality, and the chapter's own metrics
+show the trade: at `THRESHOLD=0.6`, coverage falls to 0.800 and the Brier over
+what remains improves from 0.496 to 0.409. Those eight conversations in a hundred
+are the ones worth a person's time.
+
+Latency is about 1.9 s per conversation on an M3 across the full 320, around ten
+minutes for the set. That is far off the sub-200 ms figures quoted for short
+tasks, because a multi-turn transcript is a long state and latency grows with it.
+
 ## Datasets
 
 - [`oopere/RetailBanking-Conversations`](https://huggingface.co/datasets/oopere/RetailBanking-Conversations)
@@ -89,6 +168,13 @@ answer that at least committed to something.
 - `src/batch.py`: the batch-inference seam — real Bedrock, or the local from-source
   batch shim over S3Proxy + Ollama
 - `src/classify.py`: build the Converse manifest, submit the job, collect, map to categories
+- `src/categories.py`: where each team's work begins and ends, written once and
+  read by both routers, so comparing them compares the routers
+- `src/decider.py`: the decision-model seam, either the model loaded in this
+  process or an AgentCore Runtime endpoint
+- `src/decide.py`: ask one typed question per conversation, route on the answer,
+  and hold back the close calls
+- `src/runs.py`: one identifier per run, so two runs' outputs can be told apart
 - `src/sns.py` + `src/route.py`: the routing seam — real SNS, or the local file-inbox shim
 - `src/evaluate.py`: accuracy and coverage, macro-F1, and the raw multiclass
   Brier plus a skill score, over the records that produced a forecast
@@ -96,6 +182,8 @@ answer that at least committed to something.
   the job statuses that mean a job has stopped moving
 - `tests/test_evaluate.py`: the scoring maths, and what a missing prediction
   does and does not score
+- `tests/test_decide.py`: the question put to the decision model, and the
+  confidence policy applied to its answer
 
 ## The Brier Index, one-vs-rest
 
@@ -120,9 +208,12 @@ labels the Brier is just twice the error rate.
 
 ## AWS services and local stand-ins
 
-- **AWS services:** Amazon Bedrock (batch inference, Converse), Amazon SNS, Amazon S3
+- **AWS services:** Amazon Bedrock (batch inference, Converse), Amazon Bedrock
+  AgentCore Runtime (the decision model, on the Instances compute type), Amazon
+  SNS, Amazon S3
 - **Local stand-ins:** a from-source Bedrock batch shim over S3Proxy + Ollama, a
-  from-source SNS shim (file inboxes), S3Proxy (S3)
+  from-source SNS shim (file inboxes), S3Proxy (S3), and for the decision model
+  no stand-in at all: the same 2B checkpoint that runs on AgentCore runs here
 
 ## Run it on AWS
 

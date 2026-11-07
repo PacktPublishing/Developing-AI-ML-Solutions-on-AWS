@@ -18,11 +18,12 @@ import math
 import os
 import re
 import time
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import categories
 from batch import get_bedrock, s3_client
+from runs import new_run_id
 from models import TEXT_MODEL, answer_text
 
 INSTRUCTION = (
@@ -37,21 +38,14 @@ INSTRUCTION_PROBS = (
 )
 
 # Variant B defines each category and adds rules for overlapping topics.
+# The definitions live in categories.py because the decision model in decide.py is
+# briefed from the same text, so the two routers can be compared fairly.
 INSTRUCTION_B = (
     "You are a bank's conversation router. Choose the ONE category the conversation is"
     " mainly about, using these definitions:\n"
-    "- Bank Accounts: current/checking accounts, statements, fees, balances.\n"
-    "- Cards: debit/credit cards, activation, limits, lost or stolen, card fraud.\n"
-    "- Customer Rewards: points, cashback, loyalty, referrals.\n"
-    "- Digital Banking: the mobile app or online banking, login, passwords, transfers, errors.\n"
-    "- Insurance: policies and claims (life, home, travel, health).\n"
-    "- Investment Funds: mutual funds, ETFs, brokerage, buying/selling securities.\n"
-    "- Mortgages: home/property loans, rates, refinancing.\n"
-    "- Pension Plans: retirement/pension contributions and withdrawals.\n"
-    "- Personal Loans: unsecured consumer loans and their repayment (not property).\n"
-    "- Savings & Deposits: savings accounts and fixed/term deposits and their interest ONLY.\n"
-    "Rules: borrowing money is Personal Loans or Mortgages, never Savings & Deposits;"
-    " app/login/transfer issues are Digital Banking."
+    + categories.as_lines()
+    + "\n"
+    + categories.RULES
 )
 
 # Variant C adds one example per category, written independently of the dataset.
@@ -313,11 +307,6 @@ def collect(
                     continue
                 preds[record_id] = {"pred": label, "probs": None}
     return preds, failures
-
-
-def new_run_id() -> str:
-    """Return an identifier unique to one run, legal in a Bedrock job name."""
-    return f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
 
 
 def classify(

@@ -1,4 +1,4 @@
-.PHONY: up prepare classify route eval all down lint test diagrams
+.PHONY: up prepare classify decide route eval all down lint test diagrams
 
 # the whole local flow in one command: the local S3, the datasets, the batch classification
 # (local Ollama), the routing, and the evaluation. make down when done.
@@ -15,7 +15,8 @@ export PYTHONPATH := $(CURDIR)/src
 COMPOSE := docker compose -f local/batch-stack.yml
 BUCKET ?= ch10-batch
 DATASET ?= conversations
-# prompt variant: a (bare category names) or b (defined category borders)
+# prompt variant: a (bare category names) or b (defined category borders).
+# classify also takes c (borders plus few-shot); decide takes a or b.
 VARIANT ?= a
 
 # Local by default: Bedrock is the Ollama-backed batch shim, S3 is S3Proxy.
@@ -37,6 +38,16 @@ prepare:
 # classify: run the batch inference job (local shim here) and score it
 classify:
 	uv run src/classify.py --dataset $(DATASET) --bucket $(BUCKET) --variant $(VARIANT) $(if $(LIMIT),--limit $(LIMIT),)
+
+# decide: route the same conversations with a decision model rather than an LLM.
+# DECIDER_LOCAL=1 loads the model into this process; unset it and set
+# AGENT_RUNTIME_ARN to call the AgentCore Runtime endpoint instead. THRESHOLD is
+# the confidence below which a conversation is left for a person.
+export DECIDER_LOCAL ?= 1
+THRESHOLD ?= 0
+decide:
+	uv run --with strands-decider src/decide.py --dataset $(DATASET) \
+		--variant $(VARIANT) --threshold $(THRESHOLD) $(if $(LIMIT),--limit $(LIMIT),)
 
 # route: publish each classified conversation to its team's topic (from-source SNS)
 route:
