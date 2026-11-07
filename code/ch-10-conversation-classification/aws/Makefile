@@ -66,9 +66,10 @@ eval:
 # -------------------------------------------------------------------------------
 decider-round:
 	$(MAKE) deploy WITH_DECIDER=true
-	$(MAKE) image
 	$(MAKE) agent
-	$(MAKE) deploy WITH_DECIDER=true DECIDER_IMAGE=$(DECIDER_REPO):latest AGENT_KEY=agent.zip
+	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=agent.zip
+	$(MAKE) image
+	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=agent.zip DECIDER_IMAGE=$(DECIDER_REPO):latest
 	$(MAKE) decide
 	$(MAKE) eval
 

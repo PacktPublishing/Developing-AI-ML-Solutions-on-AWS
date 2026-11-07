@@ -52,9 +52,12 @@ Conditions:
         - !Ref DeciderImageUri
         - ""
 
-  # The agent needs its zip uploaded, which `make agent` does.
+  # The agent needs only its zip, not the endpoint: it carries the endpoint's
+  # name, and IAM can grant on an ARN before the resource exists. So the agent
+  # deploys in minutes, before the long image build, which is the order that
+  # finds a packaging mistake early.
   AgentReady: !And
-    - !Condition DeciderReady
+    - !Condition DeployDecider
     - !Not
       - !Equals
         - !Ref AgentCodeKey
