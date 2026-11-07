@@ -80,7 +80,7 @@ decider-round:
 	$(MAKE) agent
 	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=$$(cat /tmp/ch10-agent.key)
 	$(MAKE) image
-	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=$$(cat /tmp/ch10-agent.key) DECIDER_IMAGE=$(DECIDER_REPO):latest
+	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=$$(cat /tmp/ch10-agent.key) DECIDER_IMAGE=$(DECIDER_REPO):$$(cat /tmp/ch10-image.tag)
 	$(MAKE) decide
 	$(MAKE) eval
 
@@ -95,13 +95,17 @@ image:
 	@BUCKET=$$(aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) \
 			--query "Stacks[0].Outputs[?OutputKey=='DeciderSourceBucket'].OutputValue" --output text); \
 		aws s3 cp /tmp/ch10-src.zip s3://$$BUCKET/src.zip --region $(REGION); \
+		TAG=img-$$(shasum -a 256 /tmp/ch10-src.zip | cut -c1-12); \
+		echo $$TAG > /tmp/ch10-image.tag; \
 		ID=$$(aws codebuild start-build --region $(REGION) --project-name ch10-decider-build \
+			--environment-variables-override name=TAG,value=$$TAG,type=PLAINTEXT \
 			--query 'build.id' --output text); \
 		echo "build $$ID"; \
 		while STATUS=$$(aws codebuild batch-get-builds --region $(REGION) --ids $$ID \
 			--query 'builds[0].buildStatus' --output text); \
 			[ "$$STATUS" = "IN_PROGRESS" ]; do sleep 20; echo "  $$STATUS"; done; \
-			echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]
+			echo "$$STATUS"; [ "$$STATUS" = "SUCCEEDED" ]; \
+			echo "pushed $$(cat /tmp/ch10-image.tag)"
 
 # agent: the routing agent as a zip, for direct code deployment. arm64 wheels,
 # because AgentCore Runtime is arm64 only. categories.py travels with it, so the

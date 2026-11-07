@@ -1,7 +1,10 @@
 version: 0.2
 
 # The decision model's inference image. REPO and AWS_DEFAULT_REGION come from
-# the CodeBuild project; model/Dockerfile sits at the zip root beside this file.
+# the CodeBuild project, and TAG is passed per build. The image is pushed under
+# both that tag and latest: latest is for a person reading the console, and the
+# unique tag is what the stack deploys, because CloudFormation updates a model
+# when its parameters change and :latest never changes.
 # The build bakes in 4.5 GB of weights, so it is slow and needs the disk of a
 # LARGE compute type.
 phases:
@@ -11,7 +14,8 @@ phases:
       - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
   build:
     commands:
-      - docker build -t "$REPO:latest" .
+      - docker build -t "$REPO:$TAG" -t "$REPO:latest" .
   post_build:
     commands:
+      - docker push "$REPO:$TAG"
       - docker push "$REPO:latest"
