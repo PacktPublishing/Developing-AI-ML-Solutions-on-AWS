@@ -1,15 +1,7 @@
-"""Debt-to-income arithmetic for the underwriting agent.
+"""Calculate loan instalments, debt-to-income ratios and maximum loan amounts.
 
-The knowledge base answers what was decided before. This answers what the
-numbers allow now: the instalment a loan implies, the DTI that produces, and
-the largest amount that still sits inside a DTI ceiling.
-
-Kept free of any model or store so it can be unit-tested on its own, and so the
-agent tool wrapping it has nothing to do but call it. A model fills these
-arguments in from a conversation, so every entry point validates the same way
-through the checks below: a negative principal has no instalment, and a
-negative tenor has no largest affordable amount, and both are easier to catch
-here than to recognise in an answer.
+Shared validation checks numeric inputs and permitted ranges before calculation.
+Agent tools call these functions with the configured DTI ceiling.
 
 Usage:
     from affordability import dti, max_affordable_amount
@@ -19,12 +11,10 @@ import math
 import os
 from dataclasses import dataclass
 
-# The debt-to-income ceiling is credit policy, not a per-question choice. It lives
-# here so a caller cannot supply its own, which an agent will otherwise do.
+# DTI ceiling used by the agent tools.
 CEILING_PERCENT = float(os.environ.get("DTI_CEILING_PERCENT", "40"))
 
-# Outer bounds, wide enough that no real request meets them and narrow enough
-# that a misread figure or a model's placeholder does.
+# Validation limits for the example loan calculations.
 MAX_AMOUNT = 1e12
 MAX_RATE_PERCENT = 200.0
 MAX_TENOR_MONTHS = 600
@@ -55,11 +45,7 @@ def _number(name: str, value: float) -> float:
 
 
 def _months(tenor_months: int) -> int:
-    """Return the tenor as a whole number of months inside the allowed range.
-
-    A tenor is a count of payments, so 12.5 months is not a shorter loan, it is
-    a mistake. An integral float passes because a model's JSON says 12.0.
-    """
+    """Validate and return a whole-number tenor within the permitted range."""
     # True is an integer in Python and would pass as a one month tenor
     if tenor_months is True or tenor_months is False:
         raise ValueError("tenor_months must be a whole number of months")
@@ -145,14 +131,11 @@ def max_affordable_amount(
     tenor_months: int,
     ceiling_percent: float = 40.0,
 ) -> float:
-    """Return the largest amount whose instalment keeps DTI at or under the ceiling.
-
-    Inverts the annuity formula rather than searching, so the answer is exact.
-    """
+    """Invert the annuity formula and return the maximum loan amount rounded to cents."""
     income, repayments, ceiling = _capacity(
         monthly_income, existing_repayments, ceiling_percent
     )
-    # the amount is what this answers, so only the rate and the tenor are checked
+    # Validate rate and tenor before calculating the principal.
     _, rate, months = _terms(0.0, annual_rate_percent, tenor_months)
     budget = income * ceiling / 100.0 - repayments
     if budget <= 0:

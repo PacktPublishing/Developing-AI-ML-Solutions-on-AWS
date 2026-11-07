@@ -1,12 +1,12 @@
 # /// script
 # dependencies = ["catboost", "pandas", "numpy"]
 # ///
-"""The attribution-drift monitor: SHAP feature rankings compared with NDCG.
+"""Compare mean absolute CatBoost SHAP contributions using NDCG.
 
-Mirrors SageMaker Clarify's feature-attribution drift: rank features by mean
-absolute SHAP contribution and report the NDCG of the current ranking against
-the reference ranking (1.0 = unchanged, below NDCG_MIN = drift). analysis_json
-renders the ranking as Clarify's explainability report.
+Order current contributions by the reference ranking and divide their discounted
+sum by the ideal discounted sum of current contributions. Values below NDCG_MIN
+trigger a drift violation. analysis_json writes the attributions in a custom
+report using field names based on Clarify reports.
 
 Usage:
   from attribution import attribution_ndcg, attributions
@@ -40,7 +40,7 @@ def attribution_ndcg(ref_attr: pd.Series, cur_attr: pd.Series) -> float:
 
 
 def analysis_json(model, df: pd.DataFrame) -> dict:
-    """Render Clarify's explainability report: global mean-abs SHAP per feature."""
+    """Return CatBoost attributions and mean predicted probability in report fields."""
     attr = attributions(model, df)
     return {
         "explanations": {

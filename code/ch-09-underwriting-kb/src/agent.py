@@ -1,15 +1,12 @@
 # /// script
 # dependencies = ["boto3", "ollama", "opensearch-py", "strands-agents"]
 # ///
-"""The underwriting agent: the memo knowledge base plus affordability arithmetic.
+"""Provide an underwriting agent with retrieval and affordability tools.
 
-Retrieval alone answers what was decided before. An underwriter also asks what
-the numbers allow now, and that is arithmetic rather than recall, so it is a
-tool the agent calls instead of something the model is asked to work out.
+Tools search archived memos, read case documents and calculate loan affordability.
 
 Usage (from the chapter root):
-  PYTHONPATH=src uv run src/agent.py --ask \
-      "Review CASE-20260000 for a 12 month facility at 18 percent."
+  PYTHONPATH=src uv run src/agent.py --ask       "Review CASE-20260000 for a 12 month facility at 18 percent."
 """
 
 import argparse
@@ -64,17 +61,12 @@ def search_memos(query: str, k: int = 5) -> str:
 # -------------------------------------------------------------------------------
 @tool
 def read_case(case_id: str) -> dict:
-    """Return the figures parsed from the applicant's uploaded bank statement.
+    """Return parsed figures and reconciliation status for the latest statement.
 
-    The income and existing repayments come from totalling the statement at
-    upload, not from reading the text, so the affordability tools are given
-    figures rather than an impression of them.
-
-    `monthly_income` is the income the policy allows a ratio to use, which is
-    not the total of the credits: own-account transfers, asset sales and loan
-    disbursements are listed in `excluded_inflows` and left out. `reconciliation`
-    is reconciled, breaks, or not_checked, and not_checked is not a pass.
-    The newest upload answers, and `version` says which one that was.
+    monthly_income excludes credits matched by the parser's exclusion patterns.
+    excluded_inflows lists those credits. reconciliation is reconciled, breaks or
+    not_checked; not_checked means reconciliation was not performed. version
+    identifies the upload used for these figures.
     """
     doc = get_store().read_submission(case_id)
     if not doc:
@@ -97,14 +89,10 @@ def read_case(case_id: str) -> dict:
 # -------------------------------------------------------------------------------
 @tool
 def read_context(case_id: str) -> dict:
-    """Return the supporting documents an underwriter added to this case.
+    """Return supporting documents and their model-extracted readings for a case.
 
-    A tax filing, an invoice, a contract, a page of management accounts: what
-    the applicant sent besides the bank statement. Each was read by the document
-    reader at upload, and each carries what that reading found and the document's
-    own text. The figures in them are the document's claims, not verified
-    income: the affordability arithmetic still comes from read_case. Name the
-    document when you use something from it, so the underwriter can check it.
+    Treat their figures as unverified document claims. Use read_case for statement
+    figures in affordability calculations, and name any supporting document cited.
     """
     documents = get_store().list_submissions(case_id, source="context")
     if not documents:
@@ -134,11 +122,7 @@ def assess_affordability(
     annual_rate_percent: float,
     tenor_months: int,
 ) -> dict:
-    """Return the instalment, DTI percent, and headroom for one proposed loan.
-
-    The DTI ceiling is credit policy and is not an argument: it comes from
-    configuration, so the answer cannot drift onto a limit nobody approved.
-    """
+    """Return instalment, DTI and headroom using the configured DTI ceiling."""
     result = dti(
         monthly_income,
         existing_repayments,
@@ -198,7 +182,7 @@ def build_model():
 
 
 def build_agent() -> Agent:
-    """Build the agent with the memo search and the two affordability tools."""
+    """Build the agent with memo search, case-document and affordability tools."""
     return Agent(
         model=build_model(),
         tools=[

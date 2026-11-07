@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["boto3", "pyarrow", "pyiceberg[s3fs]"]
 # ///
-"""A better table: applications as Iceberg, appended and read back.
+"""Write application records to an Iceberg table and read them back.
 
 Usage:
   uv run lake-basics/iceberg_applications.py

@@ -1,6 +1,6 @@
 """The challenger model: a second logistic PD with different weights.
 
-The hypothesis the gateway averages against the champion: same features, heavier on utilization and delinquency, lighter on debt-to-income.
+Use the champion feature set with different weights for utilisation, delinquency and debt-to-income.
 """
 
 import math

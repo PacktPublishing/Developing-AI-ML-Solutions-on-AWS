@@ -1,11 +1,6 @@
-"""The document reader: what is sent, what is refused, what comes back.
+"""Test document validation, Converse requests, response parsing and indexing.
 
-The reading itself is a model's work and is not asserted here. What is asserted
-is the contract around it: the file goes to Bedrock as a document block, a file
-Converse will not take is refused before the call, an answer that is not the
-JSON that was asked for is kept as the model's words rather than invented into
-fields, and the document's own text is indexed beside the reading so an answer
-can be checked against the page.
+Use a stub runtime to check request and response handling without model calls.
 """
 
 import json
@@ -73,7 +68,7 @@ def filing(tmp_path):
 # What goes to the model
 # ---------------------------------------------------------------------------
 def test_the_pdf_itself_is_sent_as_a_document_block(filing):
-    """Bedrock reads the file, so the bytes travel, not a transcription."""
+    """Send PDF bytes in a Converse document block."""
     runtime = FakeRuntime(json.dumps(ANSWER))
     read_document(filing, runtime, model="test-model")
     content = runtime.call["messages"][0]["content"]
@@ -86,7 +81,7 @@ def test_the_pdf_itself_is_sent_as_a_document_block(filing):
 
 
 def test_the_document_name_survives_but_loses_what_a_name_may_not_hold(filing):
-    """The model refers to the document by name, so the name has to be clean."""
+    """Sanitise the document name for the Converse request."""
     runtime = FakeRuntime(json.dumps(ANSWER))
     reading = read_document(filing, runtime)
     assert reading.doc_name == "tax filing 2025"
@@ -96,7 +91,7 @@ def test_the_document_name_survives_but_loses_what_a_name_may_not_hold(filing):
 # What is refused, before the call
 # ---------------------------------------------------------------------------
 def test_a_format_converse_does_not_take_is_refused(tmp_path):
-    """A refusal here costs nothing; a refusal from the service costs a call."""
+    """Reject unsupported document formats before invoking the runtime."""
     path = tmp_path / "scan.tiff"
     path.write_bytes(b"II*\x00")
     with pytest.raises(Unsupported, match="not a format"):
@@ -104,7 +99,7 @@ def test_a_format_converse_does_not_take_is_refused(tmp_path):
 
 
 def test_an_empty_file_is_refused(tmp_path):
-    """An empty upload is a failed upload, not a document with nothing in it."""
+    """Reject an empty document upload."""
     path = tmp_path / "empty.pdf"
     path.write_bytes(b"")
     with pytest.raises(Unsupported, match="empty"):
@@ -120,7 +115,7 @@ def test_a_file_over_the_document_block_limit_is_refused(tmp_path):
 
 
 def test_a_supporting_document_needs_a_case(filing):
-    """Filed under no case, a document answers for every case."""
+    """Reject a supporting document without a case reference."""
     with pytest.raises(Unsupported, match="case"):
         documents.submit(filing, "", None, FakeRuntime(json.dumps(ANSWER)))
 
@@ -139,7 +134,7 @@ def test_the_reading_carries_the_fields_the_model_filled_in(filing):
 
 
 def test_json_wrapped_in_prose_is_still_read(filing):
-    """A small local model explains itself first; the object is still in there."""
+    """Extract a JSON response surrounded by prose."""
     runtime = FakeRuntime(
         f"Here is the answer:\n{json.dumps(ANSWER)}\nHope that helps."
     )
@@ -148,7 +143,7 @@ def test_json_wrapped_in_prose_is_still_read(filing):
 
 @pytest.mark.parametrize("answer", ["I could not read this document.", "{not json}"])
 def test_an_answer_that_is_not_the_requested_json_is_kept_as_words(filing, answer):
-    """Inventing fields out of a refusal is worse than reporting the refusal."""
+    """Preserve a non-JSON response as raw text."""
     reading = read_document(filing, FakeRuntime(answer))
     assert reading.doc_type == "unread"
     assert reading.unparsed == answer
@@ -156,7 +151,7 @@ def test_an_answer_that_is_not_the_requested_json_is_kept_as_words(filing, answe
 
 
 def test_the_documents_own_text_is_indexed_beside_the_reading(filing):
-    """An answer the underwriter cannot check against the page is not evidence."""
+    """Index source text alongside the model reading."""
     reading = read_document(filing, FakeRuntime(json.dumps(ANSWER)))
     assert any("18,400,000" in page for page in reading.pages)
     chunks = chunks_for(reading, "CASE-1")
@@ -166,13 +161,13 @@ def test_the_documents_own_text_is_indexed_beside_the_reading(filing):
 
 
 def test_a_page_with_no_text_layer_adds_no_chunk():
-    """A scan has nothing to index, and an empty chunk is worse than none."""
+    """Omit source-text chunks for pages without extracted text."""
     reading = Reading(doc_name="scan", doc_type="unread", summary="", pages=["", "   "])
     assert len(chunks_for(reading, "CASE-1")) == 1
 
 
 def test_an_email_in_a_supporting_document_is_masked(tmp_path):
-    """The chunks are embedded and stored, here as much as for the statement."""
+    """Mask email addresses in indexed supporting-document text."""
     path = tmp_path / "invoice.txt"
     path.write_text(
         "Invoice 338. Contact billing@supplier.example for 4929123456789012."

@@ -1,12 +1,11 @@
 # /// script
 # dependencies = ["datasets"]
 # ///
-"""Build the labeled datasets the classifier files and the eval keeps honest.
+"""Prepare labelled conversation and intent datasets as JSONL.
 
-RetailBanking-Conversations is the main set: rows are single turns, so we group
-them by conversation, order by sequence, and render a transcript labeled with its
-topic (one of ten teams). banking77 is the harder eval set: short single queries
-over 77 intent classes. Both land as JSONL of {id, text, label}.
+Group RetailBanking-Conversations turns into ordered transcripts with topic
+labels. Load the banking77 test split as individual queries with intent labels.
+Write records with id, text and label fields.
 
 Usage:
   HF_TOKEN=... uv run etl/prepare.py --out data/generated

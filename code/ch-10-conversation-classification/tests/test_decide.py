@@ -1,9 +1,4 @@
-"""The decision-model router: the question it asks and what it does with the answer.
-
-No model is loaded here. A decision model's answer is already structured, so the
-only things left to get wrong are the question put to it and the policy applied
-to its confidence, and both are worth pinning down.
-"""
+"""Test decision-model questions and confidence thresholds with a stub model."""
 
 import categories
 import pytest
@@ -39,7 +34,7 @@ class FakeDecider:
 
 
 def test_bare_names_ask_about_every_team_without_describing_any():
-    """Variant a names the teams and says nothing about where their work begins."""
+    """Include each category name without definitions in variant a."""
     question = question_for(LABELS, described=False)["team"]
     assert question["type"] == "choice"
     assert list(question["criteria"]) == LABELS
@@ -47,7 +42,7 @@ def test_bare_names_ask_about_every_team_without_describing_any():
 
 
 def test_defined_borders_carry_a_definition_for_every_team():
-    """Variant b describes each option, which is where a decision model reads borders."""
+    """Include each category definition in variant b."""
     question = question_for(LABELS, described=True)["team"]
     assert list(question["criteria"]) == LABELS
     assert all(question["criteria"][label] for label in LABELS)
@@ -55,11 +50,7 @@ def test_defined_borders_carry_a_definition_for_every_team():
 
 
 def test_the_llm_and_the_decision_model_are_briefed_from_one_text():
-    """A comparison of two routers has to be a comparison of the routers.
-
-    The definitions live in categories.py precisely so that neither router can
-    quietly get a better brief than the other.
-    """
+    """Use the same category definitions for both routers."""
     from classify import INSTRUCTION_B
 
     for team, border in categories.BORDERS.items():
@@ -68,7 +59,7 @@ def test_the_llm_and_the_decision_model_are_briefed_from_one_text():
 
 
 def test_a_team_the_dataset_does_not_use_is_not_offered():
-    """The options are the dataset's labels, not every team ever defined."""
+    """Offer only categories present in the dataset label set."""
     criteria = categories.as_criteria(["Cards"], described=True)
     assert list(criteria) == ["Cards"]
 
@@ -93,11 +84,7 @@ def test_a_confident_answer_is_routed():
 
 
 def test_a_close_call_is_left_for_a_person_rather_than_routed():
-    """Below the threshold nothing is routed, and the reason names the threshold.
-
-    An empty pred is what the scorer counts as uncovered, so a held conversation
-    lowers coverage instead of being scored as a confident wrong answer.
-    """
+    """Clear predictions below the confidence threshold and record the reason."""
     record = record_for(
         {"id": "1", "label": "Cards"}, "Cards", {"Cards": 0.3}, 0.3, 0.6, "run"
     )
@@ -117,5 +104,5 @@ def test_a_threshold_of_zero_routes_everything():
 
 @pytest.mark.parametrize("described", [True, False])
 def test_either_variant_asks_exactly_one_question(described):
-    """One conversation, one question, so one forward pass answers it."""
+    """Generate one choice question for either prompt variant."""
     assert list(question_for(LABELS, described=described)) == ["team"]

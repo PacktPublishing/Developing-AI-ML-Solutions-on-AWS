@@ -40,7 +40,7 @@ def test_columns_outside_the_config_are_left_alone():
 
 
 def test_a_mixed_row_masks_only_the_listed_columns():
-    """A realistic row carries both kinds of column at once."""
+    """Mask configured columns while preserving other values in the same row."""
     rows = [{"email": "a@b.com", "loan_id": 7}]
     out = mask_records(rows)[0]
     assert out["loan_id"] == 7
@@ -51,7 +51,7 @@ def test_a_mixed_row_masks_only_the_listed_columns():
 # The strategies
 # ---------------------------------------------------------------------------
 def test_hash_is_deterministic_so_joins_and_distinct_counts_survive():
-    """The same input must always produce the same token, and different inputs must not collide."""
+    """Check repeatable tokens and distinct outputs for the tested input values."""
     column = next(c for c, s in _STRATEGIES.items() if s == "hash")
     first = mask_records([{column: "a@b.com"}])[0][column]
     second = mask_records([{column: "a@b.com"}])[0][column]
@@ -75,7 +75,7 @@ def test_redact_keeps_nothing():
 
 
 def test_a_short_value_does_not_leak_through_partial_last4():
-    """Shorter than four characters has nothing to hide, and nothing to star out."""
+    """Check partial masking for values shorter than four characters."""
     column = next(c for c, s in _STRATEGIES.items() if s == "partial_last4")
     out = mask_records([{column: "12"}])[0][column]
     assert out == "12", "shorter than four characters is returned as-is"
@@ -85,7 +85,7 @@ def test_a_short_value_does_not_leak_through_partial_last4():
 # Shapes the Data API actually returns
 # ---------------------------------------------------------------------------
 def test_an_empty_result_is_returned_unchanged():
-    """A query that matched nothing is the common case, not an error."""
+    """Preserve an empty result set."""
     assert mask_records([]) == []
 
 

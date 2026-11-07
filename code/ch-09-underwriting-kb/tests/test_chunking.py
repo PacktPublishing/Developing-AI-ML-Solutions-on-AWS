@@ -1,20 +1,15 @@
-"""Splitting text small enough for the embedding model that has the least room.
-
-The local embedding model stops at 512 tokens, so a chunk over the cap is not a
-tidiness problem, it is the request Ollama refuses with a 500 and the reason a
-whole document upload used to fail at the last step.
-"""
+"""Test paragraph, line and character splitting against the chunk-size limit."""
 
 from chunking import CHUNK_SIZE, chunk_text
 
 
 def test_short_text_is_one_chunk():
-    """Nothing is split that does not need splitting."""
+    """Keep text shorter than the limit in one chunk."""
     assert chunk_text("a tax filing for 2026") == ["a tax filing for 2026"]
 
 
 def test_paragraphs_are_preferred_boundaries():
-    """A paragraph is a better thing to retrieve than a fixed window."""
+    """Split at paragraph boundaries when they fit the limit."""
     first, second = "x" * 500, "y" * 500
     assert chunk_text(f"{first}\n\n{second}") == [first, second]
 
@@ -25,11 +20,7 @@ def test_blank_paragraphs_are_dropped():
 
 
 def test_a_page_of_rows_is_still_capped():
-    """A statement page has rows and no paragraph breaks, and must split anyway.
-
-    This is the case that broke: paragraph splitting alone leaves one chunk the
-    size of the page, which the embedding model refuses.
-    """
+    """Split a page of transaction rows into chunks within the character limit."""
     page = "\n".join(
         f"2026-03-{day:02d} POS PURCHASE FUEL STATION 42.00" for day in range(1, 60)
     )
@@ -40,7 +31,7 @@ def test_a_page_of_rows_is_still_capped():
 
 
 def test_no_chunk_ever_exceeds_the_cap():
-    """Whatever the shape of the text, every piece fits the window."""
+    """Keep each tested chunk within the character limit."""
     for text in (
         "z" * 5000,
         "\n".join("row " * 40 for _ in range(40)),
@@ -50,14 +41,14 @@ def test_no_chunk_ever_exceeds_the_cap():
 
 
 def test_a_single_line_longer_than_the_cap_is_cut():
-    """One unbroken line has no boundary to prefer, so it is cut where it must be."""
+    """Split an oversized line at the character limit."""
     chunks = chunk_text("q" * (CHUNK_SIZE * 2 + 50))
     assert all(len(c) <= CHUNK_SIZE for c in chunks)
     assert "".join(chunks) == "q" * (CHUNK_SIZE * 2 + 50)
 
 
 def test_nothing_is_lost_when_rows_are_split():
-    """Every row survives the split, so a figure cannot disappear in chunking."""
+    """Preserve all rows when splitting text."""
     rows = [f"row {i} amount {i * 11}" for i in range(200)]
     rejoined = "\n".join(chunk_text("\n".join(rows)))
     for row in rows:

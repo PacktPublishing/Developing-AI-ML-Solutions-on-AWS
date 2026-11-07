@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["boto3"]
 # ///
-"""The guardrail seam: a real Bedrock Guardrail on AWS, a small shim locally.
+"""Provide AWS Bedrock Guardrail calls and a local implementation.
 
 Usage (from the chapter root):
   make guardrail    # create the guardrail on your account

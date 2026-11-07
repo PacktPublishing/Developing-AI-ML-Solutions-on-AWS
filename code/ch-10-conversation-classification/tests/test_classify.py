@@ -1,11 +1,4 @@
-"""Reading what came back from a batch job, and what to do when it did not.
-
-A batch job answers hours after it was submitted, in a file, one line per
-conversation. Everything here is about that file and the job around it: a record
-the service could not run, an answer that names two categories, a probability
-that is not a number, and a job that failed without leaving anything worth
-reading.
-"""
+"""Test batch response parsing, per-record errors and terminal job states."""
 
 import json
 
@@ -93,7 +86,7 @@ def test_a_record_the_service_could_not_run_does_not_stop_collection():
 
 
 def test_an_answer_that_is_not_a_converse_response_is_one_failed_record():
-    """A shape nobody expected is a record that failed, not an exception."""
+    """Record an invalid response as a per-record error."""
     preds, failures = gather(
         [
             json.dumps({"recordId": "1", "modelOutput": {"output": {}}}),
@@ -105,7 +98,7 @@ def test_an_answer_that_is_not_a_converse_response_is_one_failed_record():
 
 
 def test_an_unreadable_line_is_reported_rather_than_raised():
-    """A truncated shard is a thing that happens to files."""
+    """Report a malformed JSONL line without aborting collection."""
     preds, failures = gather(
         ["{not json", json.dumps({"recordId": "2", "modelOutput": answer("Cards")})]
     )
@@ -145,7 +138,7 @@ def test_an_answer_that_names_one_category_is_taken(said, expected):
     ],
 )
 def test_an_answer_that_names_several_categories_is_rejected(said):
-    """The first category in a sentence is not the one the sentence chose."""
+    """Reject responses mentioning multiple categories."""
     label, why = parse_label(said, LABELS)
     assert label == ""
     assert "names 2 categories" in why
@@ -153,14 +146,14 @@ def test_an_answer_that_names_several_categories_is_rejected(said):
 
 @pytest.mark.parametrize("said", ["", "I am not sure", "Mortgages"])
 def test_an_answer_that_names_no_known_category_is_rejected(said):
-    """A category this router does not have is not a route."""
+    """Reject responses without a recognised category."""
     label, why = parse_label(said, LABELS)
     assert label == ""
     assert why
 
 
 def test_a_rejected_answer_becomes_a_failure_not_a_prediction():
-    """The old parser kept the raw text as the prediction, and it scored."""
+    """Store rejected responses as failures without predictions."""
     preds, failures = gather(
         [
             json.dumps(
@@ -201,7 +194,7 @@ def test_a_valid_distribution_is_normalised_over_the_label_set():
     ],
 )
 def test_a_distribution_that_is_not_one_is_refused_with_a_reason(raw, fragment):
-    """Each of these used to raise, or to pass as a vector of zeroes."""
+    """Reject invalid probability distributions with an error reason."""
     probs, why = parse_probs(raw, LABELS)
     assert probs == {}
     assert fragment in why
@@ -229,7 +222,7 @@ def test_a_refused_distribution_is_a_failed_record():
 # The job's own ending
 # ---------------------------------------------------------------------------
 def test_the_terminal_states_are_the_ones_aws_defines():
-    """Expired and PartiallyCompleted are terminal, and used not to be."""
+    """Include Expired and PartiallyCompleted among terminal statuses."""
     assert set(classify.TERMINAL) == {
         "Completed",
         "PartiallyCompleted",
@@ -242,18 +235,18 @@ def test_the_terminal_states_are_the_ones_aws_defines():
 
 @pytest.mark.parametrize("status", ["Failed", "Stopped", "Expired"])
 def test_a_job_that_did_not_finish_is_not_usable(status):
-    """Collecting from it is how a failed job becomes a file of empty labels."""
+    """Reject failed, stopped and expired runs as unusable."""
     assert Run(status=status, message="").usable is False
 
 
 @pytest.mark.parametrize("status", ["Completed", "PartiallyCompleted"])
 def test_a_job_with_output_is_usable(status):
-    """Partially completed output is incomplete, not worthless."""
+    """Accept completed and partially completed runs for collection."""
     assert Run(status=status, message="").usable is True
 
 
 def test_every_run_gets_its_own_identifier():
-    """Two runs at once are two manifests, two job names, two output prefixes."""
+    """Generate distinct identifiers for separate runs."""
     first, second = classify.new_run_id(), classify.new_run_id()
     assert first != second
     # a Bedrock job name takes letters, digits and hyphens
@@ -261,12 +254,7 @@ def test_every_run_gets_its_own_identifier():
 
 
 def test_an_answer_cut_off_at_the_token_limit_says_so():
-    """A truncated answer and a malformed one need different fixes, so they read differently.
-
-    A model that spends its whole output budget reasoning never reaches the JSON.
-    Reporting that as "no JSON object in the answer" sends the reader to the prompt
-    when the fix is in maxTokens.
-    """
+    """Report token-limit truncation when the response stop reason is max_tokens."""
     preds, failures = gather(
         [
             json.dumps(

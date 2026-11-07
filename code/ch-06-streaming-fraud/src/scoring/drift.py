@@ -7,8 +7,7 @@
 ScoreDriftAttributor splits the mean-score drift between a reference and a live batch across
 the input features. The value function is label-free: for a coalition of features, draw those
 features from the live marginal and the rest from the reference marginal, score, and take the
-mean-score shift. Exact Shapley then gives each feature fair credit, and the credits sum to the
-total drift. This is the virtual-drift (P(x)) side of Edakunni et al., "Explaining Drift using
+mean-score shift. Calculate Shapley contributions for each feature from the coalition values. This is the virtual-drift (P(x)) side of Edakunni et al., "Explaining Drift using
 Shapley Values". A fitted instance holds the model, the calibrator, and the reference marginals,
 so it pickles and can be reused batch to batch.
 

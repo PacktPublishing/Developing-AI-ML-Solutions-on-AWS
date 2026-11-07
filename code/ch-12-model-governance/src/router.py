@@ -1,14 +1,11 @@
-"""Champion/challenger router: AppConfig decides which model scores each application.
+"""Route applications to the model selected by an AppConfig feature flag.
 
-For each application the router evaluates the challenger_rollout flag with the loan's
-id as context. The flag's split rule buckets the loan deterministically, so a fixed
-share goes to the challenger and the rest to the champion, and the same loan always
-lands the same way. Widening the rollout is a flag edit -- bump the challenger
-variant's pct in AppConfig -- with no redeploy and no loan flipping back.
+Pass loanId as context when evaluating challenger_rollout. Score the application
+with the selected model and apply the decision threshold. Routing is repeatable
+for a fixed identifier and configuration; configuration changes can alter it.
 
 Usage:
-  APPCONFIG_AGENT_URL=http://localhost:2772 CHAMPION_URL=... CHALLENGER_URL=... \
-    uv run src/router.py applications.jsonl
+  APPCONFIG_AGENT_URL=http://localhost:2772 CHAMPION_URL=... CHALLENGER_URL=...     uv run src/router.py applications.jsonl
 """
 
 import argparse
@@ -48,8 +45,7 @@ class Router:
         flag = self._appconfig.configuration({"loanId": str(loan["loanId"])})[
             ROLLOUT_FLAG
         ]
-        # only the challenger variant overrides the model; champion is the default, so an
-        # absent model means champion (the AppConfig way: one variant sets the attribute).
+        # Use the champion when the evaluated flag omits the model attribute.
         model = flag.get("model", "credit-scorecard")
         pd = self._score(model, loan)
         return {

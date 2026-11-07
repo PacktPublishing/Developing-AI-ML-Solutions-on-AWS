@@ -1,31 +1,23 @@
 # /// script
 # dependencies = []
 # ///
-"""Split text into pieces an embedding model will accept.
+"""Split text into chunks with a maximum character count.
 
-Every embedding model has a window, and the local one is the smallest in this
-chapter: mxbai-embed-large stops at 512 tokens where Titan Text Embeddings v2
-takes 8,192. Text that fits the cloud and not the laptop is a chapter that only
-runs in one place, so the split is sized for the smaller window and used by both.
-
-Paragraph breaks come first, because a paragraph is a better unit to retrieve
-than a fixed window. A page of a bank statement has no paragraph breaks at all,
-only rows, so anything still over the cap is cut on line boundaries, and a single
-line longer than the cap is cut where it has to be.
+Prefer paragraph boundaries, then line boundaries. Split oversized lines at the
+character limit. The character cap does not measure the embedding token count.
 """
 
-# Characters, not tokens: a cheap proxy that needs no tokenizer, set low enough
-# that about 800 characters of English stays inside a 512-token window.
+# Maximum characters per chunk; token count depends on the embedding tokenizer.
 CHUNK_SIZE = 800
 
 
 def _hard_split(text: str, size: int) -> list[str]:
-    """Cut one oversized piece on line boundaries, then anywhere it must."""
+    """Split oversized text at line boundaries and the character limit."""
     pieces: list[str] = []
     current = ""
     for line in text.splitlines():
         while len(line) > size:
-            # a single line longer than the cap: no boundary to prefer
+            # Split a line that exceeds the character limit.
             if current:
                 pieces.append(current)
                 current = ""
@@ -51,8 +43,7 @@ def chunk_text(text: str, size: int = CHUNK_SIZE) -> list[str]:
         para = para.strip()
         if not para:
             continue
-        # + 2 for the blank line that rejoins them, as the memo corpus was
-        # chunked before this was shared, so its chunks do not move
+        # Include the two newline characters between paragraphs.
         if current and len(current) + len(para) + 2 > size:
             chunks.append(current)
             current = para
@@ -60,7 +51,7 @@ def chunk_text(text: str, size: int = CHUNK_SIZE) -> list[str]:
             current = f"{current}\n\n{para}" if current else para
     if current:
         chunks.append(current)
-    # paragraphs alone can still leave a piece over the window
+    # Split any paragraphs that still exceed the character limit.
     capped: list[str] = []
     for chunk in chunks:
         capped.extend([chunk] if len(chunk) <= size else _hard_split(chunk, size))

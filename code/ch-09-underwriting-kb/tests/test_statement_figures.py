@@ -1,10 +1,4 @@
-"""What the statement parser is allowed to report, and what it must refuse.
-
-The parser feeds the affordability tools, so a figure it invents is a figure an
-underwriter acts on. These are the cases where totalling a column is not enough:
-a credit the policy does not count as income, an amount whose sign was printed
-in a way a regex can lose, and a PDF nothing could be read from at all.
-"""
+"""Test income exclusions, signed amounts, extraction validation and masked errors."""
 
 import pytest
 
@@ -69,7 +63,7 @@ def test_the_policys_excluded_credits_are_recognised(description, reason):
     ],
 )
 def test_trading_credits_still_count_as_income(description):
-    """The exclusions have to be narrow, or real earnings leave the ratio."""
+    """Include credits that do not match exclusion patterns."""
     assert excluded_reason(description) is None
 
 
@@ -96,7 +90,7 @@ def test_an_amount_keeps_the_sign_the_statement_printed(cell, value):
 
 @pytest.mark.parametrize("cell", ["about 500", "N0TANUMBER", "1.2.3"])
 def test_an_amount_that_is_not_a_number_is_refused(cell):
-    """Reading a mark as zero turns a parse failure into a figure."""
+    """Reject unrecognised amount strings."""
     with pytest.raises(Unreadable):
         _money(cell)
 
@@ -105,19 +99,19 @@ def test_an_amount_that_is_not_a_number_is_refused(cell):
 # Not checked is not the same as reconciled
 # ---------------------------------------------------------------------------
 def test_a_statement_with_nothing_in_it_is_refused():
-    """Zero income and no balance breaks is what an unreadable PDF looks like."""
+    """Reject summaries with no extracted transactions."""
     with pytest.raises(Unreadable, match="no transactions"):
         validate(summary(transactions=0, reconciliation=NOT_CHECKED))
 
 
 def test_a_statement_without_a_case_reference_is_refused():
-    """Indexed under an empty case id, a statement answers for every case."""
+    """Reject summaries without a case reference."""
     with pytest.raises(Unreadable, match="case reference"):
         validate(summary(case_id=""))
 
 
 def test_a_single_row_is_reported_as_not_checked():
-    """One row cannot disagree with the row before it, so nothing was verified."""
+    """Report not_checked when only one transaction is available."""
     kept = validate(summary(transactions=1, reconciliation=NOT_CHECKED))
     assert kept.reconciliation == NOT_CHECKED
     assert kept.balance_breaks == []
@@ -127,7 +121,7 @@ def test_a_single_row_is_reported_as_not_checked():
 # The diagnostics are read by the model and stored, so they are masked too
 # ---------------------------------------------------------------------------
 def test_a_balance_break_names_the_row_without_the_holders_details():
-    """The break is a diagnostic, and a diagnostic is not an exemption."""
+    """Mask personal details in reconciliation errors."""
     rows = [
         Transaction("2026-03-01", "SALARY  MONTHLY PAYROLL", 0, 85_000, 120_000),
         Transaction(

@@ -1,23 +1,11 @@
 # /// script
 # dependencies = ["fastapi", "uvicorn[standard]", "python-multipart", "pdfplumber", "boto3", "ollama", "opensearch-py", "strands-agents", "pyjwt[crypto]"]
 # ///
-"""The underwriter app: one FastAPI service for the UI and the retrieval API.
+"""Serve underwriting queries, statement uploads and supporting documents.
 
-GET / serves the ask/recommend page; POST /upload takes an applicant's bank
-statement, totals it, and indexes it as the document under review; POST /context
-takes a supporting document, has the document reader read it, and files it under
-the case; POST /ask and
-POST /cases run the grounded
-retrieval from retrieve.py and return {answer, sources}. POST /agent answers a
-question that needs arithmetic as well as recall, by handing it to the Strands
-agent with the memo search and the affordability tools. The same app runs under
-uvicorn locally and, unchanged, in a Lambda container via the Lambda Web Adapter;
-only the store endpoint and credentials differ.
-
-Every route but the page and its sign-in settings needs a token from the
-underwriters' Cognito user pool, and every answer is written to the audit log
-with the underwriter who asked. On AWS, API Gateway checks the token first and
-the app checks it again; locally the pool is cognito-shim and only the app checks.
+The FastAPI service runs locally under uvicorn and in Lambda through the Lambda
+Web Adapter. Query routes call retrieval or agent functions; upload routes index
+case documents. Authentication uses the configured Cognito user pool.
 
 Usage:
   STORE=opensearch BEDROCK_LOCAL=1 PYTHONPATH=src uv run app/main.py
@@ -134,14 +122,7 @@ def agent(body: AgentBody, who: Underwriter) -> dict[str, str]:
 
 @app.post("/upload")
 async def upload(file: UploadFile, who: Underwriter) -> dict:
-    """Take an applicant's bank statement, total it, and index it for review.
-
-    The figures are parsed here, once, and stored with the document, so the
-    agent later reads them back from OpenSearch instead of adding up a table.
-    Each upload is a new version of the case's statement and the newest one is
-    what a review reads, so a corrected statement corrects the figures. A PDF
-    nothing could be read from is refused with a 422 and nothing is indexed.
-    """
+    """Parse, validate and index a new statement version; return 422 on invalid input."""
     suffix = Path(file.filename or "statement.pdf").suffix or ".pdf"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(await file.read())
@@ -174,14 +155,7 @@ async def upload(file: UploadFile, who: Underwriter) -> dict:
 async def add_context(
     case_id: Annotated[str, Form()], file: UploadFile, who: Underwriter
 ) -> dict:
-    """Read a supporting document the underwriter adds to a case, and index it.
-
-    Not the bank statement: the tax filing, the invoice, the contract, the page
-    of management accounts that came with the application. There is no parser
-    for that spread of layouts, so the document reader reads the file and the
-    reading is stored with the document's text under the case. Each document is
-    kept, so a second upload adds to the file rather than replacing it.
-    """
+    """Read and index a supporting case document, retaining previous documents."""
     suffix = Path(file.filename or "document.pdf").suffix or ".pdf"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(await file.read())

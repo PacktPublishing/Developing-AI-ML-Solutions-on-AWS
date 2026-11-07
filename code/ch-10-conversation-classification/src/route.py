@@ -1,12 +1,10 @@
 # /// script
 # dependencies = ["boto3"]
 # ///
-"""Route each classified conversation to its team through SNS.
+"""Publish classified conversation IDs to category-specific SNS topics.
 
-One topic per category; each team subscribes to its topic. Every classified
-conversation is published to the topic of its predicted category, so it lands in
-that team's queue. Locally the SNS shim delivers to a file inbox per team; on AWS
-the same calls hit real SNS topics.
+The local client writes notifications to file inboxes. AWS delivery requires
+subscriptions configured separately on the topics.
 
 Usage:
   BEDROCK_LOCAL=1 uv run src/route.py --dataset conversations

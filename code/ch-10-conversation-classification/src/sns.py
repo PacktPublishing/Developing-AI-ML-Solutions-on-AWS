@@ -1,14 +1,10 @@
 # /// script
 # dependencies = ["boto3"]
 # ///
-"""The routing seam: Amazon SNS on AWS, a from-source shim locally.
+"""Provide an AWS SNS client or a local file-based implementation.
 
-get_sns() returns an SNS client exposing create_topic / subscribe / publish. On
-AWS it is boto3's sns client; locally it is LocalSNS, modelled on the community
-LocalStack SNS provider: topics hold subscriptions, and publish fans the message
-out to every subscriber. The local delivery target is a file inbox per team, so a
-classified conversation lands in that team's queue exactly as a real subscriber
-(an SQS queue or Lambda) would receive it.
+The local client stores topics and subscriptions in memory and appends
+notification envelopes to subscriber inbox files.
 """
 
 import json
@@ -47,11 +43,7 @@ class LocalSNS:
     def publish(
         self, TopicArn: str, Message: str, Subject: str | None = None, **_
     ) -> dict:
-        """Fan the message out to every subscriber (here, appended to a file inbox).
-
-        Each delivered line is the SNS notification envelope a real subscriber
-        would receive, minus the signature fields (nothing signs locally).
-        """
+        """Append a notification envelope to each subscriber file and return its message ID."""
         message_id = str(uuid.uuid4())
         timestamp = (
             datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"

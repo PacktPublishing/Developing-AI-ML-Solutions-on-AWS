@@ -1,8 +1,7 @@
 """The gateway's decision rules, exercised without a network or an AWS account.
 
-Covers the ensemble, the shadow split, and what happens when a model does not answer.
-No network and no AWS: conftest sets ENDPOINTS before app is imported, and each test
-substitutes its own scoring function, so the rules are exercised on their own.
+Test ensemble decisions, shadow-model behaviour and scoring failures with stub
+scorers. conftest sets ENDPOINTS before the gateway is imported.
 """
 
 import app as gw
@@ -76,7 +75,7 @@ def test_unreachable_deciding_model_refers_instead_of_deciding():
 
 
 def test_unreachable_shadow_model_leaves_the_decision_alone():
-    """A shadow model that fails costs nothing, since it was never in the number."""
+    """A failed shadow-model call does not change the decision."""
     gw.SHADOW_MODELS = {"challenger"}
     answers(scorecard=0.05, challenger=httpx.ReadTimeout("slow"))
     out = decide()

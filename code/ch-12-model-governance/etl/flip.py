@@ -1,8 +1,7 @@
-"""Widen (or narrow) the challenger rollout by editing the feature flag.
+"""Update the challenger split percentage in the local feature-flag JSON.
 
-Sets the challenger variant's split percentage in the local flag store. The gateway
-reads the flag on every request, so the new share takes effect on the next application
-with nothing restarted -- the point of shipping behind a flag.
+The local rollout workflow converts the updated JSON to Ion and restarts the
+AppConfig agent to load it.
 
 Usage:
   uv run etl/flip.py 50

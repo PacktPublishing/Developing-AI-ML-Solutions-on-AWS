@@ -99,8 +99,7 @@ class FaceEmbedder:
         """Embed many images in one forward pass, keeping the order of the input.
 
         Detection is per image either way, but the embedding model is fed one stacked
-        batch rather than one face at a time. That is the difference a GPU rewards:
-        a single 160x160 face leaves the device almost idle, while a batch fills it.
+        batch rather than one face at a time. Batching allows the embedding model to process multiple faces per call.
         """
         aligned, slots = [], []
         for position, image_bytes in enumerate(images):

@@ -1,18 +1,10 @@
 # /// script
 # dependencies = []
 # ///
-"""Where each team's work begins and ends, written once for both routers.
+"""Define categories shared by the LLM and decision-model routers.
 
-The zero-shot LLM is handed these as a prompt, a line per team. The decision
-model is handed the same text as the `criteria` of a choice question, which is
-where its options are described. One definition serves both, so a comparison
-between the two routers is a comparison of the routers rather than of two
-differently worded briefs.
-
-Two tie-break rules sit beside the definitions because the broad-sounding teams
-collect what belongs to the specific ones: a request to borrow money reads as
-savings to a model that has only seen the word "deposit", and a login failure
-reads as whatever product the customer was trying to reach.
+Use the definitions in LLM prompts and decision-model choice criteria. Include
+tie-break rules for borrowing requests and digital-banking issues.
 """
 
 # Ordered as the label file is, so a routing table reads in the same order

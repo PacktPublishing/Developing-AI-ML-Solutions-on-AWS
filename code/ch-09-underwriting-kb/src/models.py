@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["boto3", "ollama"]
 # ///
-"""The model seam: one Bedrock-shaped interface, two backends."""
+"""Provide Bedrock and local Ollama clients for text, document and embedding calls."""
 
 import io
 import json
@@ -36,14 +36,7 @@ OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "mxbai-embed-large")
 # Local Bedrock shim
 # -------------------------------------------------------------------------------
 def _as_text(blocks: list[dict]) -> str:
-    """Flatten one message's content blocks into the text Ollama accepts.
-
-    Bedrock takes a document block and reads the file itself. A local model
-    behind Ollama is handed text, so this is where the local path differs: the
-    PDF is turned into text here, with the same library the statement parser
-    uses, and the model sees the words rather than the file. A scanned page has
-    no words to find, which is the honest limit of running this on a laptop.
-    """
+    """Convert message blocks to text for Ollama, extracting text from PDF documents."""
     parts = []
     for block in blocks:
         if "text" in block:

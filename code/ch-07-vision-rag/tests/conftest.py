@@ -1,7 +1,6 @@
 """Provision a throwaway pgvector for the store tests, as Chapters 3 and 9 do.
 
-Container start-up and the environment kycstore reads both belong here rather than
-at the top of a test module, so the test files keep ordinary top-level imports.
+Start the test database and configure the environment before importing kycstore.
 """
 
 import atexit

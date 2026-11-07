@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["boto3", "psycopg2-binary", "pyarrow", "pyiceberg[s3fs]"]
 # ///
-"""Ship the gold mart into the feature store, both the offline and online halves.
+"""Load the gold mart into the offline and online feature stores.
 
 Usage:
   uv run ingest_features.py

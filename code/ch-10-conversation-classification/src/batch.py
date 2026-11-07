@@ -64,8 +64,7 @@ class LocalBedrockBatch:
             "status": "Submitted",
             "inputDataConfig": inputDataConfig,
             "outputDataConfig": outputDataConfig,
-            # the counts the service reports about its own job, which the client
-            # prints beside its own tally of what it could read
+            # Job counters returned to the polling client.
             "totalRecordCount": 0,
             "processedRecordCount": 0,
             "successRecordCount": 0,

@@ -1,22 +1,11 @@
 # /// script
 # dependencies = ["boto3", "ollama", "opensearch-py", "pdfplumber"]
 # ///
-"""Read a supporting document an underwriter adds to a case.
+"""Read supporting case documents with the configured document model.
 
-The bank statement is a table with known columns, so statements.py parses it and
-the figures are arithmetic. Everything else an underwriter is sent is not: a tax
-filing, an invoice, a supply contract, a page of management accounts. There is no
-parser worth writing for that spread of layouts, so the model reads the file.
-
-Amazon Bedrock takes the PDF itself, as a Converse document block, and Claude
-Haiku 5.5 answers with the document's type, its figures, its dates and anything
-that looks like a problem. The same call runs locally through the Ollama-backed
-shim, where the difference is that the PDF is turned into text first and the
-model reads the words rather than the file.
-
-What comes back is treated as a reading, not as truth: it is stored beside the
-document's own text, under the case, and the agent cites it as the document it
-came from. The affordability arithmetic still comes from the statement.
+Bedrock receives document blocks. The local Ollama client extracts PDF text
+before inference. Store the model response and extracted source text under the
+case reference. Model-extracted figures remain unverified.
 
 Usage:
   PYTHONPATH=src uv run src/documents.py --case CASE-20260000 --file tax.pdf
@@ -71,7 +60,7 @@ ASK = (
     " document is and what figures it carries."
 )
 
-# the model is asked for one object; a small local model wraps it in prose
+# Extract a JSON object from responses that include surrounding prose.
 JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
 
 
@@ -81,7 +70,7 @@ class Unsupported(ValueError):
 
 @dataclass
 class Reading:
-    """What the model reported about one document, plus the document's text."""
+    """Model-extracted document fields and masked source text."""
 
     doc_name: str
     doc_type: str
@@ -92,7 +81,7 @@ class Reading:
     figures: list[dict] = field(default_factory=list)
     dates: list[str] = field(default_factory=list)
     concerns: list[str] = field(default_factory=list)
-    # the model's own words when its answer was not the JSON that was asked for
+    # Raw response text when JSON extraction fails.
     unparsed: str = ""
     pages: list[str] = field(default_factory=list)
 
@@ -125,12 +114,7 @@ def _block(path: Path) -> dict:
 
 
 def page_text(path: Path) -> list[str]:
-    """Return the document's own text, one entry per page, masked.
-
-    Stored beside the reading so an answer can quote the document rather than
-    only the model's summary of it. A PDF of scanned images has no text layer
-    and gives nothing here, which the caller reports rather than hides.
-    """
+    """Extract and mask source text by page; scanned pages may have no text layer."""
     if path.suffix.lower() != ".pdf":
         return [mask(path.read_text(errors="replace"), "")]
     import pdfplumber  # lazy import: only this path needs it
@@ -190,12 +174,7 @@ def read_document(path: str | Path, runtime, model: str = DOC_MODEL) -> Reading:
 
 
 def chunks_for(reading: Reading, case_id: str) -> list[str]:
-    """Return the reading and the document's text as chunks to index.
-
-    The first chunk is what the model made of the document, so a search for the
-    document's subject finds it. The rest are its pages, so an answer can quote
-    the document and the underwriter can check the quote.
-    """
+    """Return the model reading followed by source-text chunks with page references."""
     figures = "; ".join(
         f"{f.get('label', '')} {f.get('amount', '')}".strip() for f in reading.figures
     )
@@ -219,9 +198,7 @@ def chunks_for(reading: Reading, case_id: str) -> list[str]:
     for number, text in enumerate(reading.pages, start=1):
         if not text.strip():
             continue
-        # A page is too big to embed whole: the local embedding model stops at
-        # 512 tokens. Each piece says which page and which part of it, so a
-        # quoted figure can still be traced back to where it was read.
+        # Split page text and retain page and part numbers for source references.
         pieces = chunk_text(text)
         for part, piece in enumerate(pieces, start=1):
             where = f"{reading.doc_name}, page {number}"
@@ -274,7 +251,7 @@ def main() -> None:
     for concern in reading.concerns:
         print(f"  concern: {concern}")
     if reading.unparsed:
-        # the whole answer is indexed; only a first line of it belongs on a terminal
+        # Print a preview; the full response is stored in the index.
         head = " ".join(reading.unparsed.split())[:200]
         print(f"  the reader did not answer in the requested format: {head}...")
     if not any(page.strip() for page in reading.pages):

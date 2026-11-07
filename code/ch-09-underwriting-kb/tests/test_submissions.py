@@ -1,11 +1,4 @@
-"""Uploading the same case twice, against a store that remembers what it was told.
-
-The figures a review reads come from the index, so the question is which upload
-answers after a second one arrives. A fake client stands in for the cluster: it
-keeps the documents it was handed, honours the document ids the store sets, and
-answers the two queries the store makes. That is enough to tell a replaced
-statement from two statements under one case, which is the whole point.
-"""
+"""Test submission versioning and document isolation with an in-memory store."""
 
 import opensearch_store
 import pytest
@@ -113,7 +106,7 @@ def store(monkeypatch):
 # A second upload is the one that answers
 # ---------------------------------------------------------------------------
 def test_a_corrected_statement_replaces_the_figures_of_the_first(store):
-    """The applicant sends a corrected statement; the corrected income answers."""
+    """Read the latest uploaded statement figures by default."""
     store.index_submission(
         None, "CASE-1", "CASE-1", ["first"], meta={"monthly_income": 50_000}
     )
@@ -127,7 +120,7 @@ def test_a_corrected_statement_replaces_the_figures_of_the_first(store):
 
 
 def test_the_earlier_version_is_still_there_to_be_asked_for(store):
-    """An underwriter asked what changed can read the upload that was replaced."""
+    """Allow retrieval of an earlier statement version."""
     store.index_submission(
         None, "CASE-1", "CASE-1", ["first"], meta={"monthly_income": 50_000}
     )
@@ -138,7 +131,7 @@ def test_the_earlier_version_is_still_there_to_be_asked_for(store):
 
 
 def test_a_shorter_correction_does_not_leave_the_longer_one_behind(store):
-    """Three months replaced by one must not answer with the missing months."""
+    """Read only chunks belonging to the selected statement version."""
     store.index_submission(
         None, "CASE-1", "CASE-1", ["head", "march", "april"], meta={"months": 3}
     )
@@ -163,13 +156,13 @@ def test_indexing_the_same_version_twice_is_not_two_copies(store):
 
 
 def test_a_case_with_nothing_uploaded_reads_empty(store):
-    """No statement is no statement, not a statement of no income."""
+    """Return an empty result for a case without a statement."""
     assert store.read_submission("CASE-NONE") == {}
     assert store.latest_version("CASE-NONE") == 0
 
 
 def test_dropping_a_case_takes_every_version_with_it(store):
-    """A review that is over is over for the statement it corrected as well."""
+    """Delete all statement versions when no version is specified."""
     store.index_submission(None, "CASE-1", "CASE-1", ["first"])
     store.index_submission(None, "CASE-1", "CASE-1", ["second"])
     assert store.drop_submission("CASE-1") == 2
@@ -180,7 +173,7 @@ def test_dropping_a_case_takes_every_version_with_it(store):
 # Supporting documents accumulate rather than replace
 # ---------------------------------------------------------------------------
 def test_supporting_documents_do_not_replace_each_other(store):
-    """A tax filing and a contract are both in the file, so both come back."""
+    """Return all uploaded supporting documents."""
     store.index_submission(
         None,
         "CASE-1",
@@ -205,7 +198,7 @@ def test_supporting_documents_do_not_replace_each_other(store):
 
 
 def test_a_supporting_document_is_not_the_statement(store):
-    """The two live under one case and must not be read as each other."""
+    """Keep statement and supporting-document queries separate."""
     store.index_submission(None, "CASE-1", "CASE-1", ["statement"])
     store.index_submission(
         None, "CASE-1", "invoice", ["invoice"], source="context", doc_name="invoice"

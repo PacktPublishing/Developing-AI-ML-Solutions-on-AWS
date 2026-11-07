@@ -1,7 +1,6 @@
-"""Who asked what, and what the answer cited: one JSON line per request.
+"""Verify underwriter tokens and print request audit records as JSON.
 
-On AWS the line lands in the app's CloudWatch log group, which keeps it for the
-retention the template sets. Locally it prints to the terminal.
+Local records go to stdout; the AWS application sends stdout to CloudWatch Logs.
 """
 
 import base64

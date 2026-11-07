@@ -1,10 +1,7 @@
-"""The two models the router routes between, behind one scoring seam.
+"""Score applications using local model servers or SageMaker endpoints.
 
-score(model_name, loan) returns the probability of default from whichever model the
-rollout picked. Both champion (credit-scorecard) and challenger (credit-challenger)
-speak the same contract from chapter 2: POST a JSON application, read back {"pd": [p]}.
-Locally they are two serving containers reached by URL; on AWS they are two SageMaker
-endpoints reached by InvokeEndpoint. get_scorer() picks the path by environment.
+Both models accept the Chapter 2 application schema and return {"pd": [p]}.
+get_scorer selects HTTP URLs or SageMaker endpoint names from the environment.
 
 Env: CHAMPION_URL / CHALLENGER_URL (local), or CHAMPION_ENDPOINT / CHALLENGER_ENDPOINT
      (SageMaker endpoint names) plus AWS_REGION.

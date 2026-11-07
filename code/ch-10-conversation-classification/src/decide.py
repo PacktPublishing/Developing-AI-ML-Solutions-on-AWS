@@ -1,17 +1,11 @@
 # /// script
 # dependencies = ["boto3", "strands-decider"]
 # ///
-"""Route conversations to teams with a decision model instead of an LLM.
+"""Classify conversations using a decision model and write prediction records.
 
-The question is always the same one: of these teams, which should handle this
-conversation. A decision model answers it by scoring the teams it was given, so
-the answer is a team, a probability for each team, and a confidence, with no
-sentence in between that has to be read back. Writes the same predictions file
-the LLM router writes, so src/evaluate.py scores either one.
-
-A conversation the model is not confident about is not routed. Confidence here is
-normalised max-probability, which means the same thing for three teams as for
-ten, so one threshold holds as the team list grows.
+Each response contains a selected team, class probabilities and confidence.
+Clear the prediction when confidence is below the configured threshold. The
+output uses the format accepted by evaluate.py.
 
 Usage:
   DECIDER_LOCAL=1 PYTHONPATH=src uv run src/decide.py --variant b --limit 40
@@ -31,7 +25,7 @@ ASK = "Which team should handle this conversation?"
 
 
 def question_for(labels: list[str], described: bool) -> dict:
-    """Return the one choice question this router asks, as the wire shape."""
+    """Build a choice question using the supplied category labels."""
     return {
         "team": {
             "type": "choice",
@@ -50,13 +44,7 @@ def route_one(decider, text: str, question: dict) -> tuple[str, dict, float]:
 def record_for(
     row: dict, team: str, probs: dict, confidence: float, threshold: float, run_id: str
 ) -> dict:
-    """Turn one answer into the row the scorer reads.
-
-    A conversation the model is not confident about is written with no
-    prediction and the reason, which is how the scorer counts it as uncovered
-    rather than as a confident wrong answer. That is not the model failing: it
-    reported a close call, and the policy is that close calls go to a person.
-    """
+    """Build a prediction record, clearing predictions below the confidence threshold."""
     record = {
         "id": row["id"],
         "label": row["label"],

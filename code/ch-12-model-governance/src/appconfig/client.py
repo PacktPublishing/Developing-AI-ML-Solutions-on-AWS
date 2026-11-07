@@ -1,10 +1,8 @@
-"""The feature-flag client: the AWS AppConfig agent evaluates every flag.
+"""Retrieve evaluated feature flags from the AWS AppConfig agent.
 
-get_appconfig() returns a client whose configuration(context) yields the evaluated
-feature flags for a request. The same published agent image runs as a sidecar locally
-(local development mode, reading the Ion file etl/to_ion.py renders) and on ECS
-(polling the deployed configuration), so the split buckets every loan identically in
-both worlds and no evaluation logic lives in this codebase.
+Pass the request context to the agent's configuration endpoint. The local agent
+reads an Ion file; the ECS agent polls the deployed configuration. Flag rules
+are evaluated by the agent.
 
 Env: APPCONFIG_AGENT_URL (default http://localhost:2772), plus APPCONFIG_APP /
      APPCONFIG_ENV / APPCONFIG_PROFILE naming the configuration.

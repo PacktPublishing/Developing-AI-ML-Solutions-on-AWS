@@ -1,4 +1,4 @@
-"""The scorecard model: a transparent logistic PD over the risk drivers.
+"""Calculate default probability using a logistic scorecard.
 
 One coefficient per driver; the "champion" the ensemble gateway invokes as one endpoint.
 """

@@ -191,13 +191,7 @@ class OpenSearchStore:
         meta: dict | None = None,
         doc_id: str | None = None,
     ) -> None:
-        """Buffer one embedded chunk for bulk indexing.
-
-        With no `doc_id` the cluster assigns one, which is what the corpus
-        wants: every chunk is new. A caller that can name the document, such as
-        an upload naming its case and version, passes the id so indexing the
-        same chunk twice replaces it instead of storing it twice.
-        """
+        """Buffer an embedded chunk; a supplied doc_id replaces the same indexed document."""
         self._buffer.append(
             {
                 "_index": INDEX,
@@ -295,16 +289,7 @@ class OpenSearchStore:
         source: str = "submission",
         doc_name: str = "",
     ) -> int:
-        """Embed and index one uploaded document, and return its version.
-
-        An applicant sends a corrected statement, and the corrected figures have
-        to be the ones a review reads. Appending the new chunks beside the old
-        ones leaves two sets under the same case with no way to tell which is
-        which, so each upload is a numbered version: the chunks carry it, the id
-        of each chunk contains it, and a read selects one version and reads only
-        that. The versions before it stay, because an underwriter asked what
-        changed is entitled to look.
-        """
+        """Index a numbered submission version with version-specific chunk IDs."""
         version = self.latest_version(case_id, source) + 1
         uploaded_at = datetime.datetime.now(datetime.UTC).isoformat()
         vectors = embed(runtime, chunks)
@@ -331,12 +316,7 @@ class OpenSearchStore:
     def read_submission(
         self, case_id: str, version: int | None = None, source: str = "submission"
     ) -> dict:
-        """Return one version of the uploaded document: its figures and its text.
-
-        The newest version unless a caller names an older one. Every field comes
-        from the chunks of that one version, so the figures and the text a review
-        quotes are from the same upload.
-        """
+        """Return figures and text for the requested version, or the latest version."""
         wanted = self.latest_version(case_id, source) if version is None else version
         if not wanted:
             return {}
@@ -378,13 +358,7 @@ class OpenSearchStore:
         }
 
     def list_submissions(self, case_id: str, source: str = "context") -> list[dict]:
-        """Return every document indexed under a case, oldest first.
-
-        A corrected bank statement replaces the statement before it, so a review
-        reads one version. Supporting documents do not replace each other: a tax
-        filing and a supply contract are both part of the file, so each upload is
-        a version and all of them are returned.
-        """
+        """Return all matching case-document versions, oldest first."""
         if not self.client.indices.exists(index=INDEX):
             return []
         resp = self.client.search(
@@ -425,11 +399,7 @@ class OpenSearchStore:
     def drop_submission(
         self, case_id: str, version: int | None = None, source: str = "submission"
     ) -> int:
-        """Delete an uploaded document once the review is done.
-
-        Every version of it, unless a caller names one: a review that is over is
-        over for the corrected statement as well as the one it corrected.
-        """
+        """Delete the selected submission version, or all versions when none is specified."""
         filters: list[dict] = [
             {"term": {"source": source}},
             {"term": {"case_id": case_id}},
