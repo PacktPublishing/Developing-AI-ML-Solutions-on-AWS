@@ -36,6 +36,36 @@ make eval                     # the same scoring, on a real distribution
 make decide VARIANT=b THRESHOLD=0.6   # hold the close calls back for a person
 ```
 
+### What the container measured
+
+The agent is the same file locally and deployed, but the packaging is not, and
+the packaging is where AgentCore's limits bite. Building the ARM64 image on a
+laptop answers that before any AWS spend:
+
+| | result | AgentCore limit |
+| --- | --- | --- |
+| image, default aarch64 torch (bundles CUDA) | 9.39 GB | 2 GB, not adjustable |
+| image, CPU-only torch | **1.47 GB** | fits |
+| model weights | 4.8 GB | too big for either artifact |
+| CPU inference, peak resident memory | **7.37 GB** | microVM session caps at 8 GB |
+
+Three things follow, and none of them needed an AWS account:
+
+- **The CUDA image cannot be deployed at all.** 3.3 GB of `nvidia` and 916 MB of
+  `triton` come from the default aarch64 torch wheel. The CPU index drops both.
+- **The weights cannot ship inside the artifact.** A container image stops at
+  2 GB and an S3 source package at 750 MB unpacked, against 4.8 GB of weights,
+  so they are fetched to a mounted volume at session start. That is the one-time
+  cost the chapter's session handling is built around.
+- **microVMs are out.** The CPU image fits the image limit, but inference peaks
+  at 7.37 GB against a hard 8 GB session cap, which leaves nothing for the
+  runtime, and a microVM gives 2 vCPU. Running the CPU image under those limits
+  locally was killed with `OOMKilled=true`. So the chapter deploys on the
+  Instances compute type with a GPU capacity provider.
+
+The engine upcasts the torso to fp32 on CPU, which is where the 7.37 GB comes
+from: a 2B model is 4.5 GB in bf16 and roughly double that as fp32.
+
 ### Swapping the model
 
 A decision model is an interface, not a product, so the chapter treats it as one.
