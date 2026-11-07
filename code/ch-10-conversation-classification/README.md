@@ -212,10 +212,20 @@ Both routers answer the same question about the same 320 conversations, briefed
 from the same definitions in `src/categories.py`. Measured on 2026-11-07, the
 decision model on an M3 laptop and the zero-shot LLM through the local batch shim:
 
-| router | accuracy | macro-F1 | Brier | Brier Index | coverage |
+| router | accuracy | macro-F1 | Brier | coverage | median |
 | --- | --- | --- | --- | --- | --- |
-| decision model, variant b | 0.666 | 0.666 | 0.515 | 78.6% | 1.000 |
-| zero-shot LLM, variant a (Qwen3 0.6b) | 0.156 | 0.059 | 1.687 | 61.9% | 0.997 |
+| decision model, deployed (AgentCore + SageMaker, g5) | 0.669 | 0.670 | 0.515 | 1.000 | 397 ms |
+| decision model, local (M3, MPS) | 0.666 | 0.666 | 0.515 | 1.000 | 1908 ms |
+| Claude Haiku 4.5, Bedrock batch | 0.69 | | | | |
+| zero-shot LLM, local shim (Qwen3 0.6b) | 0.156 | 0.059 | 1.687 | 0.997 | ~1170 ms |
+
+The first two rows are the chapter's claim about local-first, measured rather
+than asserted: 0.666 on a laptop and 0.669 deployed, on the same 320
+conversations. The local round said what the cloud round would say. The GPU
+bought latency, not accuracy, and it bought a lot of it: 397 ms against 1908 ms,
+138 seconds for the set against 639. Both still run reference PyTorch kernels,
+since neither `causal_conv1d` nor `flash-linear-attention` is installed, so
+there is headroom in that number.
 
 The accuracy gap is not the interesting part, because the local LLM is a 0.6b
 model and Claude Haiku 4.5 scored 0.69 on these same conversations in the cloud
@@ -365,4 +375,35 @@ say so: the runtime is `ch10_router`.
 Expect the endpoint to be the slow part. The image is large, so the first deploy
 waits on a CodeBuild that pulls the weights, and
 `ContainerStartupHealthCheckTimeoutInSeconds` is raised to 900 for the same
-reason.
+reason. Verified on 2026-11-07: InService in 420 seconds, then 320
+conversations routed in 138.
+
+### What the endpoint took seven attempts to teach
+
+Each of these failed a deploy, and none of them is about the model.
+
+- **The base image decides which torch you get.** An image with no torch means
+  pip installs the default wheel, built against a newer CUDA than SageMaker's
+  GPU hosts carry, and the container dies in `torch._C._cuda_init()` before it
+  can answer `/ping`. SageMaker Distribution ships torch 2.8.0 matched to its
+  own hardware. The PyTorch inference DLC would be the usual choice and cannot
+  be used here: it stops at torch 2.6.0, below what this model needs. Check a
+  dependency floor against the images your platform publishes before designing
+  around one.
+- **SageMaker Distribution runs its own inference server.** It expects a handler
+  at `/opt/ml/model/inference.py` and ignores a CMD entirely. Either write that
+  handler, or take the `ENTRYPOINT`, which is what `model/entrypoint.sh` does.
+- **`docker run <image> serve`.** That argument replaces a CMD, so a plain
+  `docker run <image>` passes while the endpoint fails. `make sm-local` starts
+  the container the way the service does, which is the only local check that
+  catches it.
+- **A mutable tag is not a deploy.** `<repo>:latest` is an unchanged
+  CloudFormation parameter, so the model is never replaced and the endpoint
+  keeps serving the old digest while the deploy reports success. The image
+  carries the build's hash as its tag for that reason, and the agent zip carries
+  its own hash as its key for the same one.
+- **GPU capacity runs out**, and a single `InstanceType` answers
+  `InsufficientInstanceCapacity` only after twenty minutes. `InstancePools`
+  walks several by priority. Only list types whose drivers match the build:
+  g4dn has capacity when others do not, carries a CUDA 11.4 driver, and so
+  turns a fast failure into a slow one.
