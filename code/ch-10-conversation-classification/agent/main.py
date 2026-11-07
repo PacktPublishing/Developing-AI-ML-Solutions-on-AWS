@@ -27,6 +27,7 @@ import os
 import boto3
 import categories
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from botocore.exceptions import ClientError
 
 ENDPOINT_NAME = os.environ.get("ENDPOINT_NAME", "")
 ASK = "Which team should handle this conversation?"
@@ -47,11 +48,17 @@ def ask_model(request: dict) -> dict:
     """Send one System One request to the endpoint and return its answer."""
     if not ENDPOINT_NAME:
         return {"error": "ENDPOINT_NAME is not set, so there is no model to ask"}
-    response = runtime().invoke_endpoint(
-        EndpointName=ENDPOINT_NAME,
-        ContentType="application/json",
-        Body=json.dumps(request).encode(),
-    )
+    try:
+        response = runtime().invoke_endpoint(
+            EndpointName=ENDPOINT_NAME,
+            ContentType="application/json",
+            Body=json.dumps(request).encode(),
+        )
+    except ClientError as err:
+        # An endpoint that is missing, still creating, or refusing the call is
+        # the common case while a round is being set up. Answering with the
+        # reason beats a 500 that sends the reader to CloudWatch.
+        return {"error": f"the endpoint {ENDPOINT_NAME} did not answer: {err}"}
     return json.loads(response["Body"].read())
 
 

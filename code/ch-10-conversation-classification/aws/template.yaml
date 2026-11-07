@@ -307,8 +307,12 @@ Resources:
               - Effect: Allow
                 Action: sagemaker:InvokeEndpoint
                 Resource: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/ch10-decider
+
+              # CreateLogGroup as well as the stream: without it the runtime
+              # has nowhere to write, and a failure leaves no trace to read.
               - Effect: Allow
                 Action:
+                  - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                   - logs:DescribeLogStreams

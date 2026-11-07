@@ -1,0 +1,43 @@
+# The same decision-model round locally, which needs no containers at all: the
+# model loads into the router's own process and the SNS shim fans each routed
+# conversation out to a per-team file inbox. The batch path needs S3Proxy for its
+# manifests; this one needs nothing but the checkpoint.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Client, Local]
+
+    Client:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "decide.py\nroute.py"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: vertical
+      Title: "Local (no containers)"
+      Children: [Decider, SNS]
+
+    Decider:
+      Type: AWS::Diagram::Resource
+      Preset: "Strands"
+      Title: "Strands Decider 2B\nin process, one typed question"
+
+    SNS:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Notification Service (Amazon SNS)"
+      Title: "SNS shim\nten team inboxes"
+
+  Links:
+    - {Source: Client, SourcePosition: E, Target: Decider, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    # route.py publishes, not the model: it reads the predictions file back.
+    - {Source: Client, SourcePosition: E, Target: SNS, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3"]
+# dependencies = ["boto3", "botocore[crt]"]
 # ///
 """Invoke the chapter's AgentCore runtime with one JSON payload.
 

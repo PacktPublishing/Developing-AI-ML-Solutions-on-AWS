@@ -42,7 +42,18 @@ CLOUDENV = PYTHONPATH=src BEDROCK_REGION=$(REGION) BATCH_MODEL=$(BATCH_MODEL) \
 # -------------------------------------------------------------------------------
 # deploy -> classify (real batch job) -> route (real SNS) -> eval
 # -------------------------------------------------------------------------------
+# A create that fails leaves the stack in ROLLBACK_COMPLETE, and a changeset
+# that never executes leaves it in REVIEW_IN_PROGRESS. Neither can be updated,
+# and neither holds any resource, so the only way forward is to delete first.
 deploy:
+	@STATUS=$$(aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) \
+			--query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo NONE); \
+		case "$$STATUS" in \
+			ROLLBACK_COMPLETE|REVIEW_IN_PROGRESS) \
+			echo "stack is $$STATUS and cannot be updated; deleting it first"; \
+			aws cloudformation delete-stack --region $(REGION) --stack-name $(STACK); \
+			aws cloudformation wait stack-delete-complete --region $(REGION) --stack-name $(STACK);; \
+		esac
 	aws cloudformation deploy --region $(REGION) --stack-name $(STACK) \
 		--template-file template.yaml --no-fail-on-empty-changeset \
 		--capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
@@ -67,9 +78,9 @@ eval:
 decider-round:
 	$(MAKE) deploy WITH_DECIDER=true
 	$(MAKE) agent
-	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=agent.zip
+	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=$$(cat /tmp/ch10-agent.key)
 	$(MAKE) image
-	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=agent.zip DECIDER_IMAGE=$(DECIDER_REPO):latest
+	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=$$(cat /tmp/ch10-agent.key) DECIDER_IMAGE=$(DECIDER_REPO):latest
 	$(MAKE) decide
 	$(MAKE) eval
 
@@ -77,7 +88,11 @@ decider-round:
 # x86_64 with CUDA torch and the weights baked in, so SageMaker can answer
 # inside its 60 second limit on the first request.
 image:
-	rm -rf /tmp/ch10-build && mkdir -p /tmp/ch10-build\n	cp ../model/Dockerfile /tmp/ch10-build/\n	cp buildspec.yml /tmp/ch10-build/\n	rm -f /tmp/ch10-src.zip && cd /tmp/ch10-build && zip -qr /tmp/ch10-src.zip . -x '*__pycache__*'\n	@BUCKET=$$(aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) \
+	rm -rf /tmp/ch10-build && mkdir -p /tmp/ch10-build
+	cp ../model/Dockerfile /tmp/ch10-build/
+	cp buildspec.yml /tmp/ch10-build/
+	rm -f /tmp/ch10-src.zip && cd /tmp/ch10-build && zip -qr /tmp/ch10-src.zip . -x '*__pycache__*'
+	@BUCKET=$$(aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) \
 			--query "Stacks[0].Outputs[?OutputKey=='DeciderSourceBucket'].OutputValue" --output text); \
 		aws s3 cp /tmp/ch10-src.zip s3://$$BUCKET/src.zip --region $(REGION); \
 		ID=$$(aws codebuild start-build --region $(REGION) --project-name ch10-decider-build \
@@ -92,19 +107,28 @@ image:
 # because AgentCore Runtime is arm64 only. categories.py travels with it, so the
 # agent and the LLM baseline are briefed from one text.
 agent:
-	rm -rf /tmp/ch10-agent && mkdir -p /tmp/ch10-agent\n	uv pip install --python-platform aarch64-manylinux2014 --python-version 3.12 \
+	rm -rf /tmp/ch10-agent && mkdir -p /tmp/ch10-agent
+	uv pip install --python-platform aarch64-manylinux2014 --python-version 3.12 \
 		--target=/tmp/ch10-agent --only-binary=:all: -r ../agent/pyproject.toml
 	cp ../agent/main.py ../src/categories.py /tmp/ch10-agent/
-	rm -f /tmp/ch10-agent.zip && cd /tmp/ch10-agent && zip -qr /tmp/ch10-agent.zip . -x '*__pycache__*'\n	@BUCKET=$$(aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) \
+	rm -f /tmp/ch10-agent.zip && cd /tmp/ch10-agent && zip -qr /tmp/ch10-agent.zip . -x '*__pycache__*'
+	@# The key carries the zip's own hash. CloudFormation updates a runtime when
+	@# its parameters change, and replacing the object behind an unchanged key is
+	@# not a change: the old code keeps serving and the deploy looks successful.
+	@BUCKET=$$(aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) \
 			--query "Stacks[0].Outputs[?OutputKey=='DeciderSourceBucket'].OutputValue" --output text); \
-			aws s3 cp /tmp/ch10-agent.zip s3://$$BUCKET/agent.zip --region $(REGION); \
-			echo "uploaded agent.zip ($$(du -h /tmp/ch10-agent.zip | cut -f1))"
+			KEY=agent-$$(shasum -a 256 /tmp/ch10-agent.zip | cut -c1-12).zip; \
+			aws s3 cp /tmp/ch10-agent.zip s3://$$BUCKET/$$KEY --region $(REGION); \
+			echo $$KEY > /tmp/ch10-agent.key; \
+			echo "uploaded $$KEY ($$(du -h /tmp/ch10-agent.zip | cut -f1))"
 
-# decide: route the dataset through the agent, which asks the endpoint
+# decide: route the dataset through the agent, which asks the endpoint.
+# botocore[crt]: the profile chain behind `aws login` needs it, and a fresh
+# uv environment does not pull it in with boto3 alone.
 decide:
 	cd .. && PYTHONPATH=src DECIDER_BACKEND=agentcore AWS_DEFAULT_REGION=$(REGION) \
 		AGENT_RUNTIME_ARN=$(DECIDER_ARN) \
-		uv run --with boto3 src/decide.py --dataset $(DATASET) --variant b
+		uv run --with boto3 --with "botocore[crt]" src/decide.py --dataset $(DATASET) --variant b
 
 teardown:
 	-aws s3 rm s3://$(BUCKET) --recursive --region $(REGION)

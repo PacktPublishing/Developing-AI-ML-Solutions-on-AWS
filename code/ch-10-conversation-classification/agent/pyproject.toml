@@ -7,5 +7,5 @@ requires-python = ">=3.12"
 # unpinned dependency makes the next deploy a different agent.
 dependencies = [
   "bedrock-agentcore==1.25.4",
-  "boto3==1.42.6",
+  "boto3==1.43.126",
 ]

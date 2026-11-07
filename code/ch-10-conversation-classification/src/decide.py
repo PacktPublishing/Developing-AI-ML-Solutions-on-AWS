@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "strands-decider"]
+# dependencies = ["boto3", "botocore[crt]", "strands-decider"]
 # ///
 """Classify conversations using a decision model and write prediction records.
 
