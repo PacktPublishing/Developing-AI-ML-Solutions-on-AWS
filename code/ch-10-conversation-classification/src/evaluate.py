@@ -218,10 +218,19 @@ def main() -> None:
     p.add_argument("--data", type=Path, default=Path("data/generated"))
     a = p.parse_args()
 
+    predictions = a.data / f"{a.dataset}.predictions.jsonl"
     preds = [
         json.loads(line)
-        for line in (a.data / f"{a.dataset}.predictions.jsonl").read_text().splitlines()
+        for line in predictions.read_text().splitlines()
+        if line.strip()
     ]
+    if not preds:
+        # A round that died partway through leaves the file behind with nothing
+        # in it, and every metric here divides by the number of predictions.
+        raise SystemExit(
+            f"{predictions} has no predictions in it. Run the router over the "
+            "dataset first: make classify, or make decide for the decision model."
+        )
     labels = json.loads((a.data / f"{a.dataset}.labels.json").read_text())
     print(render(score(a.dataset, preds, labels)))
 
