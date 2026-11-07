@@ -9,6 +9,7 @@ Usage:
 
 import datetime
 import os
+import time
 
 import boto3
 import psycopg2
@@ -25,6 +26,9 @@ WAREHOUSE_DSN = os.environ.get(
 CATALOG_URI = os.environ.get("ICEBERG_REST_URI", "http://localhost:8181")
 FEATURE_BUCKET = "feature-store"
 TABLE = "features.applicant_credit_profile"
+# set only on the deployed stack: its presence selects the SageMaker Feature Store
+# instead of the Iceberg + DynamoDB pair the local stack stands up
+FEATURE_GROUP = os.environ.get("FEATURE_GROUP", "")
 
 
 # -------------------------------------------------------------------------------
@@ -71,6 +75,10 @@ def main() -> None:
     """Append the mart to the Iceberg feature table and the online store."""
     features = read_mart()
 
+    if FEATURE_GROUP:
+        write_sagemaker(features)
+        return
+
     s3 = boto3.client("s3")
     try:
         s3.create_bucket(Bucket=FEATURE_BUCKET)
@@ -103,6 +111,82 @@ def main() -> None:
     print(f"Appended {features.num_rows} feature rows to {TABLE}")
 
     write_online(features)
+
+
+# -------------------------------------------------------------------------------
+# SageMaker Feature Store
+# -------------------------------------------------------------------------------
+def write_sagemaker(features: pa.Table) -> None:
+    """Write the mart into a SageMaker feature group, creating it on the first run.
+
+    Both halves are enabled: the online store for low-latency lookups at serving
+    time, and the offline store in S3 for point-in-time training queries. It is the
+    managed equivalent of the Iceberg table and DynamoDB table the local stack runs.
+    """
+    sm = boto3.client("sagemaker")
+    try:
+        sm.describe_feature_group(FeatureGroupName=FEATURE_GROUP)
+    except sm.exceptions.ResourceNotFound:
+        sm.create_feature_group(
+            FeatureGroupName=FEATURE_GROUP,
+            RecordIdentifierFeatureName="applicant_id",
+            EventTimeFeatureName="event_time",
+            FeatureDefinitions=[
+                {"FeatureName": "applicant_id", "FeatureType": "Integral"},
+                {"FeatureName": "score", "FeatureType": "Integral"},
+                {"FeatureName": "state", "FeatureType": "String"},
+                {"FeatureName": "tradeline_count", "FeatureType": "Integral"},
+                {"FeatureName": "total_balance", "FeatureType": "Integral"},
+                {"FeatureName": "delinquent_count", "FeatureType": "Integral"},
+                {"FeatureName": "event_time", "FeatureType": "String"},
+            ],
+            OnlineStoreConfig={"EnableOnlineStore": True},
+            OfflineStoreConfig={
+                "S3StorageConfig": {"S3Uri": os.environ["OFFLINE_S3_URI"]}
+            },
+            RoleArn=os.environ["FEATURE_STORE_ROLE_ARN"],
+        )
+        # SageMaker publishes no waiter for feature groups, so poll the status
+        for _ in range(60):
+            status = sm.describe_feature_group(FeatureGroupName=FEATURE_GROUP)[
+                "FeatureGroupStatus"
+            ]
+            if status == "Created":
+                break
+            if status == "CreateFailed":
+                raise SystemExit(f"feature group {FEATURE_GROUP} failed to create")
+            time.sleep(5)
+        else:
+            raise SystemExit(f"feature group {FEATURE_GROUP} not ready after 5 minutes")
+
+    runtime = boto3.client("sagemaker-featurestore-runtime")
+    fields = [
+        "applicant_id",
+        "score",
+        "state",
+        "tradeline_count",
+        "total_balance",
+        "delinquent_count",
+    ]
+    rows = features.select(fields + ["event_time"]).to_pylist()
+    for row in rows:
+        runtime.put_record(
+            FeatureGroupName=FEATURE_GROUP,
+            Record=[{"FeatureName": k, "ValueAsString": str(row[k])} for k in fields]
+            + [
+                {
+                    "FeatureName": "event_time",
+                    # SageMaker accepts only yyyy-MM-ddTHH:mm:ssZ and
+                    # yyyy-MM-ddTHH:mm:ss.SSSZ here: milliseconds, and the zone.
+                    # isoformat() gives microseconds and no zone, and is rejected.
+                    "ValueAsString": row["event_time"].strftime("%Y-%m-%dT%H:%M:%S.%f")[
+                        :-3
+                    ]
+                    + "Z",
+                }
+            ],
+        )
+    print(f"Ingested {len(rows)} feature rows into {FEATURE_GROUP}")
 
 
 # -------------------------------------------------------------------------------
