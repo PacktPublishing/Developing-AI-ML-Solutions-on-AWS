@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "ollama"]
+# dependencies = ["boto3", "botocore[crt]", "ollama"]
 # ///
 """Zero-shot conversation classification through Bedrock batch inference.
 

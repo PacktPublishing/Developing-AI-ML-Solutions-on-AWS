@@ -62,11 +62,11 @@ deploy:
 
 # classify: submit a real CreateModelInvocationJob and wait for it (tens of minutes)
 classify:
-	cd .. && $(CLOUDENV) uv run src/classify.py --dataset $(DATASET) --bucket $(BUCKET) --variant $(VARIANT)
+	cd .. && $(CLOUDENV) uv run --with boto3 --with "botocore[crt]" src/classify.py --dataset $(DATASET) --bucket $(BUCKET) --variant $(VARIANT)
 
 # route: publish each classified conversation to its team's real SNS topic
 route:
-	cd .. && PYTHONPATH=src BEDROCK_REGION=$(REGION) uv run src/route.py --dataset $(DATASET)
+	cd .. && PYTHONPATH=src BEDROCK_REGION=$(REGION) uv run --with boto3 --with "botocore[crt]" src/route.py --dataset $(DATASET)
 
 eval:
 	cd .. && PYTHONPATH=src uv run src/evaluate.py --dataset $(DATASET)
