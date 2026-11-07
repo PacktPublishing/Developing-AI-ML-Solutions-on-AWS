@@ -115,7 +115,7 @@ def test_a_missing_prediction_does_not_get_a_brier_score():
     wrong = [{"pred": "b", "label": "a"}]
 
     assert math.isnan(evaluate.score("missing", missing, LABELS).brier)
-    # a recognised but wrong hard label is a forecast, and it is scored
+    # a recognized but wrong hard label is a forecast, and it is scored
     assert evaluate.score("wrong", wrong, LABELS).brier == 2.0
 
 

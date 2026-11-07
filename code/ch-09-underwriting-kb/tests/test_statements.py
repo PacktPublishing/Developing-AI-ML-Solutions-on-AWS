@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("pdfplumber")
 pytest.importorskip("reportlab")
 
-from statements import Transaction, chunks_for, mask, reconcile, summarise
+from statements import Transaction, chunks_for, mask, reconcile, summarize
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -41,7 +41,7 @@ def test_parser_recovers_the_generated_figures(corpus):
     """Income and existing repayments must match the manifest exactly."""
     out, rows = corpus
     for row in rows:
-        s = summarise(out / row["file"])
+        s = summarize(out / row["file"])
         assert s.case_id == row["case_id"]
         assert s.monthly_income == pytest.approx(float(row["monthly_income"]), abs=1)
         assert s.existing_repayments == pytest.approx(
@@ -56,7 +56,7 @@ def test_applicants_without_a_facility_show_no_repayments(corpus):
     if not clean:
         pytest.skip("this seed gave every applicant a facility")
     for row in clean:
-        assert summarise(out / row["file"]).existing_repayments == 0
+        assert summarize(out / row["file"]).existing_repayments == 0
 
 
 def test_chunks_lead_with_the_figures_and_group_by_month(corpus):
@@ -94,7 +94,7 @@ def test_generated_statements_reconcile(corpus):
     """Every row of a clean statement follows from the one before it."""
     out, rows = corpus
     for row in rows:
-        assert summarise(out / row["file"]).balance_breaks == []
+        assert summarize(out / row["file"]).balance_breaks == []
 
 
 def test_a_misread_amount_breaks_the_running_balance():

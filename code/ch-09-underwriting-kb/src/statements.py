@@ -177,7 +177,7 @@ def reconcile(rows: list[Transaction], holder: str = "") -> list[str]:
     return breaks
 
 
-def summarise(path: str | Path) -> Summary:
+def summarize(path: str | Path) -> Summary:
     """Return the monthly income and existing repayments the statement supports."""
     fields, rows = read(path)
     holder = fields.get("account holder", "")
@@ -221,7 +221,7 @@ def validate(summary: Summary) -> Summary:
     """Raise Unreadable if the summary has no transactions or case reference."""
     if not summary.transactions:
         raise Unreadable(
-            "no transactions recognised: the statement may be a scan, or a layout"
+            "no transactions recognized: the statement may be a scan, or a layout"
             " the table extractor does not read"
         )
     if not summary.case_id:
@@ -247,7 +247,7 @@ def mask(text: str, holder: str) -> str:
 def chunks_for(path: str | Path) -> tuple[Summary, list[str]]:
     """Return the summary and masked text chunks: a summary followed by one per month."""
     _, rows = read(path)
-    summary = summarise(path)
+    summary = summarize(path)
     header = (
         f"Bank statement for case {summary.case_id}. "
         f"Monthly income {summary.monthly_income:,.0f}. "
@@ -293,7 +293,7 @@ def main() -> None:
     """Print the summary for each statement given on the command line."""
     for arg in sys.argv[1:]:
         try:
-            s = validate(summarise(arg))
+            s = validate(summarize(arg))
         except Unreadable as err:
             print(f"{arg}: refused, {err}")
             continue

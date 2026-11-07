@@ -119,7 +119,7 @@ def _norm(text: str) -> str:
 
 
 def _loose(text: str) -> str:
-    """Normalise further, so "Savings and Deposits" matches "Savings & Deposits"."""
+    """Normalize further, so "Savings and Deposits" matches "Savings & Deposits"."""
     return _norm(text).replace(" and ", " ")
 
 
@@ -131,10 +131,10 @@ def _clean(said: str) -> str:
 
 
 def parse_label(said: str, labels: list[str]) -> tuple[str, str]:
-    """Return a recognised category or an error reason.
+    """Return a recognized category or an error reason.
 
-    Accept an exact match after normalisation, or text containing exactly one
-    recognised category. Reject answers containing multiple categories.
+    Accept an exact match after normalization, or text containing exactly one
+    recognized category. Reject answers containing multiple categories.
     """
     cleaned = _clean(said)
     if not cleaned:

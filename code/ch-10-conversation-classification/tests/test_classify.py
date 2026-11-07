@@ -146,7 +146,7 @@ def test_an_answer_that_names_several_categories_is_rejected(said):
 
 @pytest.mark.parametrize("said", ["", "I am not sure", "Mortgages"])
 def test_an_answer_that_names_no_known_category_is_rejected(said):
-    """Reject responses without a recognised category."""
+    """Reject responses without a recognized category."""
     label, why = parse_label(said, LABELS)
     assert label == ""
     assert why

@@ -5,8 +5,9 @@ splits them that way. The decision model sits behind a SageMaker endpoint on a
 GPU instance, because it is 2 GB of image and 4.5 GB of weights. This agent is a
 few kilobytes on a serverless microVM, and it holds everything about routing
 that is not the model: which teams exist, where their work begins and ends, and
-how sure the model has to be before a conversation is routed rather than left
-for a person.
+how sure the model has to be before a conversation is routed rather than
+withheld. Withheld means `routed` comes back false and the caller decides what
+to do with it; nothing here hands it to a review queue.
 
 That split is why AgentCore works here at all. An agent that calls an endpoint
 fits a microVM easily; the model never would, at a 2 GB image limit and an 8 GB
@@ -110,9 +111,10 @@ def route(payload: dict) -> dict:
         "team": answer["choice"],
         "probabilities": answer["probabilities"],
         "confidence": confidence,
-        # Below the threshold nothing is routed. That is not the model failing:
-        # it reported a close call, and the policy is that close calls go to a
-        # person. The policy lives here rather than in the model.
+        # Below the threshold this is reported as not routed. That is not the
+        # model failing: it reported a close call, and deciding what counts as
+        # too close is policy, which lives here rather than in the model. What
+        # happens to an unrouted conversation is the caller's to arrange.
         "routed": confidence >= threshold,
         "model": answered.get("model", "unnamed"),
     }

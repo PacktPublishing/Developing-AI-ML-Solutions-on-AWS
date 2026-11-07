@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["datasets"]
 # ///
-"""Prepare labelled conversation and intent datasets as JSONL.
+"""Prepare labeled conversation and intent datasets as JSONL.
 
 Group RetailBanking-Conversations turns into ordered transcripts with topic
 labels. Load the banking77 test split as individual queries with intent labels.

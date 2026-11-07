@@ -122,8 +122,16 @@ curl -X POST http://127.0.0.1:8080/invocations -H 'content-type: application/jso
 
 The agent holds everything about routing that is not the model: which teams
 exist, where their work begins and ends, and how sure the model must be before a
-conversation is routed rather than left for a person. The model only scores the
-options it is given. That division is the point of the split, and it is why the
+conversation is routed rather than withheld. The model only scores the
+options it is given.
+
+One honest caveat about the chapter's own round. `src/decide.py` builds the
+typed question itself and sends it, which the agent passes straight through to
+the model, so the threshold on a `make decide` run is applied by the client and
+the agent's policy branch is not what decided anything. That is deliberate: the
+same question goes to all four backends, so the local, HTTP and AgentCore
+numbers compare. A caller that wants the policy sends `{"text": ...}` and gets
+`routed` back, which is what the curl above does. That division is the point of the split, and it is why the
 agent's IAM policy allows exactly one action, `sagemaker:InvokeEndpoint` on one
 endpoint.
 
@@ -178,9 +186,13 @@ every option, and a confidence. There is no text, which is why there is nothing 
 parse and nothing to truncate: the failure modes the batch path has to defend
 against cannot arise here.
 
-Confidence is normalised max-probability, `(N * p_max - 1) / (N - 1)`, so it means
-the same thing for three options as for ten and one `THRESHOLD` keeps holding as
-the team list grows.
+Confidence is normalized max-probability, `(N * p_max - 1) / (N - 1)`. That puts
+the number on the same scale whatever the option count, uniform at 0 and one-hot
+at 1, so a threshold is at least comparable across team lists. It does not make
+one threshold equally reliable across them: how often 0.6 is right depends on the
+distribution the model produces for that option set, and the model card is
+explicit that calibration is fitted per primitive and should be measured on your
+own traffic. Changing the team list means measuring the threshold again.
 
 Two things worth knowing before building on it:
 
@@ -229,8 +241,14 @@ first 40 conversations), the same direction the prompt variants move the LLM.
 Confidence is the part with no LLM equivalent. Holding back the conversations the
 model is least sure of trades coverage for quality, and the chapter's own metrics
 show the trade: at `THRESHOLD=0.6`, coverage falls to 0.800 and the Brier over
-what remains improves from 0.496 to 0.409. Those eight conversations in a hundred
-are the ones worth a person's time.
+what remains improves from 0.496 to 0.409. Coverage of 0.800 means one
+conversation in five is withheld, which is the price of the better Brier on the
+other four.
+
+Withheld is all it is. The record carries no prediction and the reason, so the
+scorer counts it as uncovered and `route.py` publishes nothing for it. Nothing
+here delivers it to a review queue; wiring those to a team is the obvious next
+step and the chapter does not take it.
 
 Latency is about 1.9 s per conversation on an M3 across the full 320, around ten
 minutes for the set. That is far off the sub-200 ms figures quoted for short
