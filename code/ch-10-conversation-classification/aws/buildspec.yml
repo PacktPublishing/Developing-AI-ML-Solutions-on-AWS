@@ -1,0 +1,19 @@
+version: 0.2
+
+# One image: the decision-model agent behind the AgentCore Runtime contract.
+# REPO (the ECR repository URI) and AWS_DEFAULT_REGION come from the CodeBuild
+# project; the build context (Dockerfile, app.py, requirements.txt) sits at the
+# zip root beside this file.
+phases:
+  pre_build:
+    commands:
+      - REGISTRY="${REPO%%/*}"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+  build:
+    # linux/amd64 because every GPU family AgentCore supports is x86_64, and
+    # CodeBuild's standard image is x86_64 too, so this is a native build.
+    commands:
+      - docker build --build-arg TARGETPLATFORM=linux/amd64 -t "$REPO:latest" .
+  post_build:
+    commands:
+      - docker push "$REPO:latest"

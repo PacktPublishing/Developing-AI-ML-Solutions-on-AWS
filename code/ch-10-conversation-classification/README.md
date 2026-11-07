@@ -320,6 +320,41 @@ make -C aws eval
 make -C aws teardown
 ```
 
+### The decision model on AgentCore
+
+Off by default, because it provisions a VPC and GPU EC2 in your account that
+bill by the hour while a session is alive.
+
+```
+make -C aws decider-round      # the four steps below, in order
+```
+
+It is four steps because the runtime needs an image that the same stack's
+repository holds:
+
+```
+make -C aws deploy WITH_DECIDER=true     # VPC, repository, CodeBuild, roles, capacity
+make -C aws image                        # CodeBuild builds x86_64 and pushes
+make -C aws deploy WITH_DECIDER=true DECIDER_IMAGE=<repo>:latest   # the runtime
+make -C aws prepare                      # torch and the weights onto the volume
+make -C aws decide                       # route the dataset through it
+```
+
+`prepare` is the step with no local equivalent, and it exists because of the
+limits in the table above: the image carries the agent and the runtime SDK only,
+so the first call of a session installs CUDA torch and fetches the checkpoint
+onto the mounted EBS volume. It takes minutes. The volume survives session
+stops, so a resumed session skips it, which is also why `src/decider.py` holds
+one session id for a whole run rather than one per conversation.
+
+Two names in the template cannot take hyphens, and the validation error does not
+say so: the capacity provider and the runtime are `ch10_decider_capacity` and
+`ch10_decider`.
+
+Expect `InsufficientInstanceCapacity` on GPU instances. The capacity provider
+allows `g6.xlarge` and `g5.xlarge` across two availability zones for that reason;
+add more types with `DeciderInstanceTypes` if both are short.
+
 The submitting user needs `CreateModelInvocationJob` + `InvokeModel`, and the batch
 job invokes the model **as the service role**, so that role needs `InvokeModel` too.
 Manifest sharding (1 GiB/file, 5 GiB/job) is the remaining piece for very large jobs.

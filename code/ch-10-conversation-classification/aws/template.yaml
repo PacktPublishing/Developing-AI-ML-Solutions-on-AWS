@@ -38,6 +38,16 @@ Conditions:
     - !Ref WithDecider
     - "true"
 
+  # The runtime needs an image the repository in this same stack holds, so it
+  # appears on the second deploy, after `make image`. The first deploy builds
+  # everything the build itself needs.
+  DeciderReady: !And
+    - !Condition DeployDecider
+    - !Not
+      - !Equals
+        - !Ref DeciderImageUri
+        - ""
+
 Transform: AWS::Serverless-2016-10-31
 
 Resources:
@@ -431,9 +441,9 @@ Resources:
             - !Ref DeciderSecurityGroup
       EnvironmentVariables:
         DECIDER_MODEL: StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
-        HF_HOME: /mnt/models
+        HF_HOME: /mnt/models/hf
         MODEL_VOLUME: /mnt/models
-    Condition: DeployDecider
+    Condition: DeciderReady
 
 Outputs:
   BatchBucket:
@@ -445,7 +455,7 @@ Outputs:
   DeciderRuntimeArn:
     Description: Pass as AGENT_RUNTIME_ARN to src/decide.py
     Value: !GetAtt DeciderRuntime.AgentRuntimeArn
-    Condition: DeployDecider
+    Condition: DeciderReady
 
   DeciderRepoUri:
     Value: !GetAtt DeciderRepo.RepositoryUri
