@@ -47,6 +47,7 @@ A decision model is an interface, not a product, so the chapter treats it as one
 | `http` | any System One server | `DECIDER_URL` |
 | `agentcore` | an AgentCore Runtime endpoint | `AGENT_RUNTIME_ARN` |
 
+
 The `http` backend is the interesting one. Strands Decider and
 [Kev](https://github.com/jaredpalmer/kev) both serve `POST /v1/systemone` with
 the same request and the same response, so changing which model routes your
@@ -78,6 +79,30 @@ LocalStack's own Bedrock emulator uses: it too runs the job over Ollama). **SNS 
 a from-source shim** that fans each publish out to its subscribers, delivering to a
 file inbox per team. On a small local model (Qwen3 0.6b) the accuracy is
 illustrative; the graded numbers come from Claude on Bedrock in the cloud round.
+
+### AgentCore runs locally too
+
+`agentcore/app.py` is the deployable unit, and it is also the local one.
+`BedrockAgentCoreApp` serves `POST /invocations` and `GET /ping`, which is the
+contract AgentCore Runtime invokes a container on, so the same file answers on a
+laptop and in the cloud. The local round is the deployed path, not a stand-in
+for it:
+
+```
+make serve-agentcore                                   # http://127.0.0.1:8080
+make decide DECIDER_BACKEND=http \
+  DECIDER_URL=http://127.0.0.1:8080 DECIDER_PATH=/invocations
+```
+
+The payload is a System One request, so the `http` backend reaches the AgentCore
+app with no client change, and `DECIDER_PATH=/invocations` runs the round through
+the exact path the cloud uses. The AgentCore CLI has its own loop over the same
+file, `agentcore dev` for a reloading server with `agentcore invoke --local`,
+then `agentcore configure -e agentcore/app.py` and `agentcore launch`.
+
+The weights load on the first invocation of a container, tens of seconds, and
+are reused after that. That is why the router holds one session id for a whole
+run: the first call pays for the model and the rest do not.
 
 ## What a batch job does to a result
 
@@ -202,6 +227,8 @@ tasks, because a multi-turn transcript is a long state and latency grows with it
 - `src/batch.py`: the batch-inference seam — real Bedrock, or the local from-source
   batch shim over S3Proxy + Ollama
 - `src/classify.py`: build the Converse manifest, submit the job, collect, map to categories
+- `agentcore/app.py`: the decision model behind the AgentCore Runtime contract,
+  the same file locally and deployed
 - `src/categories.py`: where each team's work begins and ends, written once and
   read by both routers, so comparing them compares the routers
 - `src/decider.py`: the decision-model seam, either the model loaded in this
@@ -246,8 +273,10 @@ labels the Brier is just twice the error rate.
   AgentCore Runtime (the decision model, on the Instances compute type), Amazon
   SNS, Amazon S3
 - **Local stand-ins:** a from-source Bedrock batch shim over S3Proxy + Ollama, a
-  from-source SNS shim (file inboxes), S3Proxy (S3), and for the decision model
-  no stand-in at all: the same 2B checkpoint that runs on AgentCore runs here
+  from-source SNS shim (file inboxes), S3Proxy (S3). The decision model has no
+  stand-in at all: `agentcore/app.py` serves the AgentCore Runtime contract
+  itself, so the local round runs the file that deploys. It also needs no
+  containers, where the batch path needs S3Proxy for its manifests.
 
 ## Run it on AWS
 

@@ -1,4 +1,4 @@
-.PHONY: up prepare classify decide serve-decider route eval all down lint test diagrams
+.PHONY: up prepare classify decide serve-decider serve-agentcore route eval all down lint test diagrams
 
 # the whole local flow in one command: the local S3, the datasets, the batch classification
 # (local Ollama), the routing, and the evaluation. make down when done.
@@ -47,6 +47,9 @@ classify:
 # left for a person.
 export DECIDER_BACKEND ?= local
 export DECIDER_URL ?=
+# /invocations instead of /v1/systemone runs the local round through the exact
+# path AgentCore Runtime invokes, which Strands Decider's server also serves.
+export DECIDER_PATH ?=
 THRESHOLD ?= 0
 decide:
 	uv run --with strands-decider src/decide.py --dataset $(DATASET) \
@@ -60,6 +63,15 @@ decide:
 PORT ?= 8019
 serve-decider:
 	uv run --with strands-decider strands-decider serve $(DECIDER_CHECKPOINT) --port $(PORT)
+
+# serve-agentcore: the same model behind the AgentCore Runtime contract, which
+# is the file that deploys. Local and cloud run the same code, so the local
+# round is the deployed path rather than a stand-in:
+#   make serve-agentcore
+#   make decide DECIDER_BACKEND=http DECIDER_URL=http://127.0.0.1:8080 DECIDER_PATH=/invocations
+AGENTCORE_PORT ?= 8080
+serve-agentcore:
+	PORT=$(AGENTCORE_PORT) uv run --with bedrock-agentcore --with strands-decider agentcore/app.py
 
 # route: publish each classified conversation to its team's topic (from-source SNS)
 route:

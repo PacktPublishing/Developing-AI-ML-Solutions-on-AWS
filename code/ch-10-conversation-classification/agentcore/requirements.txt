@@ -1,0 +1,4 @@
+# The deployable unit for AgentCore Runtime. Pinned, because an unpinned
+# decision model is a different model on the next deploy.
+bedrock-agentcore==1.25.4
+strands-decider==0.3.0

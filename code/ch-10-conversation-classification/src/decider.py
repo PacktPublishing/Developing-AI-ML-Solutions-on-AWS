@@ -40,7 +40,11 @@ DECIDER_TIMEOUT = int(os.environ.get("DECIDER_TIMEOUT", "300"))
 AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN", "")
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 
-SYSTEM_ONE_PATH = "/v1/systemone"
+# /v1/systemone is what both Strands Decider and Kev serve, so it is the default.
+# Strands Decider also serves /invocations and /ping, which is the contract
+# AgentCore Runtime invokes a container on, so pointing DECIDER_PATH at
+# /invocations runs the local round through the same path the cloud round uses.
+SYSTEM_ONE_PATH = os.environ.get("DECIDER_PATH", "/v1/systemone")
 
 
 def best_device() -> str:
