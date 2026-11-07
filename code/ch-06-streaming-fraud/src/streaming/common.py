@@ -1,4 +1,4 @@
-"""Shared plumbing for the chapter's streaming scripts.
+"""Configure streaming clients and provide stream creation and polling helpers.
 
 One place for the boto3 clients, the stream names, and the two helpers every
 stage needs: create-a-stream-if-missing and iterate-records-across-shards.

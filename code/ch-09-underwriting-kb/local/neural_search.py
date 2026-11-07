@@ -1,13 +1,11 @@
 # /// script
 # dependencies = ["requests"]
 # ///
-"""Prove the neural plugin: let the cluster embed, instead of embedding first.
+"""Index and search memo text using an OpenSearch embedding model.
 
-Everywhere else in this chapter the app calls the model and sends OpenSearch a
-vector. Here OpenSearch holds the model: an ingest pipeline embeds each document
-as it lands, and a neural query embeds the question at search time. The model is
-a pretrained sentence-transformer running inside the cluster, so this needs no
-Bedrock and no network beyond the one-off model download.
+An ingest pipeline embeds documents and a neural query embeds the search text.
+The pretrained sentence-transformer runs inside the local cluster and requires
+an initial model download.
 
 Usage:
   make neural           # against the local node on 9200

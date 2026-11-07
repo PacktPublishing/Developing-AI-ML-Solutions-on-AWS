@@ -2,16 +2,12 @@
 # requires-python = ">=3.12,<3.13"
 # dependencies = ["sagemaker>=3,<4", "sagemaker-mlops", "botocore[crt]", "boto3", "pandas", "catboost"]
 # ///
-"""Verify the chapter's from-source SHAP feature-attribution drift against real SageMaker Clarify.
+"""Compare attribution drift calculated from Clarify and CatBoost SHAP values.
 
-Runs two Clarify explainability jobs (KernelSHAP, global mean-absolute) through a shadow endpoint
-built from the scorecard -- one on the reference batch, one on the drifted current batch -- reads
-each analysis.json, and scores the NDCG between the two feature-attribution rankings. That is the
-exact measure src/attribution.py computes from CatBoost TreeSHAP. If the two NDCGs agree, and agree
-on the < 0.90 drift verdict, the from-source monitor is faithful to Clarify.
-
-SageMaker Clarify is closed to new accounts, so this parity check needs a grandfathered account;
-the chapter's everyday path is the Processing-step replacement in pipeline.py (make pipeline).
+Run Clarify explainability jobs on the reference and current samples, then apply
+the chapter's NDCG function to their global attributions. Compare the result
+with NDCG calculated from CatBoost attributions on the same samples. This checks
+agreement between the two attribution methods for these samples.
 
 Env: IMAGE_URI, SAGEMAKER_ROLE_ARN, ARTIFACT_BUCKET, AWS_DEFAULT_REGION (default us-east-1),
      DATA_DIR (default ../data/generated), MODEL_DIR (default ../runs-local/model),
@@ -85,7 +81,7 @@ def stage() -> tuple[pd.DataFrame, pd.DataFrame, dict]:
 
 
 def ensure_model(model_tar: str) -> None:
-    """(Re)create the SageMaker model Clarify stands its shadow endpoint up from."""
+    """Recreate the SageMaker model used by the Clarify jobs."""
     client = sess.sagemaker_client
     try:
         client.delete_model(ModelName=MODEL_NAME)
@@ -148,12 +144,12 @@ def clarify_shap(name: str, data_uri: str, baseline: list) -> pd.Series:
 
 
 def verdict(ndcg: float) -> str:
-    """Return the chapter's drift call: below 0.90 (NDCG_MIN) is drift, at or above is stable."""
+    """Return drift when NDCG is below NDCG_MIN, otherwise stable."""
     return "DRIFT" if ndcg < 0.90 else "stable"
 
 
 def main() -> None:
-    """Run Clarify on both batches, compute both NDCGs on identical rows, and report parity."""
+    """Compare NDCG values from Clarify and CatBoost attributions on matched samples."""
     ref, cur, staged = stage()
     ensure_model(staged["model_tar"])
     baseline = baseline_row(ref)

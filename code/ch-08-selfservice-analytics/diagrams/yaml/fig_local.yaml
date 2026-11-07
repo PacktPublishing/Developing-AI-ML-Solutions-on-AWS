@@ -28,7 +28,7 @@ Diagram:
       Title: "Local (Docker Compose)"
       Children: [AgentCol, BackendCol, WarehouseCol]
 
-    # single child: the container centres on the canvas axis, so the browser's
+    # single child: the container centers on the canvas axis, so the browser's
     # link lands on the icon instead of striking through the caption below it.
     AgentCol:
       Type: AWS::Diagram::VerticalStack

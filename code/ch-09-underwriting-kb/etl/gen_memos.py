@@ -1,15 +1,8 @@
-"""Generate a synthetic SME underwriting-memo corpus for the knowledge base.
+"""Generate synthetic SME credit memos, approval threads and amendment requests.
 
-Three shapes mirror a real corpus without any real data: a structured 8-section
-credit memo (the extractable one, with a Customer Financial Snapshot table), an
-Outlook approval thread (mostly boilerplate around a few lines of reasoning), and
-an amendment request against a facility that already exists. The third is the
-common case in a real archive, where most decisions are servicing changes rather
-than new lending: deferred principal, facility increases, security instruments,
-tenor and repayment changes, and approvals above a limit.
-
-All names, businesses, amounts, and identifiers are invented, and amounts are in
-USD.
+Structured memos contain eight sections and a financial snapshot table. Email
+threads include nested replies. Amendment requests describe changes to existing
+facilities. All names, identifiers and amounts are invented; amounts are in USD.
 
 Usage:
   python gen_memos.py --out data/generated/memos --count 200 --seed 7
@@ -129,7 +122,7 @@ class Memo:
 
 
 def _money(rng: random.Random, lo: int, hi: int) -> int:
-    """Return a round-ish dollar amount in [lo, hi], snapped to thousands."""
+    """Generate a dollar amount rounded to thousands within the supplied bounds."""
     return rng.randint(lo // 1000, hi // 1000) * 1000
 
 
@@ -168,8 +161,8 @@ AMENDMENTS = [
         "Combined exposure stays inside the single-obligor limit.",
     ),
     (
-        "DEFERRED GUARANTOR CHEQUE",
-        "deferral of the guarantor cheque presentation by {months} month(s)",
+        "DEFERRED GUARANTOR CHECK",
+        "deferral of the guarantor check presentation by {months} month(s)",
         "Guarantor forms remain on file and unchanged.",
     ),
     (
@@ -180,7 +173,7 @@ AMENDMENTS = [
     (
         "TENOR EXTENSION",
         "an extension of tenor from {tenor} to {new_tenor} months",
-        "Instalment recalculated, and the rate is unchanged.",
+        "Installment recalculated, and the rate is unchanged.",
     ),
     (
         "EXCEPTIONAL APPROVAL",
@@ -201,11 +194,7 @@ AMENDMENTS = [
 
 
 def _amendment(rng: random.Random, loan_id: int, as_thread: bool) -> Memo:
-    """Render a servicing decision on a facility that already exists.
-
-    Most of a real archive is this: not the original credit assessment, but the
-    changes made to it afterwards, each one a short request and a shorter answer.
-    """
+    """Generate an amendment request and decision for an existing facility."""
     name, _ = _business_name(rng)
     sector, _, facility = rng.choice(SECTORS)
     approver, lead, rm = rng.sample(STAFF, 3)
@@ -256,7 +245,7 @@ def _amendment(rng: random.Random, loan_id: int, as_thread: bool) -> Memo:
 
                     Exposure: ${exposure:,}   Tenor: {tenor} months
                     Days past due: {dpd}      Sector: {sector}
-                    Collateral: guarantor cheques, 2 signatories
+                    Collateral: guarantor checks, 2 signatories
             """)
         doc = f"{kind.title().replace(' ', '_')}.msg"
         return Memo(
@@ -286,7 +275,7 @@ def _amendment(rng: random.Random, loan_id: int, as_thread: bool) -> Memo:
         Original Tenor                        {tenor} months
         Days Past Due                         {dpd}
         Credit Bureau Status                  {rng.choice(["Satisfactory", "No adverse records"])}
-        Collateral                            Guarantor cheques, 2 signatories
+        Collateral                            Guarantor checks, 2 signatories
 
         3. Background
         {reason} The promoter has serviced the facility without
@@ -316,7 +305,7 @@ def _amendment(rng: random.Random, loan_id: int, as_thread: bool) -> Memo:
 
 
 def _structured(rng: random.Random, loan_id: int, messy: bool) -> Memo:
-    """Render the 8-section structured credit memo, the extractable shape."""
+    """Generate an eight-section memo with a financial snapshot table."""
     name, promoter = _business_name(rng)
     sector, line, facility = rng.choice(SECTORS)
     city, state = rng.choice(CITIES)
@@ -400,7 +389,7 @@ def _structured(rng: random.Random, loan_id: int, messy: bool) -> Memo:
 
 
 def _email_thread(rng: random.Random, loan_id: int) -> Memo:
-    """Render a nested Outlook approval thread, the low-signal shape."""
+    """Generate an approval thread with nested replies."""
     name, _ = _business_name(rng)
     amount = _money(rng, 500_000, 20_000_000)
     approver, lead, rm, cc1, cc2 = rng.sample(STAFF, 5)

@@ -2,7 +2,7 @@
 
 FastWoe is a scikit-learn transformer (numerics monotone tree-binned, categoricals
 target-encoded), so the scorecard is a Pipeline([woe, lr]) and the monotone binning
-carries the bank's business rule by construction. The pipeline serialises natively:
+carries the bank's business rule by construction. The pipeline serializes natively:
 joblib for the serving container, mlflow.sklearn for the registry. ScorecardPredictor is
 a thin wrapper that selects the model's features and returns the probability of default.
 """

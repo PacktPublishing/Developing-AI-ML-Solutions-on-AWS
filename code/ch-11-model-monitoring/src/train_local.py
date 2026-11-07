@@ -2,11 +2,9 @@
 # requires-python = ">=3.12,<3.13"
 # dependencies = ["sagemaker>=3,<4", "sagemaker-mlops", "botocore[crt]", "boto3"]
 # ///
-"""Train the scorecard in SageMaker local mode (Mode.LOCAL_CONTAINER).
+"""Train the scorecard in a container using SageMaker local mode.
 
-The same image and /opt/ml contract as the managed training job, but the SDK runs the
-container locally instead of a bare docker run, so the training API is exactly the one the
-cloud job uses. Produces runs-local/model/scorecard.cbm.
+Write the trained model to runs-local/model/scorecard.cbm.
 
 Env: IMAGE (default ch11-scorecard:latest).
 """

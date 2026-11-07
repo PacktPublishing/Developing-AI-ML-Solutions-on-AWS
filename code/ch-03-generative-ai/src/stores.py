@@ -1,4 +1,4 @@
-"""The vector store seam: pgvector locally, RDS for PostgreSQL on AWS."""
+"""Connect to pgvector locally or PostgreSQL on AWS."""
 
 import os
 

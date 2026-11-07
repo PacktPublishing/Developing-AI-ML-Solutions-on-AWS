@@ -1,9 +1,7 @@
-"""Render the feature-flag JSON as the Amazon Ion the AppConfig agent evaluates.
+"""Convert feature-flag JSON to Amazon Ion for the AppConfig agent.
 
-The agent only evaluates rules (including the split) when the configuration is Ion of
-type AWS.AppConfig.FeatureFlags, in a file named app:env:profile.application%ion%type=
-AWS.AppConfig.FeatureFlags. This converts our JSON flag document to that Ion form, one
-source of truth for both the local agent and the AWS hosted configuration version.
+Write an AWS.AppConfig.FeatureFlags configuration using the application,
+environment and profile names in the output filename.
 
 Usage:
   uv run etl/to_ion.py --app credit-governance --env local --profile rollout

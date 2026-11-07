@@ -1,4 +1,4 @@
-"""The delegated-authority routing rule: the one piece that must never drift."""
+"""Test delegated-authority routing rules."""
 
 from authority import decide
 

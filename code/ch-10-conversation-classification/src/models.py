@@ -1,12 +1,7 @@
 # /// script
 # dependencies = ["boto3", "ollama"]
 # ///
-"""The model seam: one Bedrock Converse interface, two backends.
-
-get_runtime() returns a bedrock-runtime client -- real boto3, or a local shim
-backed by Ollama when BEDROCK_LOCAL=1. Both answer .converse(...) in the Bedrock
-Converse response shape, so the classifier and the batch job never change.
-"""
+"""Provide Bedrock Converse and local Ollama clients for classification."""
 
 import os
 

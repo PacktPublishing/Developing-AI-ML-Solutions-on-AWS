@@ -23,13 +23,17 @@ Diagram:
     Local:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
-      Direction: horizontal
+      Direction: vertical
       Title: "Local cloud (Docker Compose)"
-      Children: [S3Proxy, BatchColumn, SNS]
+      Children: [JobRow, SNS]
+
+    JobRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [S3Proxy, BatchColumn]
 
     S3Proxy:
       Type: AWS::S3::Bucket
-      Title: "S3Proxy\nJSONL manifest + .jsonl.out"
+      Title: "S3Proxy\ninput/<run>/ and output/<run>/"
     BatchColumn:
       Type: AWS::Diagram::VerticalStack
       Children: [Batch, Ollama]
@@ -40,7 +44,7 @@ Diagram:
     Ollama:
       Type: AWS::Diagram::Resource
       Preset: "Ollama"
-      Title: "Ollama\nmodel seam (Converse)"
+      Title: "Ollama\nmodel seam (qwen3:0.6b)"
     SNS:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Simple Notification Service (Amazon SNS)"
@@ -50,4 +54,5 @@ Diagram:
     - {Source: Client, SourcePosition: E, Target: S3Proxy, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: S3Proxy, SourcePosition: E, Target: Batch, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Batch, SourcePosition: S, Target: Ollama, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Batch, SourcePosition: E, Target: SNS, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    # route.py publishes, not the batch shim: it reads the predictions back.
+    - {Source: Client, SourcePosition: E, Target: SNS, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

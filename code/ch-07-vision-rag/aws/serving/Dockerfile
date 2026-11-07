@@ -5,7 +5,7 @@ FROM public.ecr.aws/docker/library/python:3.12-slim
 
 # CUDA build of torch, pinned twice over. The version has to satisfy facenet-pytorch
 # (torch<2.3), and the CUDA build has to be one the host driver supports: a cu121 image
-# on this instance enumerates the device but fails to initialise it, which surfaces as
+# on this instance enumerates the device but fails to initialize it, which surfaces as
 # device_count 1 alongside is_available False. cu118 is the conservative choice.
 RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu118 \
     torch==2.2.2+cu118 torchvision==0.17.2+cu118

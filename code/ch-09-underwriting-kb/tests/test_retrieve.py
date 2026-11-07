@@ -1,4 +1,4 @@
-"""Every source an answer drew on is cited, policies included."""
+"""Test deduplication of retrieved loan and policy references."""
 
 from retrieve import _sources_list
 

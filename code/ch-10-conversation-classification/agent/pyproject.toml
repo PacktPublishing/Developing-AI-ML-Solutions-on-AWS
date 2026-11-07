@@ -1,0 +1,11 @@
+[project]
+name = "ch10-routing-agent"
+version = "0.1.0"
+description = "The routing agent: owns the policy, asks the model on SageMaker"
+requires-python = ">=3.12"
+# Pinned, because AgentCore builds the deployment package from this file and an
+# unpinned dependency makes the next deploy a different agent.
+dependencies = [
+  "bedrock-agentcore==1.25.4",
+  "boto3==1.43.126",
+]

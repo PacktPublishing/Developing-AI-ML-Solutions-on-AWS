@@ -64,6 +64,11 @@ class LocalBedrockBatch:
             "status": "Submitted",
             "inputDataConfig": inputDataConfig,
             "outputDataConfig": outputDataConfig,
+            # Job counters returned to the polling client.
+            "totalRecordCount": 0,
+            "processedRecordCount": 0,
+            "successRecordCount": 0,
+            "errorRecordCount": 0,
         }
         threading.Thread(target=self._run, args=(arn,), daemon=True).start()
         return {"jobArn": arn}
@@ -110,31 +115,55 @@ class LocalBedrockBatch:
                     .read()
                     .decode("utf-8")
                 )
-                out_lines = [
-                    json.dumps(self._invoke(model, json.loads(line)))
-                    for line in body.splitlines()
-                    if line.strip()
-                ]
+                out_lines = []
+                for line in body.splitlines():
+                    if not line.strip():
+                        continue
+                    record = json.loads(line)
+                    answered = self._invoke(model, record)
+                    out_lines.append(json.dumps(answered))
+                    job["processedRecordCount"] += 1
+                    job["errorRecordCount"] += "error" in answered
                 out_key = f"{out_prefix.rstrip('/')}/{arn.split('/')[-1]}/{key.split('/')[-1]}.out"
                 self._s3.put_object(
                     Bucket=out_bucket,
                     Key=out_key,
                     Body="\n".join(out_lines).encode("utf-8"),
                 )
+            job["successRecordCount"] = (
+                job["processedRecordCount"] - job["errorRecordCount"]
+            )
+            job["totalRecordCount"] = job["processedRecordCount"]
             job["status"] = "Completed"
-        except Exception as exc:  # noqa: BLE001 - surface the failure in the job status like Bedrock
+        # The job boundary catches anything: a thread that raises here would lose
+        # the job, where the service records a Failed job and its message.
+        except Exception as exc:
             job["status"] = "Failed"
             job["message"] = str(exc)
 
     def _invoke(self, model: str, record: dict) -> dict:
-        """Invoke the model on one record's Converse modelInput; wrap as Bedrock does."""
+        """Invoke the model on one record's Converse modelInput; wrap as Bedrock does.
+
+        One record failing is not the job failing, here as on the service: the
+        output line carries an error in place of modelOutput and the rest of the
+        batch is still processed. The failures caught are the ones that belong to
+        a record, a malformed modelInput and a call that did not get through.
+        Anything else is the job's problem and _run reports it as the job failing.
+        """
         mi = record["modelInput"]
-        resp = self._runtime.converse(
-            modelId=model,
-            messages=mi["messages"],
-            system=mi.get("system"),
-            inferenceConfig=mi.get("inferenceConfig"),
-        )
+        try:
+            resp = self._runtime.converse(
+                modelId=model,
+                messages=mi["messages"],
+                system=mi.get("system"),
+                inferenceConfig=mi.get("inferenceConfig"),
+            )
+        except (ClientError, OSError, KeyError, TypeError, ValueError) as exc:
+            return {
+                "recordId": record["recordId"],
+                "modelInput": mi,
+                "error": {"message": str(exc)},
+            }
         return {"recordId": record["recordId"], "modelInput": mi, "modelOutput": resp}
 
 

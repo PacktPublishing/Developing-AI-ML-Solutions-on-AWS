@@ -1,13 +1,10 @@
 # /// script
 # dependencies = ["boto3"]
 # ///
-"""The alerting seam: Amazon CloudWatch on AWS, a from-source shim locally.
+"""Provide AWS and local clients for publishing metrics and evaluating alarms.
 
-get_cloudwatch() returns a client exposing put_metric_data, put_metric_alarm, and
-describe_alarms. On AWS it is boto3's cloudwatch client; locally it is a shim,
-modelled on the community LocalStack CloudWatch provider: it stores metric data and
-evaluates each alarm's latest datapoint against its threshold, so a monitoring job
-can publish PSI and attribution metrics and raise an alarm before bad scores pile up.
+The local client stores the latest metric values and compares them with alarm
+thresholds. get_cloudwatch selects it or the boto3 CloudWatch client.
 """
 
 import os

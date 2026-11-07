@@ -2,18 +2,12 @@
 # requires-python = ">=3.12,<3.13"
 # dependencies = ["boto3", "botocore[crt]", "pandas"]
 # ///
-"""Deploy the scorecard as a real-time endpoint with Data Capture, for live monitoring.
+"""Deploy the scorecard to a SageMaker endpoint with data capture enabled.
 
-The chapter's everyday monitoring path is the Batch Transform pipeline (pipeline.py).
-This is the real-time counterpart: a SageMaker endpoint serving the same train/serve
-image, with DataCaptureConfig turned on so every request and response is logged to S3
-as JSON Lines. Point run_monitor.py --capture at that S3 prefix and the same PSI + SHAP
-monitors run over live traffic instead of a batch, no rescoring.
-
-It packages the locally trained scorecard into model.tar.gz, creates the model, an
-endpoint config with capture enabled (100% sampling, inputs and outputs, CSV), and the
-endpoint; then it sends the current batch through to seed some capture and prints the S3
-prefix to monitor. Needs the image in ECR (make image) first.
+Package and upload the trained model, create the endpoint with 100% input and
+output sampling, and send the current batch for scoring. Print the capture
+prefix for use with run_monitor.py --capture. The serving image must already
+be available in ECR.
 
 Env: IMAGE_URI, SAGEMAKER_ROLE_ARN, ARTIFACT_BUCKET, AWS_DEFAULT_REGION (default
      us-east-1), MODEL_DIR (default ../runs-local/model), DATA_DIR (default

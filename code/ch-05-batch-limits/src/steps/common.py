@@ -1,4 +1,4 @@
-"""Shared plumbing for the batch steps: the warehouse DSN and the S3 client.
+"""Configure the warehouse connection and S3 client for batch steps.
 
 Locally the endpoints point at the compose containers; on AWS the same
 variables point at the real services, and this module does not change.

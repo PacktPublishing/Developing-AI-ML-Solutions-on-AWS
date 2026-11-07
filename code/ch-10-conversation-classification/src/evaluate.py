@@ -1,17 +1,12 @@
-"""Score the classifier: accuracy, macro-F1, the multiclass Brier, and the Brier Index.
+"""Calculate accuracy, macro-F1 and Brier metrics for classification results.
 
-The Brier Index (Forecasting Research Institute, 2026) rescales a binary Brier
-score to 100 * (1 - sqrt(Brier)) so higher is better, with 100 = perfect, 50 =
-always forecasting the base event, 0 = maximally wrong. Its anchors assume a 50%
-base rate, so we apply it one-vs-rest -- one binary problem per class -- and also
-report the **Adjusted Brier Index**, which references each class's own base rate p:
+Accuracy and macro-F1 include all records. Brier metrics include only records
+with a valid forecast; coverage reports the proportion included.
 
-    Adjusted Brier Index = 100 - 50 * sqrt(Brier / (p * (1 - p)))
-
-That is what makes it fair under class imbalance: a rare class with a low raw Brier
-is not automatically "good", it is judged against p * (1 - p). The indices are only
-meaningful with soft probabilities -- add a "probs" field to the predictions (see
-classify.py --probs); with hard labels the Brier is just twice the error rate.
+For each class, the Brier Index is 100 * (1 - sqrt(Brier)). The Adjusted Brier
+Index is 100 - 50 * sqrt(Brier / (p * (1 - p))), where p is the class frequency
+among valid forecasts. The adjusted index is undefined when p is zero or one.
+Multiclass Brier equals twice the error rate for valid one-hot predictions.
 
 Usage:
   uv run src/evaluate.py --dataset conversations
@@ -24,8 +19,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# The per-class table, as (heading, ClassScore field, format). One place to edit,
-# so a heading can never drift away from the column under it.
+# Per-class table columns: (heading, ClassScore field, format).
 CLASS_COLUMNS = (
     ("base", "base", "{:.2f}"),
     ("Brier", "brier", "{:.3f}"),
@@ -47,7 +41,7 @@ class ClassScore:
 
 @dataclass(frozen=True)
 class Report:
-    """Everything evaluate.py knows about one scored dataset."""
+    """Classification metrics, coverage and per-class scores."""
 
     dataset: str
     n: int
@@ -58,14 +52,32 @@ class Report:
     macro_index: float
     macro_adjusted: float
     classes: list[ClassScore] = field(default_factory=list)
+    # records with a usable prediction, and the ones without
+    scored: int = 0
+    missing: int = 0
+
+    @property
+    def coverage(self) -> float:
+        """Return the share of records that produced a usable prediction."""
+        return self.scored / self.n if self.n else 0.0
 
     @property
     def summary(self) -> list[tuple[str, str, str]]:
         """The headline metrics as (name, value, gloss) rows."""
         return [
-            ("accuracy", f"{self.accuracy:.3f}", ""),
+            ("accuracy", f"{self.accuracy:.3f}", "every record, missing ones wrong"),
+            (
+                "coverage",
+                f"{self.coverage:.3f}",
+                f"{self.scored}/{self.n} records produced a prediction"
+                + (f", {self.missing} did not" if self.missing else ""),
+            ),
             ("macro-F1", f"{self.macro_f1:.3f}", ""),
-            ("Brier score", f"{self.brier:.3f}", "multiclass, lower is better"),
+            (
+                "Brier score",
+                _cell(self.brier, "{:.3f}"),
+                f"multiclass, lower is better, over the {self.scored} scored",
+            ),
             (
                 "Brier Index",
                 _pct(self.macro_index),
@@ -89,8 +101,15 @@ def _cell(value: float, fmt: str) -> str:
     return "n/a" if math.isnan(value) else fmt.format(value)
 
 
+def has_forecast(r: dict) -> bool:
+    """Return whether the record has a valid probability distribution or category."""
+    if r.get("probs"):
+        return True
+    return bool(r.get("pred"))
+
+
 def _prob(r: dict, label: str) -> float:
-    """Return the predicted probability for one class -- soft if present, else one-hot."""
+    """Return the predicted probability for one class, soft if present, else one-hot."""
     if probs := r.get("probs"):
         return float(probs.get(label, 0.0))
     return 1.0 if r["pred"] == label else 0.0
@@ -114,7 +133,10 @@ def _macro_f1(preds: list[dict], labels: list[str]) -> float:
 
 
 def _class_score(preds: list[dict], label: str) -> ClassScore:
-    """Return the one-vs-rest scores for one class: base rate, Brier, and both indices."""
+    """Calculate one-vs-rest Brier metrics for a class.
+
+    Calculate the class frequency from the supplied subset of valid forecasts.
+    """
     n = len(preds)
     base = sum(r["label"] == label for r in preds) / n
     brier = sum((_prob(r, label) - float(r["label"] == label)) ** 2 for r in preds) / n
@@ -129,19 +151,27 @@ def _class_score(preds: list[dict], label: str) -> ClassScore:
 
 
 def score(dataset: str, preds: list[dict], labels: list[str]) -> Report:
-    """Score the predictions against the label set."""
-    classes = [_class_score(preds, label) for label in labels]
+    """Calculate accuracy and macro-F1 over all records.
+
+    Calculate Brier metrics over valid forecasts and report their coverage.
+    """
+    scored = [r for r in preds if has_forecast(r)]
+    classes = [_class_score(scored, label) for label in labels] if scored else []
     adjusted = [c.adjusted for c in classes if not math.isnan(c.adjusted)]
     return Report(
         dataset=dataset,
         n=len(preds),
         soft=any(r.get("probs") for r in preds),
-        accuracy=sum(r["pred"] == r["label"] for r in preds) / len(preds),
+        accuracy=sum(r.get("pred") == r["label"] for r in preds) / len(preds),
         macro_f1=_macro_f1(preds, labels),
-        brier=sum(c.brier for c in classes),
-        macro_index=sum(c.index for c in classes) / len(classes),
+        brier=sum(c.brier for c in classes) if classes else math.nan,
+        macro_index=sum(c.index for c in classes) / len(classes)
+        if classes
+        else math.nan,
         macro_adjusted=sum(adjusted) / len(adjusted) if adjusted else math.nan,
         classes=classes,
+        scored=len(scored),
+        missing=len(preds) - len(scored),
     )
 
 
@@ -164,6 +194,12 @@ def render(report: Report) -> str:
             "add --probs to classify for a calibrated Brier"
         )
 
+    if not report.classes:
+        lines.append(
+            "\nno record produced a prediction, so there is nothing to score per class"
+        )
+        return "\n".join(lines)
+
     label_width = max(len(c.label) for c in report.classes)
     headings = "".join(f"{heading:>10}" for heading, _, _ in CLASS_COLUMNS)
     lines += ["", f"  {'per class':<{label_width}}{headings}"]
@@ -182,10 +218,19 @@ def main() -> None:
     p.add_argument("--data", type=Path, default=Path("data/generated"))
     a = p.parse_args()
 
+    predictions = a.data / f"{a.dataset}.predictions.jsonl"
     preds = [
         json.loads(line)
-        for line in (a.data / f"{a.dataset}.predictions.jsonl").read_text().splitlines()
+        for line in predictions.read_text().splitlines()
+        if line.strip()
     ]
+    if not preds:
+        # A round that died partway through leaves the file behind with nothing
+        # in it, and every metric here divides by the number of predictions.
+        raise SystemExit(
+            f"{predictions} has no predictions in it. Run the router over the "
+            "dataset first: make classify, or make decide for the decision model."
+        )
     labels = json.loads((a.data / f"{a.dataset}.labels.json").read_text())
     print(render(score(a.dataset, preds, labels)))
 

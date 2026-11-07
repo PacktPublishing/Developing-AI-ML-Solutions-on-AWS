@@ -7,10 +7,9 @@
 Read transactions off the stream, score each against the model, and act on the
 decision in two places. The endpoint returns a 0-1000 score, and two cuts band
 it into approve, investigate, or block. DynamoDB holds blocks only, keyed by
-transaction id: the block lands first because that write is the product. The
+transaction ID. Write the block before publishing the decision. The
 decisions stream then gets every scored record, whatever its band, for the
-analytics pipeline. Fast path first, analytics second; the order in the loop
-body is the architecture.
+analytics pipeline. Write blocks before publishing records to the analytics stream.
 
 The model sits behind the SageMaker serving contract, never in-process: the
 consumer calls invoke_endpoint through boto3's sagemaker-runtime client, the

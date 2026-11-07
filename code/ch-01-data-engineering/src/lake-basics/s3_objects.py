@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["boto3"]
 # ///
-"""Buckets and objects: the S3 data model in a dozen calls.
+"""Demonstrate S3 object writes, reads, listing, metadata and tags.
 
 Writes a scored decision as an object, reads it back, lists a prefix,
 and stamps provenance metadata and tags on a curated object.

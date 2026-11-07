@@ -15,10 +15,9 @@ Usage:
 import argparse
 from pathlib import Path
 
+from chunking import chunk_text
 from models import EMBED_DIM, embed, get_runtime
 from stores import get_store
-
-CHUNK_SIZE = 800
 
 
 def _header(path: Path) -> tuple[dict[str, str], str]:
@@ -49,24 +48,6 @@ def memo_meta(path: Path) -> dict:
         if int(fields.get(key) or 0):
             meta[key] = int(fields[key])
     return meta
-
-
-def chunk_text(text: str, size: int = CHUNK_SIZE) -> list[str]:
-    """Split text into chunks of about `size` characters on paragraph breaks."""
-    chunks: list[str] = []
-    current = ""
-    for para in text.split("\n\n"):
-        para = para.strip()
-        if not para:
-            continue
-        if current and len(current) + len(para) + 2 > size:
-            chunks.append(current)
-            current = para
-        else:
-            current = f"{current}\n\n{para}" if current else para
-    if current:
-        chunks.append(current)
-    return chunks
 
 
 def seed(memo_dir: Path, policy_dir: Path | None = None) -> int:

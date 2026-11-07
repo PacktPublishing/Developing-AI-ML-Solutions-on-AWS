@@ -1,12 +1,6 @@
-"""Turn scores into limit decisions, as a pipeline Lambda step.
+"""Apply limit rules to scored customers in a pipeline Lambda step.
 
-The rules are a handful of comparisons over one row at a time, so this needs neither a
-model nor a dataframe: it streams scores.csv out of S3 and writes decisions.csv back,
-using nothing but the standard library and boto3.
-
-That is also why it is a Lambda rather than a Processing job. The work is bounded by
-how long the rules take per customer, not by anything that needs an instance sized for
-it. The step before it, which runs the model, is a different matter.
+Read scores.csv from S3, evaluate each row and write decisions.csv.
 """
 
 import csv
@@ -23,7 +17,7 @@ DECREASE_STEP = float(os.environ.get("DECREASE_STEP", "0.30"))
 
 
 def _s3():
-    """Build an S3 client that honours a local endpoint when one is configured."""
+    """Build an S3 client that honors a local endpoint when one is configured."""
     return boto3.client("s3", endpoint_url=os.environ.get("S3_ENDPOINT") or None)
 
 

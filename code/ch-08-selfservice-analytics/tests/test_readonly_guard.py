@@ -1,9 +1,7 @@
 """The read-only guard in front of the Data API.
 
-The assistant writes this SQL, so the guard is the one place that decides what a
-model-generated statement is allowed to do. The warehouse grants are the real
-backstop, but a guard that only inspects the first word is easy to walk past,
-and these are the shapes that walk past it.
+Test rejection of writes and multiple statements, including SQL with leading
+comments or parentheses. Database permissions provide a separate access check.
 """
 
 import pytest

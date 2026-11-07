@@ -1,21 +1,11 @@
 # /// script
 # dependencies = ["fastapi", "uvicorn[standard]", "python-multipart", "pdfplumber", "boto3", "ollama", "opensearch-py", "strands-agents", "pyjwt[crypto]"]
 # ///
-"""The underwriter app: one FastAPI service for the UI and the retrieval API.
+"""Serve underwriting queries, statement uploads and supporting documents.
 
-GET / serves the ask/recommend page; POST /upload takes an applicant's bank
-statement, totals it, and indexes it as the document under review; POST /ask and
-POST /cases run the grounded
-retrieval from retrieve.py and return {answer, sources}. POST /agent answers a
-question that needs arithmetic as well as recall, by handing it to the Strands
-agent with the memo search and the affordability tools. The same app runs under
-uvicorn locally and, unchanged, in a Lambda container via the Lambda Web Adapter;
-only the store endpoint and credentials differ.
-
-Every route but the page and its sign-in settings needs a token from the
-underwriters' Cognito user pool, and every answer is written to the audit log
-with the underwriter who asked. On AWS, API Gateway checks the token first and
-the app checks it again; locally the pool is cognito-shim and only the app checks.
+The FastAPI service runs locally under uvicorn and in Lambda through the Lambda
+Web Adapter. Query routes call retrieval or agent functions; upload routes index
+case documents. Authentication uses the configured Cognito user pool.
 
 Usage:
   STORE=opensearch BEDROCK_LOCAL=1 PYTHONPATH=src uv run app/main.py
@@ -28,11 +18,13 @@ from typing import Annotated
 
 from agent import build_agent
 from audit import record, underwriter
-from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
+from documents import Unsupported
+from documents import submit as read_context_document
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, UploadFile
 from models import get_runtime
 from pydantic import BaseModel
 from retrieve import ask_result, cases_result
-from statements import submit
+from statements import Unreadable, submit
 from stores import get_store
 
 app = FastAPI(title="Underwriting knowledge base")
@@ -130,29 +122,85 @@ def agent(body: AgentBody, who: Underwriter) -> dict[str, str]:
 
 @app.post("/upload")
 async def upload(file: UploadFile, who: Underwriter) -> dict:
-    """Take an applicant's bank statement, total it, and index it for review.
-
-    The figures are parsed here, once, and stored with the document, so the
-    agent later reads them back from OpenSearch instead of adding up a table.
-    """
+    """Parse, validate and index a new statement version; return 422 on invalid input."""
     suffix = Path(file.filename or "statement.pdf").suffix or ".pdf"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
     try:
         summary = submit(tmp_path, get_store(), get_runtime())
+    except Unreadable as err:
+        # nothing was indexed, so the applicant can send a readable copy and the
+        # case is where it was, rather than holding a statement of no income
+        raise HTTPException(status_code=422, detail=str(err)) from err
     finally:
         os.unlink(tmp_path)
     record(who, "upload", summary.case_id, [])
     return {
         "case_id": summary.case_id,
+        "version": summary.version,
         "holder": summary.holder,
         "monthly_income": summary.monthly_income,
+        "total_inflows": summary.total_inflows,
+        "excluded_inflows": summary.excluded_inflows,
         "existing_repayments": summary.existing_repayments,
         "months_covered": summary.months,
         "transactions": summary.transactions,
+        "reconciliation": summary.reconciliation,
         "balance_breaks": summary.balance_breaks,
     }
+
+
+@app.post("/context")
+async def add_context(
+    case_id: Annotated[str, Form()], file: UploadFile, who: Underwriter
+) -> dict:
+    """Read and index a supporting case document, retaining previous documents."""
+    suffix = Path(file.filename or "document.pdf").suffix or ".pdf"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    try:
+        reading = read_context_document(tmp_path, case_id, get_store(), get_runtime())
+    except Unsupported as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
+    finally:
+        os.unlink(tmp_path)
+    record(who, "context", f"{case_id} {reading.doc_name}", [])
+    return {
+        "case_id": case_id,
+        "doc_name": reading.doc_name,
+        "doc_type": reading.doc_type,
+        "summary": reading.summary,
+        "figures": reading.figures,
+        "dates": reading.dates,
+        "concerns": reading.concerns,
+        "pages_with_text": sum(1 for page in reading.pages if page.strip()),
+    }
+
+
+@app.get("/context/{case_id}")
+def list_context(case_id: str, who: Underwriter) -> dict:
+    """List the supporting documents held for a case."""
+    documents = get_store().list_submissions(case_id, source="context")
+    return {
+        "case_id": case_id,
+        "documents": [
+            {
+                "doc_name": doc["doc_name"],
+                "doc_type": doc["doc_type"],
+                "uploaded_at": doc["uploaded_at"],
+            }
+            for doc in documents
+        ],
+    }
+
+
+@app.delete("/context/{case_id}")
+def drop_context(case_id: str, who: Underwriter) -> dict[str, int]:
+    """Remove the supporting documents held for a case."""
+    record(who, "drop-context", case_id, [])
+    return {"deleted": get_store().drop_submission(case_id, source="context")}
 
 
 @app.delete("/upload/{case_id}")

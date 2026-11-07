@@ -6,7 +6,7 @@ from router import Router
 
 
 def _score(model_name, loan):
-    """Stub scorer: a referable pd from the challenger, an approvable one from the champion."""
+    """Return a PD of 0.8 for the challenger and 0.1 for the champion."""
     return 0.8 if model_name == "credit-challenger" else 0.1
 
 

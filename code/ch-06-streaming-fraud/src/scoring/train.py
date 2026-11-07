@@ -73,7 +73,7 @@ def main() -> None:
     # operating point worth the most. Frozen and shipped; the consumer never re-derives it.
     # The holdout is chronological, the earlier three quarters of the training window to fit
     # and the latest quarter to score candidates on. A float cv would shuffle instead, which
-    # would let later behaviour inform the fitting half and undo has_time above.
+    # would let later behavior inform the fitting half and undo has_time above.
     cut = int(len(train) * 0.75)
     split = [(np.arange(cut), np.arange(cut, len(train)))]
     business_scorer = make_scorer(business_metric).set_score_request(amount=True)

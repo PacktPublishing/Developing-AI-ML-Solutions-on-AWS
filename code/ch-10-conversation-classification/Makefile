@@ -1,4 +1,4 @@
-.PHONY: up prepare classify route eval all down lint test diagrams
+.PHONY: up prepare classify decide serve-decider serve-agent sm-local sm-local-image route eval all down lint test diagrams
 
 # the whole local flow in one command: the local S3, the datasets, the batch classification
 # (local Ollama), the routing, and the evaluation. make down when done.
@@ -15,7 +15,9 @@ export PYTHONPATH := $(CURDIR)/src
 COMPOSE := docker compose -f local/batch-stack.yml
 BUCKET ?= ch10-batch
 DATASET ?= conversations
-# prompt variant: a (bare category names) or b (defined category borders)
+DECIDER_CHECKPOINT ?= StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
+# prompt variant: a (bare category names) or b (defined category borders).
+# classify also takes c (borders plus few-shot); decide takes a or b.
 VARIANT ?= a
 
 # Local by default: Bedrock is the Ollama-backed batch shim, S3 is S3Proxy.
@@ -37,6 +39,67 @@ prepare:
 # classify: run the batch inference job (local shim here) and score it
 classify:
 	uv run src/classify.py --dataset $(DATASET) --bucket $(BUCKET) --variant $(VARIANT) $(if $(LIMIT),--limit $(LIMIT),)
+
+# decide: route the same conversations with a decision model rather than an LLM.
+# local loads the model here; http points at any System One server (Strands
+# Decider's or Kev's, they serve the same endpoint); agentcore needs
+# AGENT_RUNTIME_ARN. THRESHOLD is the confidence below which a conversation is
+# left for a person.
+export DECIDER_BACKEND ?= local
+export DECIDER_URL ?=
+# /invocations instead of /v1/systemone runs the local round through the exact
+# path AgentCore Runtime invokes, which Strands Decider's server also serves.
+export DECIDER_PATH ?=
+THRESHOLD ?= 0
+decide:
+	uv run --with strands-decider src/decide.py --dataset $(DATASET) \
+		--variant $(VARIANT) --threshold $(THRESHOLD) $(if $(LIMIT),--limit $(LIMIT),)
+
+# serve-decider: the baseline model behind an HTTP server, so `make decide
+# DECIDER_BACKEND=http DECIDER_URL=http://127.0.0.1:8009` reaches it the same
+# way it reaches Kev or AgentCore.
+# 8009 is a common default for these servers and collides easily; override with
+# PORT= if 8019 is taken too.
+PORT ?= 8019
+serve-decider:
+	uv run --with strands-decider strands-decider serve $(DECIDER_CHECKPOINT) --port $(PORT)
+
+# serve-agent: the routing agent behind the AgentCore Runtime contract, the file
+# that deploys. It asks the model rather than holding it, so it needs a
+# deployed endpoint to be useful:
+#   make serve-agent ENDPOINT_NAME=ch10-decider
+#   curl -X POST localhost:8080/invocations -H 'content-type: application/json' \
+#     -d '{"text": "my debit card was declined", "threshold": 0.6}'
+AGENT_PORT ?= 8080
+ENDPOINT_NAME ?= ch10-decider
+serve-agent:
+	PORT=$(AGENT_PORT) ENDPOINT_NAME=$(ENDPOINT_NAME) \
+		uv run --with bedrock-agentcore --with boto3 agent/main.py
+
+# sm-local: the model's container as a SageMaker endpoint in local mode, which
+# starts it the way the service does (`docker run <image> serve`) rather than
+# the way a person would. A plain docker run uses CMD and passes even when the
+# image has no serve on PATH, which is how that failure once reached a deployed
+# endpoint. Needs AWS credentials and any role ARN; local mode never assumes it.
+#
+# The CPU variant of the base image, because a laptop has no NVIDIA GPU.
+SM_LOCAL_IMAGE ?= ch10-decider:cpu
+# Not the distribution image: it is amd64 only, so on Apple silicon it builds
+# emulated and takes hours. This one is multi-arch and builds natively.
+SM_LOCAL_BASE ?= ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+SM_LOCAL_TORCH ?= https://download.pytorch.org/whl/cpu
+SAGEMAKER_ROLE_ARN ?= arn:aws:iam::000000000000:role/local-mode-placeholder
+sm-local-image:
+	@# No --platform: this builds for whatever this machine is, natively. The
+	@# weights are baked in here as they are for the endpoint, so the download
+	@# happens once at build time instead of on every run.
+	docker build --build-arg BASE_IMAGE=$(SM_LOCAL_BASE) \
+		--build-arg TORCH_INDEX=$(SM_LOCAL_TORCH) \
+		-t $(SM_LOCAL_IMAGE) model/
+
+sm-local: sm-local-image
+	MODEL_IMAGE=$(SM_LOCAL_IMAGE) DEVICE=cpu \
+		PYTHONPATH=src uv run src/serve_local.py
 
 # route: publish each classified conversation to its team's topic (from-source SNS)
 route:

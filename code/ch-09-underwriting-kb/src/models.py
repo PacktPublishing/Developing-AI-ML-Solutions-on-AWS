@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["boto3", "ollama"]
 # ///
-"""The model seam: one Bedrock-shaped interface, two backends."""
+"""Provide Bedrock and local Ollama clients for text, document and embedding calls."""
 
 import io
 import json
@@ -15,6 +15,11 @@ import boto3
 # -------------------------------------------------------------------------------
 # Qwen3 runs on both Bedrock and Ollama; Titan pairs with 1024-dim mxbai-embed-large so the vector schema matches.
 TEXT_MODEL = os.environ.get("TEXT_MODEL", "qwen.qwen3-next-80b-a3b")
+# The document reader is a different job from the chat model: it is handed a PDF
+# as a Converse document block and asked for the figures in it. Claude Haiku 5.5
+# reads the file itself, so a supporting document needs no parser of its own.
+# Global cross-Region inference, the profile the chapter's stacks allow.
+DOC_MODEL = os.environ.get("DOC_MODEL", "global.anthropic.claude-haiku-5-5")
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "amazon.titan-embed-text-v2:0")
 BEDROCK_REGION = os.environ.get("BEDROCK_REGION", "us-east-1")
 EMBED_DIM = int(os.environ.get("EMBED_DIM", "1024"))
@@ -30,6 +35,35 @@ OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "mxbai-embed-large")
 # -------------------------------------------------------------------------------
 # Local Bedrock shim
 # -------------------------------------------------------------------------------
+def _as_text(blocks: list[dict]) -> str:
+    """Convert message blocks to text for Ollama, extracting text from PDF documents."""
+    parts = []
+    for block in blocks:
+        if "text" in block:
+            parts.append(block["text"])
+        if "document" in block:
+            doc = block["document"]
+            name = doc.get("name", "document")
+            parts.append(f"--- {name} ---\n{_document_text(doc)}")
+    return "\n\n".join(parts)
+
+
+def _document_text(doc: dict) -> str:
+    """Return the text of a Converse document block, for the local path."""
+    source = doc.get("source", {})
+    if "text" in source:
+        return source["text"]
+    raw = source.get("bytes")
+    if raw is None:
+        return ""
+    if doc.get("format") != "pdf":
+        return raw.decode("utf-8", "replace")
+    import pdfplumber  # lazy import: only the local document path needs it
+
+    with pdfplumber.open(io.BytesIO(raw)) as pdf:
+        return "\n".join((page.extract_text() or "") for page in pdf.pages)
+
+
 class LocalBedrockRuntime:
     """A bedrock-runtime stand-in backed by Ollama."""
 
@@ -51,11 +85,7 @@ class LocalBedrockRuntime:
                 {"role": "system", "content": " ".join(b["text"] for b in system)}
             )
         chat.extend(
-            {
-                "role": m["role"],
-                "content": " ".join(b.get("text", "") for b in m["content"]),
-            }
-            for m in messages
+            {"role": m["role"], "content": _as_text(m["content"])} for m in messages
         )
         cfg = inferenceConfig or {}
         options = {}
@@ -63,8 +93,12 @@ class LocalBedrockRuntime:
             options["num_predict"] = cfg["maxTokens"]
         if "temperature" in cfg:
             options["temperature"] = cfg["temperature"]
+        # think=False matters: the chapter's default tag is a thinking model, and
+        # with thinking on Ollama returns the reasoning in its own field and
+        # leaves message.content empty when the budget runs out first. Bedrock
+        # has no such field, so the shim asks for the answer only.
         resp = self._client.chat(
-            model=OLLAMA_TEXT_MODEL, messages=chat, options=options
+            model=OLLAMA_TEXT_MODEL, messages=chat, options=options, think=False
         )
         text = resp["message"]["content"]
         tokens_in = resp.get("prompt_eval_count") or 0

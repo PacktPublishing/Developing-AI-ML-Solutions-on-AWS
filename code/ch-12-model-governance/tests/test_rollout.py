@@ -23,7 +23,7 @@ def test_split_share_matches_the_flag(agent_url):
 
 
 def test_assignment_is_deterministic(agent_url):
-    """A loan id always resolves to the same variant."""
+    """Repeated evaluation under the same configuration returns the same variant."""
     client = AgentAppConfig(agent_url, "credit-governance", "local", "rollout")
     seen = {
         client.configuration({"loanId": "L000042"})["challenger_rollout"]["_variant"]
@@ -33,7 +33,7 @@ def test_assignment_is_deterministic(agent_url):
 
 
 def test_widening_never_flips_a_loan_back(agent_url):
-    """Bumping pct only adds loans to the challenger cohort; none leave it."""
+    """Increasing the tested split percentage retains existing challenger assignments."""
     in20 = {x for x, v in _variants(agent_url, "rollout").items() if v == "challenger"}
     in50 = {
         x for x, v in _variants(agent_url, "rollout50").items() if v == "challenger"

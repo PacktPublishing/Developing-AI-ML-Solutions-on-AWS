@@ -1,4 +1,4 @@
-.PHONY: neural up gen seed ask cases app all down lint test diagrams statements review eval auth call
+.PHONY: neural up gen seed ask cases app all down lint test diagrams statements review context eval auth call
 
 # the whole local flow in one command: the vector store, the synthetic corpus, the embeddings,
 # and a case-retrieval query. make down when done.
@@ -45,6 +45,15 @@ statements:
 CASE ?= CASE-20260000
 review: statements
 	uv run --with pdfplumber src/review.py --case $(CASE)
+
+# context: read a supporting document into the case, the way an underwriter adds
+# the tax filing or the invoice that came with the application. On Bedrock the
+# PDF goes to the document reader as it is; with BEDROCK_LOCAL=1 it is turned
+# into text first and the local model reads that.
+FILE ?=
+context:
+	@test -n "$(FILE)" || { echo "pass the document: make context CASE=... FILE=..."; exit 1; }
+	uv run --with pdfplumber src/documents.py --case $(CASE) --file $(FILE)
 
 # gen: write the synthetic memo corpus (reproducible from the seed)
 gen:

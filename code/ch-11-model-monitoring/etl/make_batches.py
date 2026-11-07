@@ -1,13 +1,11 @@
 # /// script
 # dependencies = ["pandas"]
 # ///
-"""Build the reference and current batches the monitors compare.
+"""Split Chapter 2 data into reference and current monitoring batches.
 
-Reuses the credit bureau data from chapter 2: a reference batch (the distribution
-the model was trained on) and a current batch with injected drift -- an economic
-downturn where utilization and debt-to-income climb and bureau scores slip. The
-monitors should catch the shift in the features, the score, and the model's own
-feature contributions.
+Apply synthetic changes to the current batch's utilization, debt-to-income,
+bureau score, income and employment fields. These changes provide test inputs
+for the drift monitors.
 
 Usage:
   uv run etl/make_batches.py --source ../ch-02-mlops/data/split/train.csv --out data/generated
@@ -20,13 +18,13 @@ import pandas as pd
 
 
 def inject_drift(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a copy of df shifted as a downturn would shift a credit population."""
+    """Return a copy with synthetic shifts in selected credit features."""
     out = df.copy()
     out["credit_utilization"] = (out["credit_utilization"] * 1.35).clip(upper=100)
     out["debt_to_income"] = (out["debt_to_income"] * 1.25).clip(upper=100)
     out["bureau_score"] = (out["bureau_score"] - 45).clip(lower=300)
     out["annual_income"] = out["annual_income"] * 0.9
-    # more self-employed applicants apply when times are hard
+    # Change a sample of employment values to self-employed.
     mask = out.sample(frac=0.15, random_state=0).index
     out.loc[mask, "employment_status"] = "self_employed"
     return out

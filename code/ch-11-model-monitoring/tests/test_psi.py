@@ -1,4 +1,4 @@
-"""PSIDetector: quantile bins, model-border bins, and serialisation."""
+"""PSIDetector: quantile bins, model-border bins, and serialization."""
 
 import numpy as np
 import pandas as pd

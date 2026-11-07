@@ -2,19 +2,13 @@
 # requires-python = ">=3.12,<3.13"
 # dependencies = ["sagemaker>=3,<4", "botocore[crt]", "boto3"]
 # ///
-"""Serve one rollout model as a SageMaker local endpoint (Mode.LOCAL_CONTAINER).
+"""Deploy, invoke and delete a model endpoint using SageMaker local mode.
 
-Option 2 for the models locally: instead of the compose rollout stack, champion or
-challenger runs through ModelBuilder local mode, the same ModelBuilder path and image the
-cloud endpoint uses, so swapping Mode.LOCAL_CONTAINER for Mode.SAGEMAKER_ENDPOINT is the
-only change to reach the serverless endpoint the stack deploys. One model, deployed,
-invoked once, then deleted (the serving check for a model; the champion/challenger A/B
-runs on the compose stack). Needs AWS credentials, a SageMaker role, and the model's
-serving image in ECR; the trained artifact is mounted from chapter 2's local run.
+ModelBuilder uses the serving image in ECR and a trained Chapter 2 artifact.
+This serving check requires AWS credentials and a SageMaker role.
 
 Usage:
-  MODEL_IMAGE=<ecr-uri> SAGEMAKER_ROLE_ARN=<role> \
-    MODEL_PATH=../ch-02-mlops/runs-local/model uv run src/serve_local.py
+  MODEL_IMAGE=<ecr-uri> SAGEMAKER_ROLE_ARN=<role>     MODEL_PATH=../ch-02-mlops/runs-local/model uv run src/serve_local.py
 """
 
 import json

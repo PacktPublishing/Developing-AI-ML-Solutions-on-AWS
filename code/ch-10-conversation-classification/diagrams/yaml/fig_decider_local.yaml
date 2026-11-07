@@ -1,0 +1,51 @@
+# The same decision-model round locally, by two routes. `make decide` loads the
+# model into the router's own process, which needs no container at all.
+# `make sm-local` runs the endpoint's own image through SageMaker local mode,
+# started the way the service starts it, which is what checks the contract a
+# deploy will hold the image to. The SNS shim fans each routed conversation out
+# to a per-team file inbox either way.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/custom-icons.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Client, Local]
+
+    Client:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "decide.py\nserve_local.py\nroute.py"
+
+    Local:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: vertical
+      Title: "Local"
+      Children: [Decider, LocalEndpoint, SNS]
+
+    Decider:
+      Type: AWS::Diagram::Resource
+      Preset: "Strands"
+      Title: "Strands Decider 2B\nin process (make decide)"
+
+    LocalEndpoint:
+      Type: AWS::Diagram::Resource
+      Preset: "Docker"
+      Title: "SageMaker local mode\nthe endpoint's own image (make sm-local)"
+
+    SNS:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Notification Service (Amazon SNS)"
+      Title: "SNS shim\nten team inboxes"
+
+  Links:
+    - {Source: Client, SourcePosition: E, Target: Decider, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    # route.py publishes, not the model: it reads the predictions file back.
+    - {Source: Client, SourcePosition: E, Target: LocalEndpoint, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Client, SourcePosition: E, Target: SNS, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

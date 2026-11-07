@@ -1,17 +1,17 @@
-"""Affordability arithmetic: the instalment, the ratio, and the inverse."""
+"""Affordability arithmetic: the installment, the ratio, and the inverse."""
 
 import pytest
-from affordability import dti, instalment, max_affordable_amount
+from affordability import dti, installment, max_affordable_amount
 
 
 def test_zero_rate_is_straight_division():
-    """With no interest the instalment is the amount spread over the tenor."""
-    assert instalment(120_000, 0.0, 12) == pytest.approx(10_000.0)
+    """With no interest the installment is the amount spread over the tenor."""
+    assert installment(120_000, 0.0, 12) == pytest.approx(10_000.0)
 
 
-def test_instalment_grows_with_rate():
+def test_installment_grows_with_rate():
     """A higher rate cannot produce a smaller payment over the same tenor."""
-    assert instalment(300_000, 24.0, 12) > instalment(300_000, 18.0, 12)
+    assert installment(300_000, 24.0, 12) > installment(300_000, 18.0, 12)
 
 
 def test_dti_counts_existing_repayments():
@@ -22,7 +22,7 @@ def test_dti_counts_existing_repayments():
 
 
 def test_recommended_amount_lands_on_the_ceiling():
-    """The inverse is exact: lending the maximum puts DTI at the ceiling."""
+    """Check that the recommended amount produces the expected rounded DTI."""
     amount = max_affordable_amount(90_000, 12_000, 18.0, 12, ceiling_percent=40.0)
     assert dti(90_000, 12_000, amount, 18.0, 12).dti_percent == pytest.approx(40.0)
 
@@ -33,8 +33,8 @@ def test_no_headroom_returns_zero():
 
 
 def test_income_and_tenor_are_validated():
-    """Impossible inputs raise rather than returning a number nobody should use."""
+    """Reject invalid income and tenor values."""
     with pytest.raises(ValueError):
         dti(0, 0, 100_000, 18.0, 12)
     with pytest.raises(ValueError):
-        instalment(100_000, 18.0, 0)
+        installment(100_000, 18.0, 0)

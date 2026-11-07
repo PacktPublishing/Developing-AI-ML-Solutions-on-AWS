@@ -1,23 +1,12 @@
 # /// script
 # dependencies = ["catboost", "pandas", "numpy"]
 # ///
-"""PSIDetector: Population Stability Index over a model's own bins.
+"""Calculate Population Stability Index using fixed reference bins.
 
-Traditional PSI bins a feature into quantiles of the reference sample -- it measures
-raw distribution shift, but not necessarily the shift the model reacts to. A tree
-model partitions each feature at specific thresholds (its split borders) and a
-scorecard at its WOE bin edges; binning PSI at those boundaries makes it measure
-whether the population drifted across the lines the model actually uses to decide.
-That is the ML approach to PSI.
-
-PSIDetector fits the reference proportions over a set of bins and scores the PSI of a
-later batch against them. Build it two ways: from_reference bins each feature into
-reference quantiles (the scorecard / linear-model path), from_catboost bins each
-numeric feature at the model's own split borders (the tree path). It serialises to a
-transparent JSON artifact, and log_detector wraps that artifact as an MLflow pyfunc
-model so the drift baseline carries the same lineage, versioning, and registry as
-the model it watches. MLflow is imported inside log_detector only, so the monitor
-image and the Processing job never need it.
+Fit numeric bins from reference quantiles or CatBoost split borders and store
+reference proportions for numeric bins and known categories. Save and load the
+detector as JSON. log_detector optionally logs it as an MLflow pyfunc model;
+registry registration and linkage to the scoring model require separate steps.
 
 Usage:
   from psi import PSIDetector, log_detector
@@ -25,7 +14,7 @@ Usage:
   det.psi(current)  # {feature: psi}
   det.save("psi.json"); PSIDetector.load("psi.json")
   with mlflow.start_run():
-      log_detector(det)  # -> registered pyfunc model
+      log_detector(det)  # Log the detector to the active run.
 """
 
 from __future__ import annotations
@@ -102,7 +91,7 @@ class PSIDetector:
         categorical: Sequence[str] = (),
         bins: int = 10,
     ) -> PSIDetector:
-        """Bin each numeric feature into reference quantiles (the scorecard path)."""
+        """Fit numeric bins from reference quantiles."""
         borders = {f: _quantile_borders(reference[f], bins) for f in numeric}
         return cls._fit(reference, borders, list(categorical), "quantile")
 
@@ -114,10 +103,8 @@ class PSIDetector:
         numeric: Sequence[str],
         categorical: Sequence[str] = (),
     ) -> PSIDetector:
-        """Bin each numeric feature at the model's own split borders (the tree path)."""
-        # get_borders() keys by the OVERALL feature index (categorical positions are
-        # simply absent), so feature_names_.index(f) aligns a name to its borders no
-        # matter where the categoricals sit -- verified against a mid-list categorical.
+        """Fit numeric bins from CatBoost split borders, falling back to quantiles."""
+        # CatBoost keys borders by feature position, including categorical positions.
         names = list(model.feature_names_)
         model_borders = model.get_borders()
         borders = {}
@@ -164,7 +151,7 @@ class PSIDetector:
         return out
 
     def violations(self, current: pd.DataFrame, threshold: float = PSI_MAJOR) -> dict:
-        """Return the features whose PSI exceeds the major-shift threshold."""
+        """Return features whose PSI exceeds the supplied threshold."""
         return {f: v for f, v in self.psi(current).items() if v > threshold}
 
     # -------------------------------------------------------------------------------
@@ -190,7 +177,7 @@ class PSIDetector:
         )
 
     def save(self, path: str | Path) -> None:
-        """Write the detector to a transparent JSON artifact."""
+        """Write detector bins and reference proportions to JSON."""
         Path(path).write_text(json.dumps(self.to_dict(), indent=2))
 
     @classmethod
@@ -200,9 +187,7 @@ class PSIDetector:
 
 
 # -------------------------------------------------------------------------------
-# MLflow pyfunc wrapper for a PSIDetector artifact, so the drift baseline carries the
-# same lineage, versioning, and registry as the model it watches. MLflow is imported
-# inside log_detector only, so the monitor image and the Processing job never need it.
+# Optional MLflow pyfunc wrapper. Import MLflow only when logging a detector.
 # -------------------------------------------------------------------------------
 ARTIFACT_KEY = "psi_detector"
 

@@ -29,6 +29,7 @@ BEDROCK_LOCAL=1 make ask  Q="How is DTI assessed for a grocery business?"
 BEDROCK_LOCAL=1 make cases DEAL="A logistics firm seeks a 500,000 dollar working-capital loan"
 make statements               # the synthetic bank statement PDFs to review
 BEDROCK_LOCAL=1 make review CASE=CASE-20260000
+BEDROCK_LOCAL=1 make context CASE=CASE-20260000 FILE=path/to/tax-filing.pdf
 BEDROCK_LOCAL=1 make app      # the page on http://localhost:8080, sign-in required
 make call                     # POST /ask as underwriter1; NO_TOKEN=1 expects a 401
 make down                     # tear it down
@@ -45,7 +46,7 @@ before. The statement is stored with `source: submission` and the archive search
 filters on `source: corpus`, so a document under review is never returned as its
 own precedent, and `--keep` aside it is deleted once the review is done.
 
-Totalling the statement is arithmetic, so it is a parser and not a prompt: the
+Totaling the statement is arithmetic, so it is a parser and not a prompt: the
 agent reads the income and existing repayments back out of the index rather than
 adding up a table it retrieved. That is the same rule the affordability tool
 follows, and for the same reason. The parser also checks the running balance,
@@ -53,6 +54,62 @@ row by row, and lists any row whose balance does not follow from the one before;
 `read_case` returns that list, and the agent reports it before any figure. What
 is indexed is masked: the case id stands in for the holder's name, and long
 numbers and email addresses are replaced.
+
+Not every credit is income. POL-DTI counts average monthly inflows after
+removing transfers between the borrower's own accounts and one-off credits such
+as asset sales or loan disbursements, so the parser reports two figures: the
+total of the credits, and the income a ratio may be built on. The credits it left
+out are listed with the reason for each, and the generator writes statements that
+carry them, so the rule is visible in the corpus rather than only in the policy.
+
+An applicant who sends a corrected statement has to correct the figures with it.
+Each upload is a numbered version: the chunks carry the version, so a read
+selects one upload and reads its figures and its text together, and the versions
+before it stay for an underwriter asked what changed. A PDF nothing could be read
+from is refused rather than indexed, because zero income, zero repayments and no
+balance breaks is also what a reconciled statement from a solvent applicant looks
+like. `read_case` reports `reconciled`, `breaks`, or `not_checked`, and
+`not_checked` is not a pass.
+
+## Supporting documents
+
+The statement is a table with known columns, so it is parsed. The rest of what an
+underwriter is sent is not: a tax filing, an invoice, a supply contract, a page of
+management accounts. `make context` sends the file to the document reader instead,
+and the reader is a model: on Bedrock the PDF goes to Claude Haiku 5.5 as a
+Converse document block, up to 4.5 MB, and the model reads the file itself, so
+there is no parser to write per layout. It answers with the document's type, its
+issuer and period, the figures it carries, and anything an underwriter should
+look at.
+
+With `BEDROCK_LOCAL=1` the file cannot go to Ollama, so the shim turns the PDF
+into text first and the local model reads the words. That is the honest limit of
+the local path: a scanned page has no words in it, and the reader says so rather
+than reporting an empty document.
+
+Two more limits worth knowing before running the local reader, both measured
+rather than guessed:
+
+- The reading is asked for as one JSON object, and a small local model does not
+  reliably produce one. Running this against `llama3.2:3b` returned a well formed
+  answer that still failed to parse, because it wrote a figure as `612,320`, with
+  the thousands separator, inside a JSON number. Nothing is repaired: guessing
+  which number was meant is the same mistake as reading "about 500" as 500, which
+  the statement parser already refuses. The reading is marked `unread`, the raw
+  answer is kept with the document, and the pages are still indexed and
+  searchable, so the upload is useful even when the reading is not.
+- The chapter's default local tag is a thinking model. Ollama returns reasoning
+  in its own field and leaves the answer empty when the budget goes first, and
+  Bedrock has no such field, so the shim asks for the answer only (`think=False`).
+  Without that every local call comes back blank.
+
+What comes back is stored as a reading, not as a fact. Each document is indexed
+under the case with `source: context`, beside its own text page by page, so the
+agent's `read_context` tool can quote the document and the underwriter can check
+the quote. The archive search still filters on `source: corpus`, so a supporting
+document is never returned as precedent, and the affordability arithmetic still
+comes from the statement: a turnover figure in a tax filing is what the document
+claims, and the system prompt says so.
 
 Expect terse answers on a small local model, and note that tool calling needs
 Qwen3 4b or larger: at 0.6b the agent replies that the statement is unavailable
@@ -97,6 +154,8 @@ terminal locally.
   k-NN alone against hybrid
 - `data/policy/`: the synthetic credit policy (DTI, amendments, security and
   approval limits), invented for illustration
+- `src/chunking.py`: split text small enough for the embedding model with the
+  least room, so a page of statement rows can be indexed at all
 - `src/models.py`: the model seam — one Bedrock-shaped interface, Ollama behind it
 - `src/stores.py`: the store seam — one function naming the backend
 - `src/opensearch_store.py`: the OpenSearch backend — local container, Amazon
@@ -104,15 +163,21 @@ terminal locally.
 - `src/retrieve.py`: grounded question answering and case assembly, with citations
 - `src/affordability.py`: the DTI arithmetic the agent calls as a tool
 - `src/statements.py`: read an uploaded statement PDF, total it, and index it
+- `src/documents.py`: the document reader, a supporting document read by the
+  model rather than by a parser
 - `src/review.py`: upload one statement and print the agent's review of it
 - `src/audit.py`: the audit line, and the underwriter read from the token
-- `src/agent.py`: the Strands agent, memo search plus the statement and the
-  affordability tools
+- `src/agent.py`: the Strands agent, memo search plus the statement, the
+  supporting documents, and the affordability tools
 - `local/kb-stack.yml`: the compose stack — the OpenSearch node and Dashboards
 - `tests/test_opensearch.py`: the score conversion, and a round-trip when a node
   is up
-- `tests/test_affordability.py`: the instalment, the ratio, and its inverse
+- `tests/test_affordability.py`: the installment, the ratio, and its inverse
 - `tests/test_statements.py`: the parser against the generator's own manifest
+- `tests/test_statement_figures.py`: the credits that are not income, the signs a
+  regex can lose, and the statements that are refused
+- `tests/test_submissions.py`: which upload answers after a second one arrives
+- `tests/test_documents.py`: what the document reader is sent and what it refuses
 - `tests/test_scope.py`: what a search may read, the hybrid query, and the
   underwriter read from a token
 
