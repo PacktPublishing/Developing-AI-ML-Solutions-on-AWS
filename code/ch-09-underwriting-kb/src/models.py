@@ -100,8 +100,12 @@ class LocalBedrockRuntime:
             options["num_predict"] = cfg["maxTokens"]
         if "temperature" in cfg:
             options["temperature"] = cfg["temperature"]
+        # think=False matters: the chapter's default tag is a thinking model, and
+        # with thinking on Ollama returns the reasoning in its own field and
+        # leaves message.content empty when the budget runs out first. Bedrock
+        # has no such field, so the shim asks for the answer only.
         resp = self._client.chat(
-            model=OLLAMA_TEXT_MODEL, messages=chat, options=options
+            model=OLLAMA_TEXT_MODEL, messages=chat, options=options, think=False
         )
         text = resp["message"]["content"]
         tokens_in = resp.get("prompt_eval_count") or 0

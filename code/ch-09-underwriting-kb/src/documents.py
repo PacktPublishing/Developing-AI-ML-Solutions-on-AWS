@@ -31,6 +31,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from chunking import chunk_text
 from models import DOC_MODEL, get_runtime
 from statements import mask
 from stores import get_store
@@ -214,10 +215,19 @@ def chunks_for(reading: Reading, case_id: str) -> list[str]:
     ):
         if value:
             head.append(f"{label}: {value}")
-    chunks = ["\n".join(head)]
+    chunks = chunk_text("\n".join(head))
     for number, text in enumerate(reading.pages, start=1):
-        if text.strip():
-            chunks.append(f"{reading.doc_name}, page {number}:\n{text}")
+        if not text.strip():
+            continue
+        # A page is too big to embed whole: the local embedding model stops at
+        # 512 tokens. Each piece says which page and which part of it, so a
+        # quoted figure can still be traced back to where it was read.
+        pieces = chunk_text(text)
+        for part, piece in enumerate(pieces, start=1):
+            where = f"{reading.doc_name}, page {number}"
+            if len(pieces) > 1:
+                where = f"{where}, part {part} of {len(pieces)}"
+            chunks.append(f"{where}:\n{piece}")
     return chunks
 
 
@@ -264,9 +274,9 @@ def main() -> None:
     for concern in reading.concerns:
         print(f"  concern: {concern}")
     if reading.unparsed:
-        print(
-            f"  the reader did not answer in the requested format: {reading.unparsed}"
-        )
+        # the whole answer is indexed; only a first line of it belongs on a terminal
+        head = " ".join(reading.unparsed.split())[:200]
+        print(f"  the reader did not answer in the requested format: {head}...")
     if not any(page.strip() for page in reading.pages):
         print("  no text layer: nothing of the document itself could be indexed")
 

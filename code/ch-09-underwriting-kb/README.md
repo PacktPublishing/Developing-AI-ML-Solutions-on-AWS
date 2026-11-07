@@ -87,6 +87,22 @@ into text first and the local model reads the words. That is the honest limit of
 the local path: a scanned page has no words in it, and the reader says so rather
 than reporting an empty document.
 
+Two more limits worth knowing before running the local reader, both measured
+rather than guessed:
+
+- The reading is asked for as one JSON object, and a small local model does not
+  reliably produce one. Running this against `llama3.2:3b` returned a well formed
+  answer that still failed to parse, because it wrote a figure as `612,320`, with
+  the thousands separator, inside a JSON number. Nothing is repaired: guessing
+  which number was meant is the same mistake as reading "about 500" as 500, which
+  the statement parser already refuses. The reading is marked `unread`, the raw
+  answer is kept with the document, and the pages are still indexed and
+  searchable, so the upload is useful even when the reading is not.
+- The chapter's default local tag is a thinking model. Ollama returns reasoning
+  in its own field and leaves the answer empty when the budget goes first, and
+  Bedrock has no such field, so the shim asks for the answer only (`think=False`).
+  Without that every local call comes back blank.
+
 What comes back is stored as a reading, not as a fact. Each document is indexed
 under the case with `source: context`, beside its own text page by page, so the
 agent's `read_context` tool can quote the document and the underwriter can check
@@ -138,6 +154,8 @@ terminal locally.
   k-NN alone against hybrid
 - `data/policy/`: the synthetic credit policy (DTI, amendments, security and
   approval limits), invented for illustration
+- `src/chunking.py`: split text small enough for the embedding model with the
+  least room, so a page of statement rows can be indexed at all
 - `src/models.py`: the model seam — one Bedrock-shaped interface, Ollama behind it
 - `src/stores.py`: the store seam — one function naming the backend
 - `src/opensearch_store.py`: the OpenSearch backend — local container, Amazon
