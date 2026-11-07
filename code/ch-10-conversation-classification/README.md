@@ -39,33 +39,29 @@ make decide VARIANT=b THRESHOLD=0.6   # hold the close calls back for a person
 ### What the container measured
 
 The agent is the same file locally and deployed, but the packaging is not, and
-the packaging is where AgentCore's limits bite. Building the image on a laptop
-answers that before any AWS spend (measured on arm64; the deployed image is
-x86_64, because every GPU family AgentCore supports is):
+the packaging is where the limits bite. Building the image on a laptop answers
+that before any AWS spend (measured on arm64; the deployed model image is
+x86_64, because every GPU family is):
 
-| | result | AgentCore limit |
+| | result | the limit it meets |
 | --- | --- | --- |
-| image, default aarch64 torch (bundles CUDA) | 9.39 GB | 2 GB, not adjustable |
-| image, CPU-only torch | **1.47 GB** | fits |
-| model weights | 4.8 GB | too big for either artifact |
-| CPU inference, peak resident memory | **7.37 GB** | microVM session caps at 8 GB |
+| image, default torch (bundles CUDA) | 9.39 GB | AgentCore caps an image at 2 GB |
+| image, CPU-only torch | 1.47 GB | fits, but see the next row |
+| CPU inference, peak resident memory | 7.37 GB | an AgentCore microVM session caps at 8 GB |
+| model weights | 4.8 GB | too big for a 2 GB image or a 750 MB code zip |
 
-Three things follow, and none of them needed an AWS account:
+That is why this chapter runs on two services rather than one. **The model goes
+to SageMaker**, which has no image limit and real GPU instances. **The agent goes
+to AgentCore Runtime**, which is what it is for, and which a few kilobytes of
+routing policy fits comfortably on a serverless microVM.
 
-- **The CUDA image cannot be deployed at all.** 3.3 GB of `nvidia` and 916 MB of
-  `triton` come from the default aarch64 torch wheel. The CPU index drops both.
-- **The weights cannot ship inside the artifact.** A container image stops at
-  2 GB and an S3 source package at 750 MB unpacked, against 4.8 GB of weights,
-  so they are fetched to a mounted volume at session start. That is the one-time
-  cost the chapter's session handling is built around.
-- **microVMs are out.** The CPU image fits the image limit, but inference peaks
-  at 7.37 GB against a hard 8 GB session cap, which leaves nothing for the
-  runtime, and a microVM gives 2 vCPU. Running the CPU image under those limits
-  locally was killed with `OOMKilled=true`. So the chapter deploys on the
-  Instances compute type with a GPU capacity provider.
+Running the CPU image under a microVM's limits locally ends in
+`OOMKilled=true`, which is the measurement rather than the guess. The engine
+upcasts the torso to fp32 on CPU, so a 2B model that is 4.5 GB in bf16 is
+roughly double that.
 
-The engine upcasts the torso to fp32 on CPU, which is where the 7.37 GB comes
-from: a 2B model is 4.5 GB in bf16 and roughly double that as fp32.
+Serverless Inference on SageMaker is not an option either, for the same
+arithmetic: its ceiling is 6144 MB and it offers no GPU.
 
 ### Swapping the model
 
@@ -113,27 +109,23 @@ illustrative; the graded numbers come from Claude on Bedrock in the cloud round.
 
 ### AgentCore runs locally too
 
-`agentcore/app.py` is the deployable unit, and it is also the local one.
-`BedrockAgentCoreApp` serves `POST /invocations` and `GET /ping`, which is the
-contract AgentCore Runtime invokes a container on, so the same file answers on a
-laptop and in the cloud. The local round is the deployed path, not a stand-in
-for it:
+`agent/main.py` is the deployable unit and the local one. `BedrockAgentCoreApp`
+serves `POST /invocations` and `GET /ping`, which is the contract AgentCore
+Runtime invokes a container on, and also exactly what SageMaker requires of an
+inference container. One contract, two services, no stand-in:
 
 ```
-make serve-agentcore                                   # http://127.0.0.1:8080
-make decide DECIDER_BACKEND=http \
-  DECIDER_URL=http://127.0.0.1:8080 DECIDER_PATH=/invocations
+ENDPOINT_NAME=ch10-decider uv run agent/main.py     # http://127.0.0.1:8080
+curl -X POST http://127.0.0.1:8080/invocations -H 'content-type: application/json' \
+  -d '{"text": "my debit card was declined", "threshold": 0.6}'
 ```
 
-The payload is a System One request, so the `http` backend reaches the AgentCore
-app with no client change, and `DECIDER_PATH=/invocations` runs the round through
-the exact path the cloud uses. The AgentCore CLI has its own loop over the same
-file, `agentcore dev` for a reloading server with `agentcore invoke --local`,
-then `agentcore configure -e agentcore/app.py` and `agentcore launch`.
-
-The weights load on the first invocation of a container, tens of seconds, and
-are reused after that. That is why the router holds one session id for a whole
-run: the first call pays for the model and the rest do not.
+The agent holds everything about routing that is not the model: which teams
+exist, where their work begins and ends, and how sure the model must be before a
+conversation is routed rather than left for a person. The model only scores the
+options it is given. That division is the point of the split, and it is why the
+agent's IAM policy allows exactly one action, `sagemaker:InvokeEndpoint` on one
+endpoint.
 
 ## What a batch job does to a result
 
@@ -258,8 +250,10 @@ tasks, because a multi-turn transcript is a long state and latency grows with it
 - `src/batch.py`: the batch-inference seam — real Bedrock, or the local from-source
   batch shim over S3Proxy + Ollama
 - `src/classify.py`: build the Converse manifest, submit the job, collect, map to categories
-- `agentcore/app.py`: the decision model behind the AgentCore Runtime contract,
-  the same file locally and deployed
+- `agent/main.py`: the routing agent, which owns the policy and asks the model;
+  the same file locally and on AgentCore Runtime
+- `model/Dockerfile`: the decision model behind a SageMaker endpoint, serving the
+  same `/invocations` and `/ping` contract with no bespoke inference code
 - `src/categories.py`: where each team's work begins and ends, written once and
   read by both routers, so comparing them compares the routers
 - `src/decider.py`: the decision-model seam, either the model loaded in this
@@ -301,13 +295,14 @@ labels the Brier is just twice the error rate.
 ## AWS services and local stand-ins
 
 - **AWS services:** Amazon Bedrock (batch inference, Converse), Amazon Bedrock
-  AgentCore Runtime (the decision model, on the Instances compute type), Amazon
-  SNS, Amazon S3
+  AgentCore Runtime (the routing agent, serverless), Amazon SageMaker (the
+  decision model, on a GPU endpoint), Amazon SNS, Amazon S3
 - **Local stand-ins:** a from-source Bedrock batch shim over S3Proxy + Ollama, a
   from-source SNS shim (file inboxes), S3Proxy (S3). The decision model has no
-  stand-in at all: `agentcore/app.py` serves the AgentCore Runtime contract
-  itself, so the local round runs the file that deploys. It also needs no
-  containers, where the batch path needs S3Proxy for its manifests.
+  stand-in at all: `agent/main.py` serves the AgentCore Runtime contract itself,
+  so the local round runs the file that deploys, and the model runs here as the
+  same checkpoint the endpoint serves. It also needs no containers, where the
+  batch path needs S3Proxy for its manifests.
 
 ## Run it on AWS
 
@@ -320,41 +315,35 @@ make -C aws eval
 make -C aws teardown
 ```
 
-### The decision model on AgentCore
+### The decision model and its agent
 
-Off by default, because it provisions a VPC and GPU EC2 in your account that
-bill by the hour while a session is alive.
-
-```
-make -C aws decider-round      # the four steps below, in order
-```
-
-It is four steps because the runtime needs an image that the same stack's
-repository holds:
+Off by default, because it provisions a GPU endpoint that bills while it is up.
 
 ```
-make -C aws deploy WITH_DECIDER=true     # VPC, repository, CodeBuild, roles, capacity
-make -C aws image                        # CodeBuild builds x86_64 and pushes
-make -C aws deploy WITH_DECIDER=true DECIDER_IMAGE=<repo>:latest   # the runtime
-make -C aws prepare                      # torch and the weights onto the volume
-make -C aws decide                       # route the dataset through it
+make -C aws decider-round      # the steps below, in order
 ```
 
-`prepare` is the step with no local equivalent, and it exists because of the
-limits in the table above: the image carries the agent and the runtime SDK only,
-so the first call of a session installs CUDA torch and fetches the checkpoint
-onto the mounted EBS volume. It takes minutes. The volume survives session
-stops, so a resumed session skips it, which is also why `src/decider.py` holds
-one session id for a whole run rather than one per conversation.
+There are two deployables and they are built differently, which is the thing
+worth noticing:
+
+```
+make -C aws deploy WITH_DECIDER=true   # repository, bucket, CodeBuild, roles
+make -C aws image                      # the model image: x86_64, CUDA torch, weights baked in
+make -C aws agent                      # the agent: an arm64 zip, no image at all
+make -C aws deploy WITH_DECIDER=true DECIDER_IMAGE=<repo>:latest AGENT_KEY=agent.zip
+make -C aws decide                     # route the dataset through the agent
+```
+
+The model needs a container because it carries CUDA torch and 4.5 GB of weights,
+and the weights are baked into the image rather than downloaded on demand
+because SageMaker gives `/invocations` 60 seconds to answer. The agent needs no
+container: it is small enough for direct code deployment, a zip under 250 MB,
+built for `aarch64` because AgentCore Runtime is arm64 only.
 
 Two names in the template cannot take hyphens, and the validation error does not
-say so: the capacity provider and the runtime are `ch10_decider_capacity` and
-`ch10_decider`.
+say so: the runtime is `ch10_router`.
 
-Expect `InsufficientInstanceCapacity` on GPU instances. The capacity provider
-allows `g6.xlarge` and `g5.xlarge` across two availability zones for that reason;
-add more types with `DeciderInstanceTypes` if both are short.
-
-The submitting user needs `CreateModelInvocationJob` + `InvokeModel`, and the batch
-job invokes the model **as the service role**, so that role needs `InvokeModel` too.
-Manifest sharding (1 GiB/file, 5 GiB/job) is the remaining piece for very large jobs.
+Expect the endpoint to be the slow part. The image is large, so the first deploy
+waits on a CodeBuild that pulls the weights, and
+`ContainerStartupHealthCheckTimeoutInSeconds` is raised to 900 for the same
+reason.

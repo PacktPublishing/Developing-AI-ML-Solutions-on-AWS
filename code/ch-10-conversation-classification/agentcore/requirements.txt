@@ -1,4 +1,0 @@
-# What goes in the image, and nothing more. strands-decider is deliberately
-# absent: it pulls torch, and CUDA torch is 4.2 GB against AgentCore Runtime's
-# 2 GB image limit. The prepare call installs it onto the mounted volume.
-bedrock-agentcore==1.25.4

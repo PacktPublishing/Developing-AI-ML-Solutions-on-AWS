@@ -25,22 +25,26 @@ Parameters:
     Type: String
     Default: ""
 
-  DeciderInstanceTypes:
+  DeciderInstanceType:
     Description: |
-      GPU instance types the capacity provider may launch, most wanted first.
-      AgentCore supports g4dn, g5, g6, g6e, gr6, g6f, gr6f, g7e and inf2 only, and
-      GPU capacity is often short, so more than one type is listed on purpose.
-    Type: CommaDelimitedList
-    Default: g6.xlarge,g5.xlarge
+      The endpoint instance. GPU, because CPU inference of this model peaks at
+      7.4 GB and takes seconds per conversation. ml.g5.xlarge has an endpoint
+      quota of its own, separate from the EC2 one.
+    Type: String
+    Default: ml.g5.xlarge
+
+  AgentCodeKey:
+    Description: The agent zip in the source bucket; empty until `make agent`.
+    Type: String
+    Default: ""
 
 Conditions:
   DeployDecider: !Equals
     - !Ref WithDecider
     - "true"
 
-  # The runtime needs an image the repository in this same stack holds, so it
-  # appears on the second deploy, after `make image`. The first deploy builds
-  # everything the build itself needs.
+  # The endpoint needs an image the repository in this same stack holds, so it
+  # appears on the second deploy, after `make image`.
   DeciderReady: !And
     - !Condition DeployDecider
     - !Not
@@ -48,7 +52,13 @@ Conditions:
         - !Ref DeciderImageUri
         - ""
 
-Transform: AWS::Serverless-2016-10-31
+  # The agent needs its zip uploaded, which `make agent` does.
+  AgentReady: !And
+    - !Condition DeciderReady
+    - !Not
+      - !Equals
+        - !Ref AgentCodeKey
+        - ""
 
 Resources:
   BatchBucket:
@@ -110,105 +120,14 @@ Resources:
                   - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
 
   # ---------------------------------------------------------------------------
-  # The decision-model router. AgentCore Runtime's Instances compute type, which
-  # is the only one that offers GPUs, and the only one this model fits: a
-  # container image stops at 2 GB where CUDA torch alone is 4.2 GB, and a microVM
-  # session caps at 8 GB where CPU inference peaks at 7.4 GB.
+  # Two services, split by what each is for. SageMaker hosts the decision model,
+  # which is a 2B model on a GPU instance. AgentCore Runtime hosts the agent that
+  # owns the routing policy, which is a few kilobytes on a serverless microVM.
+  #
+  # The split is not a preference. Measured locally: the model needs a 9.39 GB
+  # image with CUDA torch, against AgentCore's 2 GB limit, and 7.4 GB of memory
+  # on CPU, against a microVM's 8 GB session. The agent fits a microVM easily.
   # ---------------------------------------------------------------------------
-  DeciderVpc:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: 10.60.0.0/16
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      Tags:
-        - Key: Name
-          Value: ch10-decider
-    Condition: DeployDecider
-
-  DeciderIgw:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Name
-          Value: ch10-decider
-    Condition: DeployDecider
-
-  DeciderIgwAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref DeciderVpc
-      InternetGatewayId: !Ref DeciderIgw
-    Condition: DeployDecider
-
-  # Two subnets in different zones: GPU capacity runs out in one zone often
-  # enough that a single-subnet capacity provider is a deploy that fails for a
-  # reason nobody can fix by retrying.
-  DeciderSubnetA:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref DeciderVpc
-      CidrBlock: 10.60.1.0/24
-      AvailabilityZone: !Select
-        - 0
-        - !GetAZs
-      MapPublicIpOnLaunch: true
-    Condition: DeployDecider
-
-  DeciderSubnetB:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref DeciderVpc
-      CidrBlock: 10.60.2.0/24
-      AvailabilityZone: !Select
-        - 1
-        - !GetAZs
-      MapPublicIpOnLaunch: true
-    Condition: DeployDecider
-
-  DeciderRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref DeciderVpc
-    Condition: DeployDecider
-
-  # Public subnets with an internet gateway rather than private subnets behind
-  # NAT: the instance pulls torch and the weights at session start, and a NAT
-  # gateway bills by the hour whether or not a session is alive.
-  DeciderRoute:
-    Type: AWS::EC2::Route
-    DependsOn: DeciderIgwAttachment
-    Properties:
-      RouteTableId: !Ref DeciderRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref DeciderIgw
-    Condition: DeployDecider
-
-  DeciderSubnetARoute:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref DeciderSubnetA
-      RouteTableId: !Ref DeciderRouteTable
-    Condition: DeployDecider
-
-  DeciderSubnetBRoute:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref DeciderSubnetB
-      RouteTableId: !Ref DeciderRouteTable
-    Condition: DeployDecider
-
-  DeciderSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Egress only; AgentCore reaches the agent, nothing else does
-      VpcId: !Ref DeciderVpc
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-          Description: Pull the image, torch and the weights at session start
-    Condition: DeployDecider
-
   DeciderRepo:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
@@ -233,8 +152,6 @@ Resources:
         RestrictPublicBuckets: true
     Condition: DeployDecider
 
-  # The image is built in the account by CodeBuild, not pushed from a laptop, so
-  # the x86_64 GPU image does not depend on what the author's machine can build.
   ImageBuildRole:
     Type: AWS::IAM::Role
     Properties:
@@ -274,6 +191,8 @@ Resources:
                 Resource: !GetAtt DeciderRepo.Arn
     Condition: DeployDecider
 
+  # The image carries CUDA torch and the weights, so the build is long and the
+  # disk is large. BUILD_GENERAL1_LARGE rather than MEDIUM for that reason.
   ImageBuild:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -284,10 +203,9 @@ Resources:
         Location: !Sub ${SourceBucket}/src.zip
       Artifacts:
         Type: NO_ARTIFACTS
+      TimeoutInMinutes: 60
       Environment:
-        ComputeType: BUILD_GENERAL1_MEDIUM
-
-        # x86_64, because every GPU family AgentCore supports is x86_64.
+        ComputeType: BUILD_GENERAL1_LARGE
         Type: LINUX_CONTAINER
         Image: aws/codebuild/standard:7.0
         PrivilegedMode: true
@@ -298,8 +216,8 @@ Resources:
             Value: !Ref AWS::Region
     Condition: DeployDecider
 
-  # AgentCore assumes this to launch and tear down EC2 in the account.
-  CapacityOperatorRole:
+  # ---- the model, on SageMaker ----------------------------------------------
+  EndpointRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -307,39 +225,63 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: bedrock-agentcore.amazonaws.com
+              Service: sagemaker.amazonaws.com
             Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:SourceAccount: !Ref AWS::AccountId
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/BedrockAgentCoreRuntimeInstancesOperatorRolePolicy
+      Policies:
+        - PolicyName: serve
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchCheckLayerAvailability
+                Resource: !GetAtt DeciderRepo.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
     Condition: DeployDecider
 
-  # Attached to the instance itself, for AgentCore to collect its system logs.
-  DeciderInstanceRole:
-    Type: AWS::IAM::Role
+  DeciderModel:
+    Type: AWS::SageMaker::Model
     Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-    Condition: DeployDecider
+      ExecutionRoleArn: !GetAtt EndpointRole.Arn
+      PrimaryContainer:
+        Image: !Ref DeciderImageUri
+        Mode: SingleModel
+    Condition: DeciderReady
 
-  DeciderInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
+  DeciderEndpointConfig:
+    Type: AWS::SageMaker::EndpointConfig
     Properties:
-      Roles:
-        - !Ref DeciderInstanceRole
-    Condition: DeployDecider
+      ProductionVariants:
+        - VariantName: main
+          ModelName: !GetAtt DeciderModel.ModelName
+          InitialInstanceCount: 1
+          InstanceType: !Ref DeciderInstanceType
+          InitialVariantWeight: 1
 
-  # What the agent process itself may do: pull its image and read the bucket.
-  DeciderExecutionRole:
+          # The image pulls 4.5 GB of weights with it, so give the container
+          # longer than the default to report healthy.
+          ContainerStartupHealthCheckTimeoutInSeconds: 900
+    Condition: DeciderReady
+
+  DeciderEndpoint:
+    Type: AWS::SageMaker::Endpoint
+    Properties:
+      EndpointName: ch10-decider
+      EndpointConfigName: !GetAtt DeciderEndpointConfig.EndpointConfigName
+    Condition: DeciderReady
+
+  # ---- the agent, on AgentCore ----------------------------------------------
+  AgentRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -357,15 +299,11 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+
+              # The only thing the agent may do: ask this one endpoint.
               - Effect: Allow
-                Action: ecr:GetAuthorizationToken
-                Resource: '*'
-              - Effect: Allow
-                Action:
-                  - ecr:BatchGetImage
-                  - ecr:GetDownloadUrlForLayer
-                  - ecr:BatchCheckLayerAvailability
-                Resource: !GetAtt DeciderRepo.Arn
+                Action: sagemaker:InvokeEndpoint
+                Resource: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/ch10-decider
               - Effect: Allow
                 Action:
                   - logs:CreateLogStream
@@ -373,77 +311,34 @@ Resources:
                   - logs:DescribeLogStreams
                 Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
               - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                Resource: !Sub ${BatchBucket.Arn}/*
+                Action: s3:GetObject
+                Resource: !Sub ${SourceBucket.Arn}/*
     Condition: DeployDecider
 
-  # Names take underscores, not hyphens: a hyphen fails validation.
-  DeciderCapacity:
-    Type: AWS::BedrockAgentCore::CapacityProvider
-    Properties:
-      Name: ch10_decider_capacity
-      Description: GPU instances for the decision-model router
-      PermissionsConfiguration:
-        CapacityProviderOperatorRoleArn: !GetAtt CapacityOperatorRole.Arn
-      ComputeConfiguration:
-        Ec2Configuration:
-          LaunchTemplateSource:
-            LaunchParameters:
-              OperatingSystem: LINUX_X86_64
-              InstanceRequirements:
-                AllowedInstanceTypes: !Ref DeciderInstanceTypes
-              InstanceProfileArn: !GetAtt DeciderInstanceProfile.Arn
-          VpcConfiguration:
-            Subnets:
-              - !Ref DeciderSubnetA
-              - !Ref DeciderSubnetB
-            SecurityGroups:
-              - !Ref DeciderSecurityGroup
-
-          # The weights and the CUDA torch install land here, not in the image,
-          # and survive a session stop so only the first call pays for them.
-          Volumes:
-            - EbsConfiguration:
-                Name: models
-                SizeGiB: 60
-                VolumeType: gp3
-                Encrypted: true
-                Throughput: 500
-          RootVolume:
-            FreeSpaceGiB: 30
-            VolumeType: gp3
-          LifecycleConfiguration:
-            IdleInstanceTimeout: 600
-            MaxLifetime: 86400
-    Condition: DeployDecider
-
-  DeciderRuntime:
+  # Direct code deployment, not a container: the agent is small enough for the
+  # 250 MB zip, so it needs no repository and no build. The name takes
+  # underscores, not hyphens.
+  RoutingAgent:
     Type: AWS::BedrockAgentCore::Runtime
     Properties:
-      AgentRuntimeName: ch10_decider
-      Description: Routes a conversation to a team with a decision model
-      RoleArn: !GetAtt DeciderExecutionRole.Arn
+      AgentRuntimeName: ch10_router
+      Description: Routes a conversation to a team, asking the model on SageMaker
+      RoleArn: !GetAtt AgentRole.Arn
       ProtocolConfiguration: HTTP
       AgentRuntimeArtifact:
-        ContainerConfiguration:
-          ContainerUri: !Ref DeciderImageUri
-      CapacityProviderConfiguration:
-        CapacityProviderArn: !GetAtt DeciderCapacity.Arn
+        CodeConfiguration:
+          Runtime: PYTHON_3_12
+          EntryPoint:
+            - main.py
+          Code:
+            S3:
+              Bucket: !Ref SourceBucket
+              Prefix: !Ref AgentCodeKey
       NetworkConfiguration:
-        NetworkMode: VPC
-        NetworkModeConfig:
-          Subnets:
-            - !Ref DeciderSubnetA
-            - !Ref DeciderSubnetB
-          SecurityGroups:
-            - !Ref DeciderSecurityGroup
+        NetworkMode: PUBLIC
       EnvironmentVariables:
-        DECIDER_MODEL: StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
-        HF_HOME: /mnt/models/hf
-        MODEL_VOLUME: /mnt/models
-    Condition: DeciderReady
+        ENDPOINT_NAME: ch10-decider
+    Condition: AgentReady
 
 Outputs:
   BatchBucket:
@@ -452,9 +347,14 @@ Outputs:
   BatchServiceRoleArn:
     Value: !GetAtt BatchServiceRole.Arn
 
-  DeciderRuntimeArn:
+  RoutingAgentArn:
     Description: Pass as AGENT_RUNTIME_ARN to src/decide.py
-    Value: !GetAtt DeciderRuntime.AgentRuntimeArn
+    Value: !GetAtt RoutingAgent.AgentRuntimeArn
+    Condition: AgentReady
+
+  DeciderEndpointName:
+    Description: the SageMaker endpoint the agent asks
+    Value: !GetAtt DeciderEndpoint.EndpointName
     Condition: DeciderReady
 
   DeciderRepoUri:
