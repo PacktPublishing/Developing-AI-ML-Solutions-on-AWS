@@ -1,4 +1,4 @@
-.PHONY: up prepare classify decide serve-decider serve-agent route eval all down lint test diagrams
+.PHONY: up prepare classify decide serve-decider serve-agent sm-local sm-local-image route eval all down lint test diagrams
 
 # the whole local flow in one command: the local S3, the datasets, the batch classification
 # (local Ollama), the routing, and the evaluation. make down when done.
@@ -75,6 +75,24 @@ ENDPOINT_NAME ?= ch10-decider
 serve-agent:
 	PORT=$(AGENT_PORT) ENDPOINT_NAME=$(ENDPOINT_NAME) \
 		uv run --with bedrock-agentcore --with boto3 agent/main.py
+
+# sm-local: the model's container as a SageMaker endpoint in local mode, which
+# starts it the way the service does (`docker run <image> serve`) rather than
+# the way a person would. A plain docker run uses CMD and passes even when the
+# image has no serve on PATH, which is how that failure once reached a deployed
+# endpoint. Needs AWS credentials and any role ARN; local mode never assumes it.
+#
+# The CPU variant of the base image, because a laptop has no NVIDIA GPU.
+SM_LOCAL_IMAGE ?= ch10-decider:cpu
+SM_LOCAL_BASE ?= public.ecr.aws/sagemaker/sagemaker-distribution:4.7.0-cpu
+SAGEMAKER_ROLE_ARN ?= arn:aws:iam::000000000000:role/local-mode-placeholder
+sm-local-image:
+	docker build --build-arg BASE_IMAGE=$(SM_LOCAL_BASE) \
+		-t $(SM_LOCAL_IMAGE) model/
+
+sm-local: sm-local-image
+	MODEL_IMAGE=$(SM_LOCAL_IMAGE) DEVICE=cpu SAGEMAKER_ROLE_ARN=$(SAGEMAKER_ROLE_ARN) \
+		PYTHONPATH=src uv run src/serve_local.py
 
 # route: publish each classified conversation to its team's topic (from-source SNS)
 route:
