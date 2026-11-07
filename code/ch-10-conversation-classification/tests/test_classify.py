@@ -168,7 +168,7 @@ def test_a_rejected_answer_becomes_a_failure_not_a_prediction():
 # ---------------------------------------------------------------------------
 # Probabilities are arithmetic, so they are validated
 # ---------------------------------------------------------------------------
-def test_a_valid_distribution_is_normalised_over_the_label_set():
+def test_a_valid_distribution_is_normalized_over_the_label_set():
     """The model is asked for about one; the vector is made to sum to one."""
     probs, why = parse_probs(json.dumps({"Cards": 0.6, "Digital Banking": 0.3}), LABELS)
     assert why == ""

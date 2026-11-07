@@ -25,14 +25,6 @@ Parameters:
     Type: String
     Default: ""
 
-  DeciderInstanceType:
-    Description: |
-      The endpoint instance. GPU, because CPU inference of this model peaks at
-      7.4 GB and takes seconds per conversation. ml.g5.xlarge has an endpoint
-      quota of its own, separate from the EC2 one.
-    Type: String
-    Default: ml.g5.xlarge
-
   AgentCodeKey:
     Description: The agent zip in the source bucket; empty until `make agent`.
     Type: String
@@ -268,8 +260,32 @@ Resources:
         - VariantName: main
           ModelName: !GetAtt DeciderModel.ModelName
           InitialInstanceCount: 1
-          InstanceType: !Ref DeciderInstanceType
           InitialVariantWeight: 1
+
+          # Several types rather than one. GPU capacity runs out, and a single
+          # InstanceType answers InsufficientInstanceCapacity after twenty
+          # minutes of trying, which is a failed deploy that no retry fixes.
+          # SageMaker walks these by priority instead.
+          #
+          # g4dn is deliberately absent. It has capacity when the others do
+          # not, which is exactly the trap: its driver reports CUDA 11.4 and
+          # the image carries a CUDA 12 torch, so the instance provisions and
+          # then the container dies with "NVIDIA driver is too old" and fails
+          # the ping health check. A pool may only hold types whose drivers
+          # match the build, or the fallback turns a fast failure into a slow
+          # one. A4 generations (g5, g6, g6e) all carry CUDA 12 drivers.
+          InstancePools:
+            - InstanceType: ml.g5.xlarge
+              Priority: 1
+            - InstanceType: ml.g6.xlarge
+              Priority: 2
+            - InstanceType: ml.g5.2xlarge
+              Priority: 3
+            - InstanceType: ml.g6e.xlarge
+              Priority: 4
+
+          # How long to spend walking them before giving up, 300 to 3600.
+          VariantInstanceProvisionTimeoutInSeconds: 1800
 
           # The image pulls 4.5 GB of weights with it, so give the container
           # longer than the default to report healthy.

@@ -49,7 +49,7 @@ def summary(**kwargs) -> Summary:
         ("SALE OF  EQUIPMENT", "asset sale"),
     ],
 )
-def test_the_policys_excluded_credits_are_recognised(description, reason):
+def test_the_policys_excluded_credits_are_recognized(description, reason):
     """POL-DTI names these three kinds and they do not count towards income."""
     assert excluded_reason(description) == reason
 
@@ -90,7 +90,7 @@ def test_an_amount_keeps_the_sign_the_statement_printed(cell, value):
 
 @pytest.mark.parametrize("cell", ["about 500", "N0TANUMBER", "1.2.3"])
 def test_an_amount_that_is_not_a_number_is_refused(cell):
-    """Reject unrecognised amount strings."""
+    """Reject unrecognized amount strings."""
     with pytest.raises(Unreadable):
         _money(cell)
 

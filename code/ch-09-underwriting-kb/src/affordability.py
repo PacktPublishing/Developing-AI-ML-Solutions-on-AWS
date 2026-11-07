@@ -1,4 +1,4 @@
-"""Calculate loan instalments, debt-to-income ratios and maximum loan amounts.
+"""Calculate loan installments, debt-to-income ratios and maximum loan amounts.
 
 Shared validation checks numeric inputs and permitted ranges before calculation.
 Agent tools call these functions with the configured DTI ceiling.
@@ -24,7 +24,7 @@ MAX_TENOR_MONTHS = 600
 class Affordability:
     """One affordability assessment, in the units the memos use."""
 
-    instalment: float
+    installment: float
     dti_percent: float
     within_ceiling: bool
     headroom: float
@@ -85,8 +85,8 @@ def _capacity(
     return income, repayments, ceiling
 
 
-def instalment(amount: float, annual_rate_percent: float, tenor_months: int) -> float:
-    """Return the level monthly payment amortising `amount` over `tenor_months`."""
+def installment(amount: float, annual_rate_percent: float, tenor_months: int) -> float:
+    """Return the level monthly payment amortizing `amount` over `tenor_months`."""
     amount, rate, months = _terms(amount, annual_rate_percent, tenor_months)
     monthly_rate = rate / 100.0 / 12.0
     if monthly_rate == 0:
@@ -110,11 +110,11 @@ def dti(
     income, repayments, ceiling = _capacity(
         monthly_income, existing_repayments, ceiling_percent
     )
-    payment = instalment(amount, annual_rate_percent, tenor_months)
+    payment = installment(amount, annual_rate_percent, tenor_months)
     ratio = (repayments + payment) / income * 100.0
     allowed = income * ceiling / 100.0
     return Affordability(
-        instalment=round(payment, 2),
+        installment=round(payment, 2),
         dti_percent=round(ratio, 1),
         within_ceiling=ratio <= ceiling,
         headroom=round(allowed - repayments - payment, 2),

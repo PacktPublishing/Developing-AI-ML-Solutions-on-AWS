@@ -54,7 +54,7 @@ def query_body(
     if not hybrid:
         return {"size": k, "query": knn}
     # the keyword half reads the title too, which carries the loan id and the
-    # borrower, the exact tokens an embedding blurs into its neighbours
+    # borrower, the exact tokens an embedding blurs into its neighbors
     keyword = {
         "bool": {
             "must": {"multi_match": {"query": text, "fields": ["title^2", "content"]}},

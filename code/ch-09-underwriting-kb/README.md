@@ -46,7 +46,7 @@ before. The statement is stored with `source: submission` and the archive search
 filters on `source: corpus`, so a document under review is never returned as its
 own precedent, and `--keep` aside it is deleted once the review is done.
 
-Totalling the statement is arithmetic, so it is a parser and not a prompt: the
+Totaling the statement is arithmetic, so it is a parser and not a prompt: the
 agent reads the income and existing repayments back out of the index rather than
 adding up a table it retrieved. That is the same rule the affordability tool
 follows, and for the same reason. The parser also checks the running balance,
@@ -172,7 +172,7 @@ terminal locally.
 - `local/kb-stack.yml`: the compose stack — the OpenSearch node and Dashboards
 - `tests/test_opensearch.py`: the score conversion, and a round-trip when a node
   is up
-- `tests/test_affordability.py`: the instalment, the ratio, and its inverse
+- `tests/test_affordability.py`: the installment, the ratio, and its inverse
 - `tests/test_statements.py`: the parser against the generator's own manifest
 - `tests/test_statement_figures.py`: the credits that are not income, the signs a
   regex can lose, and the statements that are refused

@@ -98,7 +98,7 @@ class Summary:
 def _money(cell: str | None) -> float:
     """Parse an amount, preserving a leading minus, trailing minus or parentheses.
 
-    Blank markers return zero. Unrecognised amounts raise Unreadable.
+    Blank markers return zero. Unrecognized amounts raise Unreadable.
     """
     if cell is None:
         return 0.0
@@ -113,7 +113,7 @@ def _money(cell: str | None) -> float:
     core = text.strip("()").strip().lstrip("-").rstrip("-").strip()
     core = core.lstrip("$\u20ac\u00a3\u20a6").strip().replace(",", "").replace(" ", "")
     if not re.fullmatch(r"\d+(?:\.\d+)?", core):
-        raise Unreadable(f"unrecognised amount {cell!r}")
+        raise Unreadable(f"unrecognized amount {cell!r}")
     value = float(core)
     return -value if negative else value
 

@@ -5,7 +5,7 @@ Synthetic credit policy for the book's knowledge base. Invented for illustration
 ## How DTI is calculated
 
 Debt-to-income (DTI) is the borrower's monthly debt service divided by average
-monthly inflows. Debt service is the instalment on the proposed facility plus all
+monthly inflows. Debt service is the installment on the proposed facility plus all
 existing loan repayments. Average monthly inflows are total credits across the
 bank statements provided, divided by the months they cover, after removing
 transfers between the borrower's own accounts and one-off credits such as asset

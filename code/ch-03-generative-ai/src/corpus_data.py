@@ -125,7 +125,7 @@ POLICY = [
         "body": (
             "With no external score, the underwriter rates each deal on a"
             " qualitative scorecard adapted from the supervisory slotting approach"
-            " for specialised lending: the five slotting factors, plus a sixth"
+            " for specialized lending: the five slotting factors, plus a sixth"
             " the firm added for its market. Six factors are each graded strong,"
             " good, satisfactory, or weak. One, financial strength: leverage, debt"
             " service coverage, liquidity, and the quality of projected cash flow."

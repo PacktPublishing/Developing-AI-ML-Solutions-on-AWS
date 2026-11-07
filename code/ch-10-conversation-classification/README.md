@@ -164,7 +164,7 @@ An answer is read rather than guessed at. A category has to be named exactly,
 after the formatting a model wraps a one word answer in comes off, and an answer
 that mentions several categories is a failed record rather than a vote for
 whichever is listed first: "Not Cards. Digital Banking." is not Cards. A
-probability has to be a finite number in [0,1], with the categories totalling
+probability has to be a finite number in [0,1], with the categories totaling
 about one, so "not sure", null, 1e309 and a JSON object that did not parse are
 failed records instead of a crash or a vector of zeroes.
 
@@ -284,7 +284,7 @@ tasks, because a multi-turn transcript is a long state and latency grows with it
   Brier plus a skill score, over the records that produced a forecast
 - `tests/test_classify.py`: the output file, the answers that are refused, and
   the job statuses that mean a job has stopped moving
-- `tests/test_evaluate.py`: the scoring maths, and what a missing prediction
+- `tests/test_evaluate.py`: the scoring math, and what a missing prediction
   does and does not score
 - `tests/test_decide.py`: the question put to the decision model, and the
   confidence policy applied to its answer

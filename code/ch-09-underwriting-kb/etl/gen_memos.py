@@ -161,8 +161,8 @@ AMENDMENTS = [
         "Combined exposure stays inside the single-obligor limit.",
     ),
     (
-        "DEFERRED GUARANTOR CHEQUE",
-        "deferral of the guarantor cheque presentation by {months} month(s)",
+        "DEFERRED GUARANTOR CHECK",
+        "deferral of the guarantor check presentation by {months} month(s)",
         "Guarantor forms remain on file and unchanged.",
     ),
     (
@@ -173,7 +173,7 @@ AMENDMENTS = [
     (
         "TENOR EXTENSION",
         "an extension of tenor from {tenor} to {new_tenor} months",
-        "Instalment recalculated, and the rate is unchanged.",
+        "Installment recalculated, and the rate is unchanged.",
     ),
     (
         "EXCEPTIONAL APPROVAL",
@@ -245,7 +245,7 @@ def _amendment(rng: random.Random, loan_id: int, as_thread: bool) -> Memo:
 
                     Exposure: ${exposure:,}   Tenor: {tenor} months
                     Days past due: {dpd}      Sector: {sector}
-                    Collateral: guarantor cheques, 2 signatories
+                    Collateral: guarantor checks, 2 signatories
             """)
         doc = f"{kind.title().replace(' ', '_')}.msg"
         return Memo(
@@ -275,7 +275,7 @@ def _amendment(rng: random.Random, loan_id: int, as_thread: bool) -> Memo:
         Original Tenor                        {tenor} months
         Days Past Due                         {dpd}
         Credit Bureau Status                  {rng.choice(["Satisfactory", "No adverse records"])}
-        Collateral                            Guarantor cheques, 2 signatories
+        Collateral                            Guarantor checks, 2 signatories
 
         3. Background
         {reason} The promoter has serviced the facility without

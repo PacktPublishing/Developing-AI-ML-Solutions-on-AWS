@@ -27,7 +27,7 @@ Diagram:
         - BackendCol
         - WarehouseCol
 
-    # single child: the task centres on the canvas axis, so the analyst's link
+    # single child: the task centers on the canvas axis, so the analyst's link
     # lands on the icon instead of striking through the caption below it.
     AgentCol:
       Type: AWS::Diagram::VerticalStack

@@ -25,7 +25,7 @@ SYSTEM = (
     " underwriter added to the case, which you name when you use them, past"
     " memos, which you must cite by loan id in square brackets, and an"
     " affordability calculator. Never compute a debt-to-income ratio or an"
-    " instalment yourself, always call the tool, because the underwriter checks"
+    " installment yourself, always call the tool, because the underwriter checks"
     " these numbers. When the underwriter names a case reference, read the"
     " statement first and use the income and existing repayments it returns"
     " rather than any figure quoted in the question. The income it returns is"
@@ -122,7 +122,7 @@ def assess_affordability(
     annual_rate_percent: float,
     tenor_months: int,
 ) -> dict:
-    """Return instalment, DTI and headroom using the configured DTI ceiling."""
+    """Return installment, DTI and headroom using the configured DTI ceiling."""
     result = dti(
         monthly_income,
         existing_repayments,
@@ -132,7 +132,7 @@ def assess_affordability(
         CEILING_PERCENT,
     )
     return {
-        "instalment": result.instalment,
+        "installment": result.installment,
         "dti_percent": result.dti_percent,
         "within_ceiling": result.within_ceiling,
         "headroom": result.headroom,

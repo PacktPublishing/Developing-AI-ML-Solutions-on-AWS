@@ -32,7 +32,7 @@ DEFAULTS = {"iterations": 300, "depth": 5, "learning_rate": 0.1}
 
 
 def train(reference: pd.DataFrame, params: dict | None = None) -> CatBoostClassifier:
-    """Fit the scorecard on the reference batch, honouring SageMaker hyperparameters."""
+    """Fit the scorecard on the reference batch, honoring SageMaker hyperparameters."""
     p = {**DEFAULTS, **(params or {})}
     model = CatBoostClassifier(
         iterations=int(p["iterations"]),

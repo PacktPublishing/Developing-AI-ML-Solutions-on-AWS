@@ -120,7 +120,7 @@ def test_a_non_string_value_is_still_masked():
 
 
 @pytest.mark.parametrize("salt", ["book", "other"])
-def test_the_hash_salt_is_honoured(monkeypatch, salt):
+def test_the_hash_salt_is_honored(monkeypatch, salt):
     """A deployment can change MASK_SALT so tokens are not comparable across environments."""
     import importlib
 

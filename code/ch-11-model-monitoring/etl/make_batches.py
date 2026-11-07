@@ -3,7 +3,7 @@
 # ///
 """Split Chapter 2 data into reference and current monitoring batches.
 
-Apply synthetic changes to the current batch's utilisation, debt-to-income,
+Apply synthetic changes to the current batch's utilization, debt-to-income,
 bureau score, income and employment fields. These changes provide test inputs
 for the drift monitors.
 

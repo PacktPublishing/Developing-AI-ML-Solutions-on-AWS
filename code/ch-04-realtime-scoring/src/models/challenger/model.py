@@ -1,6 +1,6 @@
 """The challenger model: a second logistic PD with different weights.
 
-Use the champion feature set with different weights for utilisation, delinquency and debt-to-income.
+Use the champion feature set with different weights for utilization, delinquency and debt-to-income.
 """
 
 import math

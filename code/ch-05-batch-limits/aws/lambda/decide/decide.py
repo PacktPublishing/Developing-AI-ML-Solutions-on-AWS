@@ -17,7 +17,7 @@ DECREASE_STEP = float(os.environ.get("DECREASE_STEP", "0.30"))
 
 
 def _s3():
-    """Build an S3 client that honours a local endpoint when one is configured."""
+    """Build an S3 client that honors a local endpoint when one is configured."""
     return boto3.client("s3", endpoint_url=os.environ.get("S3_ENDPOINT") or None)
 
 

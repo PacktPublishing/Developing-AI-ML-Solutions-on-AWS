@@ -81,7 +81,7 @@ def test_the_pdf_itself_is_sent_as_a_document_block(filing):
 
 
 def test_the_document_name_survives_but_loses_what_a_name_may_not_hold(filing):
-    """Sanitise the document name for the Converse request."""
+    """Sanitize the document name for the Converse request."""
     runtime = FakeRuntime(json.dumps(ANSWER))
     reading = read_document(filing, runtime)
     assert reading.doc_name == "tax filing 2025"
