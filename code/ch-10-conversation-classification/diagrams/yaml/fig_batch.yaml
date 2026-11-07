@@ -1,7 +1,9 @@
-# The classification round on AWS: an Amazon Bedrock batch inference job. Every
-# conversation is one line of a JSONL manifest in S3; Bedrock replays each modelInput
-# against Claude Haiku 4.5 and writes the answers back as .jsonl.out; route.py collects
-# them and publishes each conversation to its team's SNS topic.
+# The LLM round on AWS: an Amazon Bedrock batch inference job. Every conversation
+# is one line of a JSONL manifest in S3, Bedrock replays each modelInput against
+# the batch model and writes the answers back as .jsonl.out, and route.py reads
+# the collected predictions and publishes each conversation to its team's topic.
+# One bucket holds both sides, under a prefix per run, so two runs at once cannot
+# overwrite each other's manifests.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -21,26 +23,28 @@ Diagram:
     AWSCloud:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
-      Direction: horizontal
-      Children: [ManifestIn, Bedrock, ResultsOut, SNS]
+      Direction: vertical
+      Children: [JobRow, SNS]
 
-    ManifestIn:
+    JobRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Bucket, Bedrock]
+
+    Bucket:
       Type: AWS::S3::Bucket
-      Title: "S3\nJSONL manifest"
+      Title: "S3\ninput/<run>/ and output/<run>/"
+
     Bedrock:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Bedrock"
-      Title: "Bedrock batch\nCreateModelInvocationJob\n(Claude Haiku 4.5)"
-    ResultsOut:
-      Type: AWS::S3::Bucket
-      Title: "S3\n.jsonl.out"
+      Title: "Bedrock batch\nCreateModelInvocationJob\n(Nova Lite by default)"
+
     SNS:
       Type: AWS::Diagram::Resource
       Preset: "Amazon Simple Notification Service (Amazon SNS)"
       Title: "SNS\nten team topics"
 
   Links:
-    - {Source: Client, SourcePosition: E, Target: ManifestIn, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: ManifestIn, SourcePosition: E, Target: Bedrock, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Bedrock, SourcePosition: E, Target: ResultsOut, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: ResultsOut, SourcePosition: E, Target: SNS, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Client, SourcePosition: E, Target: Bucket, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Bucket, SourcePosition: E, Target: Bedrock, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Client, SourcePosition: E, Target: SNS, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
