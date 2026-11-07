@@ -34,6 +34,12 @@ PORT = int(os.environ.get("PORT", "8080"))
 # correctly, so nothing looks wrong until the bill does. Refuse to start instead,
 # unless the deploy asked for the CPU on purpose.
 REQUIRE_GPU = os.environ.get("REQUIRE_GPU", "1") == "1" and DEVICE != "cpu"
+# The checkpoint is bf16 and torch loads it as float32 unless told otherwise,
+# which doubles it: 2B parameters need about 8 GB that way, more than Docker
+# Desktop's default VM has, and the container is killed with code 137 partway
+# through loading. The endpoint has the memory and leaves this alone; the local
+# check sets bfloat16 and halves the weights.
+TORCH_DTYPE = os.environ.get("TORCH_DTYPE", "")
 
 # Log what torch can actually see before anything tries to use it. device_count
 # can be non-zero while is_available is False: the device is visible but the
@@ -66,6 +72,10 @@ def main() -> None:
     import uvicorn
     from strands_decider.server import create_app
 
+    if TORCH_DTYPE:
+        dtype = getattr(torch, TORCH_DTYPE)
+        torch.set_default_dtype(dtype)
+        log.info("default dtype set to %s", dtype)
     log.info("loading %s on %s", CHECKPOINT, DEVICE)
     # create_app warms the model, so uvicorn only starts serving once the
     # weights are resident. That is what lets /ping mean ready rather than

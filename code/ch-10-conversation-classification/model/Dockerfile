@@ -11,27 +11,44 @@
 #
 # The PyTorch inference DLC would be the usual choice for an endpoint, but it
 # stops at torch 2.6.0, below what this model needs.
-# The CPU variant of the same image runs this on a laptop, which is what lets
-# SageMaker local mode exercise the real startup contract before a deploy.
+# SageMaker Distribution publishes amd64 only, so on an Apple silicon laptop it
+# can only run emulated, and emulating a 7 GB base plus 4.5 GB of weights is a
+# build measured in hours. The local-mode check does not need this base: it
+# checks how the container starts and what serve.py does, not which image the
+# endpoint runs. So the base is an argument, and `make sm-local` passes a
+# multi-arch slim one that builds natively.
 ARG BASE_IMAGE=public.ecr.aws/sagemaker/sagemaker-distribution:4.7.0-gpu
 FROM ${BASE_IMAGE}
 
 ARG DECIDER_VERSION=0.3.0
 ARG CHECKPOINT=StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
+# Empty means the base already carries torch, which is the whole reason the
+# endpoint uses SageMaker Distribution. A base without one needs an index, and
+# it must be the CPU index: the default wheel bundles CUDA nobody here can use.
+ARG TORCH_INDEX=
+# The weights are baked in for the endpoint, where SageMaker gives /invocations
+# 60 seconds. A local contract check does not need 4.5 GB to prove the container
+# starts the right server.
+ARG BAKE_WEIGHTS=1
 
 # The image runs as a non-root user; installing into its environment needs root.
 USER root
 
 # No --index-url and no torch here on purpose. Anything that reinstalls torch
 # puts back the mismatch this base image exists to avoid.
-RUN pip install --no-cache-dir "strands-decider==${DECIDER_VERSION}" \
+RUN if [ -n "$TORCH_INDEX" ]; then \
+        pip install --no-cache-dir --index-url "$TORCH_INDEX" torch; \
+    fi \
+    && pip install --no-cache-dir "strands-decider==${DECIDER_VERSION}" \
     && python -c "import torch; print('torch', torch.__version__)"
 
 # Bake the weights in. SageMaker gives /invocations 60 seconds, so a 4.5 GB
 # download belongs in the build rather than in the first request.
 ENV HF_HOME=/opt/models
-RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('${CHECKPOINT}'); snapshot_download('Qwen/Qwen3.5-2B-Base')" \
-    && chmod -R a+rX /opt/models
+RUN if [ "$BAKE_WEIGHTS" = "1" ]; then \
+        python -c "from huggingface_hub import snapshot_download; snapshot_download('${CHECKPOINT}'); snapshot_download('Qwen/Qwen3.5-2B-Base')" \
+        && chmod -R a+rX /opt/models; \
+    fi
 
 WORKDIR /opt/program
 COPY serve.py entrypoint.sh ./

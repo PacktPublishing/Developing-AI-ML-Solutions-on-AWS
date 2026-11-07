@@ -84,17 +84,21 @@ serve-agent:
 #
 # The CPU variant of the base image, because a laptop has no NVIDIA GPU.
 SM_LOCAL_IMAGE ?= ch10-decider:cpu
-SM_LOCAL_BASE ?= public.ecr.aws/sagemaker/sagemaker-distribution:4.7.0-cpu
+# Not the distribution image: it is amd64 only, so on Apple silicon it builds
+# emulated and takes hours. This one is multi-arch and builds natively.
+SM_LOCAL_BASE ?= ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+SM_LOCAL_TORCH ?= https://download.pytorch.org/whl/cpu
 SAGEMAKER_ROLE_ARN ?= arn:aws:iam::000000000000:role/local-mode-placeholder
 sm-local-image:
-	@# --platform: the distribution images are amd64, so on Apple silicon this
-	@# runs emulated. Slow, and fine: this checks how the container starts, not
-	@# how fast the model answers.
-	docker build --platform linux/amd64 --build-arg BASE_IMAGE=$(SM_LOCAL_BASE) \
+	@# No --platform: this builds for whatever this machine is, natively. The
+	@# weights are baked in here as they are for the endpoint, so the download
+	@# happens once at build time instead of on every run.
+	docker build --build-arg BASE_IMAGE=$(SM_LOCAL_BASE) \
+		--build-arg TORCH_INDEX=$(SM_LOCAL_TORCH) \
 		-t $(SM_LOCAL_IMAGE) model/
 
 sm-local: sm-local-image
-	MODEL_IMAGE=$(SM_LOCAL_IMAGE) DEVICE=cpu SAGEMAKER_ROLE_ARN=$(SAGEMAKER_ROLE_ARN) \
+	MODEL_IMAGE=$(SM_LOCAL_IMAGE) DEVICE=cpu \
 		PYTHONPATH=src uv run src/serve_local.py
 
 # route: publish each classified conversation to its team's topic (from-source SNS)
