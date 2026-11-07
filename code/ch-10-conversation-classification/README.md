@@ -318,9 +318,10 @@ labels the Brier is just twice the error rate.
 - **Local stand-ins:** a from-source Bedrock batch shim over S3Proxy + Ollama, a
   from-source SNS shim (file inboxes), S3Proxy (S3). The decision model has no
   stand-in at all: `agent/main.py` serves the AgentCore Runtime contract itself,
-  so the local round runs the file that deploys, and the model runs here as the
-  same checkpoint the endpoint serves. It also needs no containers, where the
-  batch path needs S3Proxy for its manifests.
+  so the local round runs the file that deploys, and `make sm-local` runs the
+  endpoint's own image through SageMaker local mode, started the way the service
+  starts it. `make decide` needs no container at all, where the batch path needs
+  S3Proxy for its manifests.
 
 ## Run it on AWS
 
