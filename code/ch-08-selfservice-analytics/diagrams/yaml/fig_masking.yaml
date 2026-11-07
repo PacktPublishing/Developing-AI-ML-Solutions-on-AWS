@@ -18,7 +18,7 @@ Diagram:
       Children: [ConfigCol, LayerCol]
 
     # single child: the config centres on the canvas axis, so both links leave
-    # on the icon centre line, clear of the caption below it.
+    # on the icon center line, clear of the caption below it.
     ConfigCol:
       Type: AWS::Diagram::VerticalStack
       Children: [Config]

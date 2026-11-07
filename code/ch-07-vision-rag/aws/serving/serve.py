@@ -33,7 +33,7 @@ log.info(
 )
 if not torch.cuda.is_available():
     # device_count can be non-zero while is_available is False: the device is visible
-    # but the runtime cannot initialise it, usually a driver older than the CUDA build.
+    # but the runtime cannot initialize it, usually a driver older than the CUDA build.
     try:
         torch.cuda.init()
     except (RuntimeError, AssertionError, OSError) as exc:

@@ -1,6 +1,6 @@
 """The gateway's decision rules, exercised without a network or an AWS account.
 
-Test ensemble decisions, shadow-model behaviour and scoring failures with stub
+Test ensemble decisions, shadow-model behavior and scoring failures with stub
 scorers. conftest sets ENDPOINTS before the gateway is imported.
 """
 

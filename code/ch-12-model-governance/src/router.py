@@ -58,7 +58,7 @@ class Router:
 
 
 def main() -> None:
-    """Route every application in a JSONL file and summarise the split."""
+    """Route every application in a JSONL file and summarize the split."""
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("applications", type=Path)
     a = p.parse_args()
