@@ -5,10 +5,6 @@ so every number in it is checked here rather than eyeballed in the console table
 """
 
 import math
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import evaluate
 
@@ -102,3 +98,66 @@ def test_macro_f1_penalises_a_class_that_is_never_predicted():
     assert report.accuracy == 0.5
     # a: precision 0.5, recall 1.0 -> F1 2/3; b: never predicted -> F1 0
     assert report.macro_f1 == ((2 * 0.5 * 1.0 / 1.5) + 0.0) / 2
+
+
+# ---------------------------------------------------------------------------
+# A record with no prediction is not a forecast of nothing
+# ---------------------------------------------------------------------------
+def test_a_missing_prediction_is_wrong_and_is_counted_as_missing():
+    """Count it against the run, and say how many records answered at all.
+
+    A router that answered nothing routed nothing, so accuracy carries it;
+    coverage is what tells an operator why accuracy fell.
+    """
+    preds = [
+        {"pred": "a", "label": "a"},
+        {"pred": "", "label": "b", "failed": "the record failed"},
+    ]
+    report = evaluate.score("half", preds, LABELS)
+
+    assert report.accuracy == 0.5
+    assert report.scored == 1
+    assert report.missing == 1
+    assert report.coverage == 0.5
+
+
+def test_a_missing_prediction_does_not_get_a_brier_score():
+    """Leave it out of the Brier instead of scoring it as a vector of zeroes.
+
+    An all-zero vector is not a probability distribution, and it used to score
+    better than a wrong forecast that at least committed to something.
+    """
+    missing = [{"pred": "", "label": "a", "failed": "no record"}]
+    wrong = [{"pred": "b", "label": "a"}]
+
+    assert math.isnan(evaluate.score("missing", missing, LABELS).brier)
+    # a recognised but wrong hard label is a forecast, and it is scored
+    assert evaluate.score("wrong", wrong, LABELS).brier == 2.0
+
+
+def test_nothing_scorable_leaves_the_probability_metrics_undefined():
+    """Reporting 100% on a run that predicted nothing is worse than reporting n/a."""
+    report = evaluate.score(
+        "empty", [{"pred": "", "label": "a"}, {"pred": "", "label": "b"}], LABELS
+    )
+    assert report.scored == 0
+    assert math.isnan(report.brier)
+    assert math.isnan(report.macro_index)
+    assert report.classes == []
+    assert "nothing to score" in evaluate.render(report)
+
+
+def test_the_scored_records_are_the_ones_with_a_forecast():
+    """A soft prediction needs probabilities; a hard one needs a label."""
+    assert evaluate.has_forecast({"pred": "a"}) is True
+    assert evaluate.has_forecast({"pred": "", "probs": {"a": 1.0}}) is True
+    assert evaluate.has_forecast({"pred": ""}) is False
+    assert evaluate.has_forecast({"pred": "", "probs": {}}) is False
+
+
+def test_coverage_appears_in_the_report_the_chapter_reads():
+    """The number is only useful if it is printed beside the accuracy."""
+    preds = [{"pred": "a", "label": "a"}, {"pred": "", "label": "b"}]
+    rendered = evaluate.render(evaluate.score("half", preds, LABELS))
+    assert "coverage" in rendered
+    assert "1/2 records produced a prediction" in rendered

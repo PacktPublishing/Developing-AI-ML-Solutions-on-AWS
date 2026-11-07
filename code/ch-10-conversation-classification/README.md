@@ -35,6 +35,46 @@ a from-source shim** that fans each publish out to its subscribers, delivering t
 file inbox per team. On a small local model (Qwen3 0.6b) the accuracy is
 illustrative; the graded numbers come from Claude on Bedrock in the cloud round.
 
+## What a batch job does to a result
+
+A batch job answers hours later, in a file, and most of what can go wrong goes
+wrong per record rather than per job. Three things follow from that.
+
+**One failed record is one failed record.** Bedrock writes an output line per
+conversation, and a line for a record it could not run carries an error in place
+of `modelOutput`. Collection records that against the record and carries on, so
+one throttled conversation does not cost the other three hundred and nineteen.
+The reasons are kept, written into the predictions as a `failed` field, and
+counted in the run's own summary.
+
+**A job that did not finish does not get to replace the predictions on disk.**
+The statuses that mean a job has stopped moving are Completed,
+PartiallyCompleted, Failed, Stopped and Expired, and only the first two leave
+output worth reading. A Failed job used to be collected anyway, which produced an
+empty prediction for every conversation and wrote them over the last good run.
+PartiallyCompleted is read, and the report says that not every record was
+processed.
+
+**Every run is its own run.** The manifest key, the job name and the output prefix
+all carry a run id, so classifying a second dataset or a second prompt variant
+while the first job is still queued no longer replaces the file that job is about
+to read. Pass `--out` to keep a variant's predictions beside the canonical ones.
+
+An answer is read rather than guessed at. A category has to be named exactly,
+after the formatting a model wraps a one word answer in comes off, and an answer
+that mentions several categories is a failed record rather than a vote for
+whichever is listed first: "Not Cards. Digital Banking." is not Cards. A
+probability has to be a finite number in [0,1], with the categories totalling
+about one, so "not sure", null, 1e309 and a JSON object that did not parse are
+failed records instead of a crash or a vector of zeroes.
+
+`make eval` reports coverage beside accuracy for the same reason. Accuracy counts
+every conversation, missing ones included, because a router that answered nothing
+routed nothing. The Brier score and both indices are computed over the records
+that produced a forecast, because a record with no prediction has no distribution
+to score, and scoring it as an all-zero vector used to flatter it above a wrong
+answer that at least committed to something.
+
 ## Datasets
 
 - [`oopere/RetailBanking-Conversations`](https://huggingface.co/datasets/oopere/RetailBanking-Conversations)
@@ -50,7 +90,12 @@ illustrative; the graded numbers come from Claude on Bedrock in the cloud round.
   batch shim over S3Proxy + Ollama
 - `src/classify.py`: build the Converse manifest, submit the job, collect, map to categories
 - `src/sns.py` + `src/route.py`: the routing seam — real SNS, or the local file-inbox shim
-- `src/evaluate.py`: accuracy, macro-F1, and the raw multiclass Brier plus a skill score
+- `src/evaluate.py`: accuracy and coverage, macro-F1, and the raw multiclass
+  Brier plus a skill score, over the records that produced a forecast
+- `tests/test_classify.py`: the output file, the answers that are refused, and
+  the job statuses that mean a job has stopped moving
+- `tests/test_evaluate.py`: the scoring maths, and what a missing prediction
+  does and does not score
 
 ## The Brier Index, one-vs-rest
 

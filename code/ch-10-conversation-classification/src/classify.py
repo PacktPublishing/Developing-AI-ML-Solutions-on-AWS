@@ -14,9 +14,12 @@ Usage (from the chapter root):
 
 import argparse
 import json
+import math
 import os
 import re
 import time
+import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from batch import get_bedrock, s3_client
@@ -95,22 +98,127 @@ def model_input(
     }
 
 
-def _parse_probs(text: str, labels: list[str]) -> dict[str, float]:
-    """Parse a JSON category->probability object, tolerating code fences; normalize over labels."""
-    text = re.sub(r"^```[\w-]*\s*|\s*```$", "", text.strip())
+# What the service calls a job that has stopped moving. Submitted, Validating,
+# Scheduled, InProgress and Stopping are all still in flight; Expired is a job
+# that was queued and never began, and PartiallyCompleted is output worth reading
+# with records missing from it.
+TERMINAL = ("Completed", "PartiallyCompleted", "Failed", "Stopped", "Expired")
+# the two that leave output in S3 to collect
+USABLE = ("Completed", "PartiallyCompleted")
+
+
+@dataclass
+class Run:
+    """One batch run: how it ended, what it predicted, and what it could not."""
+
+    status: str
+    message: str
+    # recordId -> {"pred": str, "probs": dict | None}
+    predictions: dict[str, dict] = field(default_factory=dict)
+    # recordId -> why that record has no prediction
+    failures: dict[str, str] = field(default_factory=dict)
+    # the counts the service reports about its own job, when it reports them
+    counts: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def usable(self) -> bool:
+        """Report whether this run left output worth writing to disk."""
+        return self.status in USABLE
+
+
+def _norm(text: str) -> str:
+    """Reduce a category name or an answer to comparable words."""
+    return re.sub(r"[^a-z0-9]+", " ", text.lower().replace("&", " and ")).strip()
+
+
+def _loose(text: str) -> str:
+    """Normalise further, so "Savings and Deposits" matches "Savings & Deposits"."""
+    return _norm(text).replace(" and ", " ")
+
+
+def _clean(said: str) -> str:
+    """Strip the formatting a model wraps a one word answer in."""
+    text = re.sub(r"^```[\w-]*\s*|\s*```$", "", said.strip())
+    text = re.sub(r"(?i)^(category|answer|label)\s*:\s*", "", text.strip())
+    return text.strip().strip("\"'*").strip(" .\t\n")
+
+
+def parse_label(said: str, labels: list[str]) -> tuple[str, str]:
+    """Return the category an answer names, or the reason it names none.
+
+    An exact category after that cleanup is the answer. Anything else is read
+    rather than guessed at: if the answer mentions exactly one category it is
+    taken, and if it mentions several it is rejected, because "Not Cards. Digital
+    Banking." is not a vote for Cards and the first category to appear in a
+    sentence is not the one the sentence chose.
+    """
+    cleaned = _clean(said)
+    if not cleaned:
+        return "", "the model answered with nothing"
+    exact = {_loose(label): label for label in labels}
+    if cleaned_label := exact.get(_loose(cleaned)):
+        return cleaned_label, ""
+    words = _loose(cleaned)
+    mentioned = [
+        label
+        for label in labels
+        if re.search(rf"\b{re.escape(_loose(label))}\b", words)
+    ]
+    if len(mentioned) == 1:
+        return mentioned[0], ""
+    if len(mentioned) > 1:
+        return "", f"names {len(mentioned)} categories: {said.strip()[:80]}"
+    return "", f"names no category: {said.strip()[:80]}"
+
+
+def parse_probs(said: str, labels: list[str]) -> tuple[dict[str, float], str]:
+    """Return a probability per category, or the reason the answer is unusable.
+
+    A distribution is arithmetic that the rest of the chapter depends on, so it
+    is validated rather than coerced. "not sure" is not a number, null is not a
+    number, 1e309 is not finite, and a JSON object that failed to parse is not a
+    forecast of zero for every class: each of those is a record that failed, and
+    saying so costs less than a NaN or an all-zero vector downstream.
+    """
+    text = re.sub(r"^```[\w-]*\s*|\s*```$", "", said.strip())
     start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < start:
+        return {}, f"no JSON object in the answer: {said.strip()[:80]}"
     try:
-        raw = json.loads(text[start : end + 1]) if start >= 0 else {}
-    except json.JSONDecodeError:
-        raw = {}
-    lower = {label.lower(): label for label in labels}
-    probs = {label: 0.0 for label in labels}
+        raw = json.loads(text[start : end + 1])
+    except json.JSONDecodeError as err:
+        return {}, f"the JSON object does not parse: {err}"
+    if not isinstance(raw, dict):
+        return {}, "the JSON is not an object of category to probability"
+
+    by_label = {_loose(label): label for label in labels}
+    probs = dict.fromkeys(labels, 0.0)
+    named = 0
     for key, value in raw.items():
-        label = lower.get(str(key).lower())
-        if label is not None:
-            probs[label] = max(0.0, float(value))
+        label = by_label.get(_loose(str(key)))
+        if label is None:
+            # a category the model invented is ignored, not an error on its own
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+            return {}, f"{key} is not a number: {value!r}"
+        try:
+            number = float(value)
+        except ValueError:
+            return {}, f"{key} is not a number: {value!r}"
+        if not math.isfinite(number):
+            return {}, f"{key} is not finite: {value!r}"
+        if not 0.0 <= number <= 1.0:
+            return {}, f"{key} is outside [0,1]: {value!r}"
+        probs[label] = number
+        named += 1
+    if not named:
+        return {}, "the answer names none of the categories"
     total = sum(probs.values())
-    return {k: v / total for k, v in probs.items()} if total else probs
+    # the prompt asks for a distribution; a total nowhere near one means the
+    # model answered a different question, so the record failed
+    if not 0.5 <= total <= 1.5:
+        return {}, f"the probabilities total {total:.3f}, not about 1"
+    return {label: value / total for label, value in probs.items()}, ""
 
 
 def write_manifest(
@@ -136,6 +244,21 @@ def write_manifest(
     return f"s3://{bucket}/{key.rsplit('/', 1)[0]}/"
 
 
+def _record_error(rec: dict) -> str:
+    """Return why one output record carries no answer.
+
+    A record Bedrock could not run comes back without `modelOutput`. The field
+    it carries instead is read rather than assumed: whatever of `error` or
+    `errorMessage` is present is reported, and a record with neither is reported
+    as having failed without saying why.
+    """
+    for key in ("error", "errorMessage", "message"):
+        if rec.get(key):
+            value = rec[key]
+            return str(value if isinstance(value, str) else json.dumps(value))[:200]
+    return "the record carries no modelOutput and no error"
+
+
 def collect(
     bucket: str,
     out_prefix: str,
@@ -143,14 +266,21 @@ def collect(
     labels: list[str],
     s3,
     distribution: bool,
-) -> dict[str, dict]:
-    """Read the .jsonl.out shards; return {recordId: {pred, probs}} per record."""
+) -> tuple[dict[str, dict], dict[str, str]]:
+    """Read the .jsonl.out shards and return the predictions and the failures.
+
+    One record Bedrock could not run must not cost the other three hundred, so a
+    record without an answer is recorded as a failure with its reason and
+    collection carries on. The same goes for an answer that could not be read:
+    a prediction nobody can defend is not a prediction, and it is kept apart
+    from the ones that can be.
+    """
     job_id = job_arn.split("/")[-1]
     prefix = (
         f"{out_prefix.removeprefix('s3://').partition('/')[2].rstrip('/')}/{job_id}/"
     )
-    lower = {label.lower(): label for label in labels}
     preds: dict[str, dict] = {}
+    failures: dict[str, str] = {}
     for obj in s3.list_objects_v2(Bucket=bucket, Prefix=prefix).get("Contents", []):
         # only the record shards; Bedrock also writes a manifest.json.out summary
         if not obj["Key"].endswith(".jsonl.out"):
@@ -161,18 +291,44 @@ def collect(
         for line in body.splitlines():
             if not line.strip():
                 continue
-            rec = json.loads(line)
-            said = answer_text(rec["modelOutput"])
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError as err:
+                failures[f"{obj['Key']}:{len(failures)}"] = f"unreadable line: {err}"
+                continue
+            record_id = str(rec.get("recordId", ""))
+            if not record_id:
+                failures[f"{obj['Key']}:{len(failures)}"] = "record without a recordId"
+                continue
+            if "modelOutput" not in rec:
+                failures[record_id] = _record_error(rec)
+                continue
+            try:
+                said = answer_text(rec["modelOutput"])
+            except (KeyError, IndexError, TypeError) as err:
+                failures[record_id] = f"the answer is not a Converse response: {err}"
+                continue
             if distribution:
-                probs = _parse_probs(said, labels)
-                pred = max(probs, key=lambda k: probs[k]) if any(probs.values()) else ""
-                preds[rec["recordId"]] = {"pred": pred, "probs": probs}
+                probs, why = parse_probs(said, labels)
+                if why:
+                    failures[record_id] = why
+                    continue
+                preds[record_id] = {
+                    "pred": max(probs, key=lambda k: probs[k]),
+                    "probs": probs,
+                }
             else:
-                match = next(
-                    (orig for low, orig in lower.items() if low in said.lower()), None
-                )
-                preds[rec["recordId"]] = {"pred": match or said.lower(), "probs": None}
-    return preds
+                label, why = parse_label(said, labels)
+                if why:
+                    failures[record_id] = why
+                    continue
+                preds[record_id] = {"pred": label, "probs": None}
+    return preds, failures
+
+
+def new_run_id() -> str:
+    """Return an identifier unique to one run, legal in a Bedrock job name."""
+    return f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
 
 
 def classify(
@@ -181,19 +337,34 @@ def classify(
     bucket: str,
     distribution: bool = False,
     variant: str = "a",
-) -> dict[str, dict]:
-    """Run the whole batch flow and return {conversation id: {pred, probs}}."""
+    run_id: str = "",
+) -> Run:
+    """Run the whole batch flow for one run and return what came back.
+
+    Each run gets its own identifier, and its input prefix, its job name and its
+    output prefix all carry it. Two runs at once are two jobs reading two
+    manifests: starting a second dataset or a second prompt variant while the
+    first is still queued used to replace the file the first job was about to
+    read.
+    """
+    run_id = run_id or new_run_id()
     s3 = s3_client()
     in_uri = write_manifest(
-        rows, labels, bucket, "input/manifest.jsonl", s3, distribution, variant
+        rows,
+        labels,
+        bucket,
+        f"input/{run_id}/manifest.jsonl",
+        s3,
+        distribution,
+        variant,
     )
-    out_uri = f"s3://{bucket}/output/"
+    out_uri = f"s3://{bucket}/output/{run_id}/"
     bedrock = get_bedrock()
     # roleArn is required on AWS (the service role Bedrock assumes to reach S3);
     # the local shim ignores it. BATCH_MODEL lets the cloud round pick a
     # batch-capable model without changing the seam's default.
     job = bedrock.create_model_invocation_job(
-        jobName=f"classify-{int(time.time())}",
+        jobName=f"classify-{run_id}",
         roleArn=os.environ.get("BEDROCK_BATCH_ROLE", ""),
         modelId=os.environ.get("BATCH_MODEL", TEXT_MODEL),
         inputDataConfig={
@@ -204,12 +375,32 @@ def classify(
     )
     arn = job["jobArn"]
     while True:
-        status = bedrock.get_model_invocation_job(jobIdentifier=arn)["status"]
-        if status in ("Completed", "Failed", "Stopped"):
-            print("job", status)
+        details = bedrock.get_model_invocation_job(jobIdentifier=arn)
+        status = details["status"]
+        if status in TERMINAL:
             break
         time.sleep(10)
-    return collect(bucket, out_uri, arn, labels, s3, distribution)
+    counts = {
+        key: details[key]
+        for key in (
+            "totalRecordCount",
+            "processedRecordCount",
+            "successRecordCount",
+            "errorRecordCount",
+        )
+        if isinstance(details.get(key), int)
+    }
+    run = Run(status=status, message=str(details.get("message") or ""), counts=counts)
+    print(f"job {status}" + (f": {run.message}" if run.message else ""))
+    if not run.usable:
+        # Failed, Stopped and Expired leave nothing to read, or nothing that
+        # should be read as a result: collecting here is how a failed job turns
+        # into a file of empty predictions
+        return run
+    run.predictions, run.failures = collect(
+        bucket, out_uri, arn, labels, s3, distribution
+    )
+    return run
 
 
 def main() -> None:
@@ -228,6 +419,12 @@ def main() -> None:
         choices=["a", "b", "c"],
         help="prompt variant: a (bare names), b (defined borders), c (borders + few-shot)",
     )
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="where to write the predictions; defaults to <dataset>.predictions.jsonl",
+    )
     a = p.parse_args()
 
     rows = [
@@ -238,17 +435,48 @@ def main() -> None:
         rows = rows[: a.limit]
     labels = json.loads((a.data / f"{a.dataset}.labels.json").read_text())
 
-    preds = classify(rows, labels, a.bucket, a.probs, a.variant)
-    out = a.data / f"{a.dataset}.predictions.jsonl"
+    run_id = new_run_id()
+    run = classify(rows, labels, a.bucket, a.probs, a.variant, run_id)
+    if not run.usable:
+        # the predictions on disk are from a run that finished; a run that did
+        # not finish does not get to replace them
+        raise SystemExit(
+            f"job {run.status}: nothing written. "
+            f"{a.dataset}.predictions.jsonl is untouched."
+        )
+
+    out = a.out or a.data / f"{a.dataset}.predictions.jsonl"
     with out.open("w", encoding="utf-8") as f:
         for r in rows:
-            got = preds.get(r["id"], {"pred": "", "probs": None})
-            record = {"id": r["id"], "label": r["label"], "pred": got["pred"]}
-            if got.get("probs"):
+            got = run.predictions.get(r["id"])
+            record = {
+                "id": r["id"],
+                "label": r["label"],
+                "pred": got["pred"] if got else "",
+                "run_id": run_id,
+            }
+            if got and got.get("probs"):
                 record["probs"] = got["probs"]
+            if not got:
+                # why this row has no prediction, so the scorer can count it as
+                # missing rather than as a confident wrong answer
+                record["failed"] = run.failures.get(
+                    r["id"], "the job returned no record for this conversation"
+                )
             f.write(json.dumps(record) + "\n")
-    hits = sum(preds.get(r["id"], {}).get("pred") == r["label"] for r in rows)
-    print(f"{hits}/{len(rows)} correct -> {out}")
+
+    hits = sum(run.predictions.get(r["id"], {}).get("pred") == r["label"] for r in rows)
+    missing = sum(1 for r in rows if r["id"] not in run.predictions)
+    print(
+        f"{hits}/{len(rows)} correct, {missing} without a prediction "
+        f"({len(run.failures)} records failed or unreadable) -> {out}"
+    )
+    if run.counts:
+        print(
+            "  the job reported " + ", ".join(f"{k}={v}" for k, v in run.counts.items())
+        )
+    if run.status == "PartiallyCompleted":
+        print("  the job partially completed: not every record was processed in time")
 
 
 if __name__ == "__main__":
