@@ -106,4 +106,6 @@ def test_a_misread_amount_breaks_the_running_balance():
     ]
     breaks = reconcile(rows)
     assert len(breaks) == 1
-    assert breaks[0].startswith("2026-03-03 LOAN REPAYMENT")
+    # the row is named by its number and date, so a reader can find it, and the
+    # narrative is masked because the break is stored and read by the model
+    assert breaks[0].startswith("row 2 on 2026-03-03 (LOAN REPAYMENT)")

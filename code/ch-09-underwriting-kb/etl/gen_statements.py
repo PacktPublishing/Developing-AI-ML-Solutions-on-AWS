@@ -5,9 +5,12 @@
 
 Each statement is three months of transactions for one applicant: a recurring
 salary credit, the repayments on any facility they already hold, and everyday
-spending around them. The manifest records the true monthly income and existing
-repayments for each file, so the parser can be checked against them rather than
-against a number somebody eyeballed.
+spending around them. Some also receive credits the credit policy does not count
+as income, a transfer from their own savings, a facility paying out, the proceeds
+of a sale, because a parser that totals every credit alike reads those as
+earnings. The manifest records both figures for each file, the qualifying income
+and the total of the credits, so the parser can be checked against them rather
+than against a number somebody eyeballed.
 
 All names, businesses, amounts, and account numbers are invented, and amounts
 are in USD.
@@ -75,6 +78,15 @@ EVERYDAY = [
 ]
 
 
+# Credits that are not income under POL-DTI: the borrower moving their own
+# money, a facility paying out, a one-off sale. Each is (narrative, low, high).
+NOT_INCOME = [
+    ("TRANSFER FROM  OWN SAVINGS", 5_000, 60_000),
+    ("LOAN DISBURSEMENT  FACILITY 4471", 100_000, 400_000),
+    ("ASSET SALE  DELIVERY VAN", 150_000, 900_000),
+]
+
+
 @dataclass
 class Statement:
     """One applicant's statement and the figures a parser should recover."""
@@ -82,7 +94,10 @@ class Statement:
     case_id: str
     holder: str
     account: str
+    # the qualifying income: the salary, which is what a DTI may be built on
     monthly_income: int
+    # every credit averaged over the months, qualifying or not
+    total_inflows: int
     existing_repayment: int
     rows: list[tuple[str, str, str, str, str]]
 
@@ -96,6 +111,16 @@ def build(rng: random.Random, case_id: str) -> Statement:
     repayment = rng.randrange(4_000, 40_000, 1_000) if rng.random() < 0.55 else 0
     balance = rng.randrange(20_000, 400_000, 1_000)
 
+    # about a third of the applicants also receive money that is not income: a
+    # recurring transfer from their own savings every month, or a single credit
+    # from a facility paying out or something they sold
+    extra, extra_low, extra_high = rng.choice(NOT_INCOME)
+    excluded_amount = (
+        rng.randrange(extra_low, extra_high, 1_000) if rng.random() < 0.35 else 0
+    )
+    recurring = excluded_amount and extra.startswith("TRANSFER")
+    excluded_total = excluded_amount * (3 if recurring else 1)
+
     rows: list[tuple[str, str, str, str, str]] = []
     start = dt.date(2026, 3, 1)
     for month in range(3):
@@ -103,6 +128,8 @@ def build(rng: random.Random, case_id: str) -> Statement:
         entries: list[tuple[int, str, int, int]] = [
             (26, "SALARY  MONTHLY PAYROLL", 0, income)
         ]
+        if excluded_amount and (recurring or month == 0):
+            entries.append((18, extra, 0, excluded_amount))
         if repayment:
             entries.append((3, "LOAN REPAYMENT  FACILITY 4471", repayment, 0))
         for _ in range(rng.randint(5, 9)):
@@ -119,7 +146,15 @@ def build(rng: random.Random, case_id: str) -> Statement:
                     f"{balance:,}",
                 )
             )
-    return Statement(case_id, holder, account, income, repayment, rows)
+    return Statement(
+        case_id,
+        holder,
+        account,
+        income,
+        income + round(excluded_total / 3),
+        repayment,
+        rows,
+    )
 
 
 def write_pdf(st: Statement, path: Path) -> None:
@@ -193,6 +228,7 @@ def main() -> None:
                 "file": name,
                 "holder": st.holder,
                 "monthly_income": st.monthly_income,
+                "total_inflows": st.total_inflows,
                 "existing_repayment": st.existing_repayment,
             }
         )

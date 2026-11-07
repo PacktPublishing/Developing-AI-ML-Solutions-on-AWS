@@ -15,6 +15,11 @@ import boto3
 # -------------------------------------------------------------------------------
 # Qwen3 runs on both Bedrock and Ollama; Titan pairs with 1024-dim mxbai-embed-large so the vector schema matches.
 TEXT_MODEL = os.environ.get("TEXT_MODEL", "qwen.qwen3-next-80b-a3b")
+# The document reader is a different job from the chat model: it is handed a PDF
+# as a Converse document block and asked for the figures in it. Claude Haiku 5.5
+# reads the file itself, so a supporting document needs no parser of its own.
+# Global cross-Region inference, the profile the chapter's stacks allow.
+DOC_MODEL = os.environ.get("DOC_MODEL", "global.anthropic.claude-haiku-5-5")
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "amazon.titan-embed-text-v2:0")
 BEDROCK_REGION = os.environ.get("BEDROCK_REGION", "us-east-1")
 EMBED_DIM = int(os.environ.get("EMBED_DIM", "1024"))
@@ -30,6 +35,42 @@ OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "mxbai-embed-large")
 # -------------------------------------------------------------------------------
 # Local Bedrock shim
 # -------------------------------------------------------------------------------
+def _as_text(blocks: list[dict]) -> str:
+    """Flatten one message's content blocks into the text Ollama accepts.
+
+    Bedrock takes a document block and reads the file itself. A local model
+    behind Ollama is handed text, so this is where the local path differs: the
+    PDF is turned into text here, with the same library the statement parser
+    uses, and the model sees the words rather than the file. A scanned page has
+    no words to find, which is the honest limit of running this on a laptop.
+    """
+    parts = []
+    for block in blocks:
+        if "text" in block:
+            parts.append(block["text"])
+        if "document" in block:
+            doc = block["document"]
+            name = doc.get("name", "document")
+            parts.append(f"--- {name} ---\n{_document_text(doc)}")
+    return "\n\n".join(parts)
+
+
+def _document_text(doc: dict) -> str:
+    """Return the text of a Converse document block, for the local path."""
+    source = doc.get("source", {})
+    if "text" in source:
+        return source["text"]
+    raw = source.get("bytes")
+    if raw is None:
+        return ""
+    if doc.get("format") != "pdf":
+        return raw.decode("utf-8", "replace")
+    import pdfplumber  # lazy import: only the local document path needs it
+
+    with pdfplumber.open(io.BytesIO(raw)) as pdf:
+        return "\n".join((page.extract_text() or "") for page in pdf.pages)
+
+
 class LocalBedrockRuntime:
     """A bedrock-runtime stand-in backed by Ollama."""
 
@@ -51,11 +92,7 @@ class LocalBedrockRuntime:
                 {"role": "system", "content": " ".join(b["text"] for b in system)}
             )
         chat.extend(
-            {
-                "role": m["role"],
-                "content": " ".join(b.get("text", "") for b in m["content"]),
-            }
-            for m in messages
+            {"role": m["role"], "content": _as_text(m["content"])} for m in messages
         )
         cfg = inferenceConfig or {}
         options = {}
