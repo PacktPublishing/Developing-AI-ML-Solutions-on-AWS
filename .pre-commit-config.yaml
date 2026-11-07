@@ -111,7 +111,10 @@ repos:
         # parameter whose default is empty, which several chapters use on purpose.
         # Genuine per-template exceptions go in that template's own
         # Metadata.cfn-lint.config.ignore_checks, not here.
-        entry: uvx cfn-lint --non-zero-exit-code error
+        # pinned: unpinned, uvx serves whatever it cached, which here was a
+        # version that did not know AWS::BedrockAgentCore and reported real
+        # resources as nonexistent.
+        entry: uvx cfn-lint==1.60.0 --non-zero-exit-code error
         language: system
         files: (^|/)(template|build|redshift-serverless)\.yaml$
 

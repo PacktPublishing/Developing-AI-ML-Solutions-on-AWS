@@ -39,8 +39,9 @@ make decide VARIANT=b THRESHOLD=0.6   # hold the close calls back for a person
 ### What the container measured
 
 The agent is the same file locally and deployed, but the packaging is not, and
-the packaging is where AgentCore's limits bite. Building the ARM64 image on a
-laptop answers that before any AWS spend:
+the packaging is where AgentCore's limits bite. Building the image on a laptop
+answers that before any AWS spend (measured on arm64; the deployed image is
+x86_64, because every GPU family AgentCore supports is):
 
 | | result | AgentCore limit |
 | --- | --- | --- |

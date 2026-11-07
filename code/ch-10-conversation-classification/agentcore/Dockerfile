@@ -1,7 +1,9 @@
-# AgentCore Runtime requires an ARM64 image serving port 8080. Building on an
-# Apple silicon laptop is already ARM64, so the image that runs here is the
-# image that runs in the cloud.
-FROM --platform=linux/arm64 ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+# The platform follows the compute type, and they disagree. microVMs take ARM64
+# only, which is what an Apple silicon laptop builds natively. Every GPU family
+# AgentCore supports is x86_64, so the deployed image is linux/amd64 and
+# CodeBuild builds it in the account rather than cross-building on a laptop.
+ARG TARGETPLATFORM=linux/amd64
+FROM --platform=${TARGETPLATFORM} ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 WORKDIR /app
 
