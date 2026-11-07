@@ -1,26 +1,12 @@
-"""Score the classifier: accuracy, macro-F1, the multiclass Brier, and the Brier Index.
+"""Calculate accuracy, macro-F1 and Brier metrics for classification results.
 
-The Brier Index (Forecasting Research Institute, 2026) rescales a binary Brier
-score to 100 * (1 - sqrt(Brier)) so higher is better, with 100 = perfect, 50 =
-always forecasting the base event, 0 = maximally wrong. Its anchors assume a 50%
-base rate, so we apply it one-vs-rest -- one binary problem per class -- and also
-report the **Adjusted Brier Index**, which references each class's own base rate p:
+Accuracy and macro-F1 include all records. Brier metrics include only records
+with a valid forecast; coverage reports the proportion included.
 
-    Adjusted Brier Index = 100 - 50 * sqrt(Brier / (p * (1 - p)))
-
-That is what makes it fair under class imbalance: a rare class with a low raw Brier
-is not automatically "good", it is judged against p * (1 - p). The indices are only
-meaningful with soft probabilities -- add a "probs" field to the predictions (see
-classify.py --probs); with hard labels the Brier is just twice the error rate.
-
-A prediction that is missing is not a prediction of nothing. A record the job
-could not run, or whose answer could not be read, has no distribution at all, and
-scoring it as an all-zero vector flatters it: an all-zero vector is not a
-probability distribution, and it can score better than a wrong answer that was
-at least a forecast. So the probability metrics are computed over the records
-that produced a usable forecast, the report says how many that was, and accuracy
-counts every record, missing ones included, because a router that answers
-nothing routed nothing.
+For each class, the Brier Index is 100 * (1 - sqrt(Brier)). The Adjusted Brier
+Index is 100 - 50 * sqrt(Brier / (p * (1 - p))), where p is the class frequency
+among valid forecasts. The adjusted index is undefined when p is zero or one.
+Multiclass Brier equals twice the error rate for valid one-hot predictions.
 
 Usage:
   uv run src/evaluate.py --dataset conversations
@@ -33,8 +19,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# The per-class table, as (heading, ClassScore field, format). One place to edit,
-# so a heading can never drift away from the column under it.
+# Per-class table columns: (heading, ClassScore field, format).
 CLASS_COLUMNS = (
     ("base", "base", "{:.2f}"),
     ("Brier", "brier", "{:.3f}"),
@@ -56,7 +41,7 @@ class ClassScore:
 
 @dataclass(frozen=True)
 class Report:
-    """Everything evaluate.py knows about one scored dataset."""
+    """Classification metrics, coverage and per-class scores."""
 
     dataset: str
     n: int
@@ -117,11 +102,7 @@ def _cell(value: float, fmt: str) -> str:
 
 
 def has_forecast(r: dict) -> bool:
-    """Report whether this record produced something that can be scored.
-
-    A soft prediction needs a distribution; a hard one needs a label. A record
-    with neither failed, and a failure has no probability attached to it.
-    """
+    """Return whether the record has a valid probability distribution or category."""
     if r.get("probs"):
         return True
     return bool(r.get("pred"))
@@ -152,11 +133,9 @@ def _macro_f1(preds: list[dict], labels: list[str]) -> float:
 
 
 def _class_score(preds: list[dict], label: str) -> ClassScore:
-    """Return the one-vs-rest scores for one class: base rate, Brier, and both indices.
+    """Calculate one-vs-rest Brier metrics for a class.
 
-    `preds` here is the scored subset, the records that produced a forecast. The
-    base rate is that subset's own, so the adjusted index references the problem
-    the numbers actually describe.
+    Calculate the class frequency from the supplied subset of valid forecasts.
     """
     n = len(preds)
     base = sum(r["label"] == label for r in preds) / n
@@ -172,12 +151,9 @@ def _class_score(preds: list[dict], label: str) -> ClassScore:
 
 
 def score(dataset: str, preds: list[dict], labels: list[str]) -> Report:
-    """Score the predictions against the label set.
+    """Calculate accuracy and macro-F1 over all records.
 
-    Accuracy and macro-F1 are over every record, so a record with no prediction
-    counts against the run. The Brier score and both indices are over the
-    records that produced a forecast, because the others have no distribution to
-    score, and the report carries how many of each there were.
+    Calculate Brier metrics over valid forecasts and report their coverage.
     """
     scored = [r for r in preds if has_forecast(r)]
     classes = [_class_score(scored, label) for label in labels] if scored else []

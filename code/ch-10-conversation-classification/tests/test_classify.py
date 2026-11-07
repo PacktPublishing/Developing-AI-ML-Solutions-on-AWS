@@ -22,9 +22,12 @@ LABELS = [
 ]
 
 
-def answer(text: str) -> dict:
+def answer(text: str, stop_reason: str = "end_turn") -> dict:
     """Wrap text as the Converse response a batch record carries."""
-    return {"output": {"message": {"role": "assistant", "content": [{"text": text}]}}}
+    return {
+        "output": {"message": {"role": "assistant", "content": [{"text": text}]}},
+        "stopReason": stop_reason,
+    }
 
 
 class FakeS3:
@@ -255,3 +258,35 @@ def test_every_run_gets_its_own_identifier():
     assert first != second
     # a Bedrock job name takes letters, digits and hyphens
     assert all(part.isalnum() for part in f"classify-{first}".split("-"))
+
+
+def test_an_answer_cut_off_at_the_token_limit_says_so():
+    """A truncated answer and a malformed one need different fixes, so they read differently.
+
+    A model that spends its whole output budget reasoning never reaches the JSON.
+    Reporting that as "no JSON object in the answer" sends the reader to the prompt
+    when the fix is in maxTokens.
+    """
+    preds, failures = gather(
+        [
+            json.dumps(
+                {
+                    "recordId": "1",
+                    "modelOutput": answer("Let us think about this", "max_tokens"),
+                }
+            )
+        ],
+        distribution=True,
+    )
+    assert preds == {}
+    assert "token limit" in failures["1"]
+
+
+def test_a_malformed_answer_that_finished_is_not_blamed_on_the_limit():
+    """The limit is only named when the service says that is what stopped the answer."""
+    preds, failures = gather(
+        [json.dumps({"recordId": "1", "modelOutput": answer("no idea sorry")})],
+        distribution=True,
+    )
+    assert preds == {}
+    assert "token limit" not in failures["1"]
