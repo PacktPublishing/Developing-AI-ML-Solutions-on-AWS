@@ -1,19 +1,14 @@
 # /// script
 # dependencies = ["reportlab"]
 # ///
-"""Generate synthetic bank statement PDFs for applicants awaiting a decision.
+"""Generate synthetic bank statement PDFs and a CSV manifest.
 
-Each statement is three months of transactions for one applicant: a recurring
-salary credit, the repayments on any facility they already hold, and everyday
-spending around them. Some also receive credits the credit policy does not count
-as income, a transfer from their own savings, a facility paying out, the proceeds
-of a sale, because a parser that totals every credit alike reads those as
-earnings. The manifest records both figures for each file, the qualifying income
-and the total of the credits, so the parser can be checked against them rather
-than against a number somebody eyeballed.
+Each statement contains three months of salary credits, loan repayments and
+spending. Some include own-account transfers, loan disbursements or asset sales.
+The manifest records monthly salary income, total inflows and loan repayments
+for comparison with the parser output.
 
-All names, businesses, amounts, and account numbers are invented, and amounts
-are in USD.
+All personal details and transactions are invented. Amounts are in USD.
 
 Usage:
   python gen_statements.py --out data/generated/statements --count 12 --seed 11
@@ -78,8 +73,7 @@ EVERYDAY = [
 ]
 
 
-# Credits that are not income under POL-DTI: the borrower moving their own
-# money, a facility paying out, a one-off sale. Each is (narrative, low, high).
+# Credits excluded by POL-DTI, as (description, minimum amount, maximum amount).
 NOT_INCOME = [
     ("TRANSFER FROM  OWN SAVINGS", 5_000, 60_000),
     ("LOAN DISBURSEMENT  FACILITY 4471", 100_000, 400_000),
@@ -89,31 +83,30 @@ NOT_INCOME = [
 
 @dataclass
 class Statement:
-    """One applicant's statement and the figures a parser should recover."""
+    """Generated statement transactions and expected monthly totals."""
 
     case_id: str
     holder: str
     account: str
-    # the qualifying income: the salary, which is what a DTI may be built on
+    # Monthly salary income used for DTI.
     monthly_income: int
-    # every credit averaged over the months, qualifying or not
+    # Average monthly credits before income exclusions.
     total_inflows: int
     existing_repayment: int
     rows: list[tuple[str, str, str, str, str]]
 
 
 def build(rng: random.Random, case_id: str) -> Statement:
-    """Compose three months of transactions around a salary and any repayment."""
+    """Generate three months of transactions for an applicant."""
     holder = f"{rng.choice(FIRST)} {rng.choice(LAST)}"
     account = f"****{rng.randint(1000, 9999)}"
     income = rng.randrange(45_000, 260_000, 5_000)
-    # about half the applicants already carry a facility somewhere
+    # Generate an existing loan repayment for 55% of applicants.
     repayment = rng.randrange(4_000, 40_000, 1_000) if rng.random() < 0.55 else 0
     balance = rng.randrange(20_000, 400_000, 1_000)
 
-    # about a third of the applicants also receive money that is not income: a
-    # recurring transfer from their own savings every month, or a single credit
-    # from a facility paying out or something they sold
+    # Add excluded credits to 35% of statements. Own-account transfers recur
+    # monthly; loan disbursements and asset sales occur once.
     extra, extra_low, extra_high = rng.choice(NOT_INCOME)
     excluded_amount = (
         rng.randrange(extra_low, extra_high, 1_000) if rng.random() < 0.35 else 0
@@ -204,7 +197,7 @@ def write_pdf(st: Statement, path: Path) -> None:
 
 
 def main() -> None:
-    """Write the statement PDFs and a manifest of their true figures."""
+    """Write statement PDFs and their expected monthly totals to a CSV manifest."""
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--out", default="data/generated/statements")
     p.add_argument("--count", type=int, default=12)
