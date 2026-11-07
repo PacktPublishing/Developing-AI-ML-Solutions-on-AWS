@@ -87,7 +87,10 @@ SM_LOCAL_IMAGE ?= ch10-decider:cpu
 SM_LOCAL_BASE ?= public.ecr.aws/sagemaker/sagemaker-distribution:4.7.0-cpu
 SAGEMAKER_ROLE_ARN ?= arn:aws:iam::000000000000:role/local-mode-placeholder
 sm-local-image:
-	docker build --build-arg BASE_IMAGE=$(SM_LOCAL_BASE) \
+	@# --platform: the distribution images are amd64, so on Apple silicon this
+	@# runs emulated. Slow, and fine: this checks how the container starts, not
+	@# how fast the model answers.
+	docker build --platform linux/amd64 --build-arg BASE_IMAGE=$(SM_LOCAL_BASE) \
 		-t $(SM_LOCAL_IMAGE) model/
 
 sm-local: sm-local-image

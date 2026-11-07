@@ -80,8 +80,16 @@ decider-round:
 	$(MAKE) agent
 	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=$$(cat /tmp/ch10-agent.key)
 	$(MAKE) image
-	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=$$(cat /tmp/ch10-agent.key) DECIDER_IMAGE=$(DECIDER_REPO):$$(cat /tmp/ch10-image.tag)
+	@# The repository URI is read here by the shell, not by make. Make expands
+	@# a whole recipe before running its first line, so DECIDER_REPO would be
+	@# looked up before the deploy above had created the stack to look it up
+	@# in, and the image would deploy as ":<tag>" with no registry in front.
+	$(MAKE) deploy WITH_DECIDER=true AGENT_KEY=$$(cat /tmp/ch10-agent.key) \
+		DECIDER_IMAGE=$$(aws cloudformation describe-stacks --region $(REGION) \
+		--stack-name $(STACK) --output text \
+		--query "Stacks[0].Outputs[?OutputKey=='DeciderRepoUri'].OutputValue"):$$(cat /tmp/ch10-image.tag)
 	$(MAKE) decide
+	$(MAKE) route
 	$(MAKE) eval
 
 # image: the model's inference container, built in the account by CodeBuild.
