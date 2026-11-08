@@ -58,6 +58,28 @@ for fname in os.listdir(MODEL_PATH):
     if os.path.isfile(src):
         shutil.copy(src, code)
 
+
+def stop_local_containers(image: str) -> None:
+    """Stop whatever is still serving this image.
+
+    endpoint.delete() takes the endpoint out of the SDK's local registry and
+    leaves the container compose started behind, holding the port and the
+    model. Nothing in the SDK brings that down, so this does.
+    """
+    import subprocess
+
+    found = subprocess.run(
+        ["docker", "ps", "-q", "--filter", f"ancestor={image}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.split()
+    for container in found:
+        subprocess.run(["docker", "stop", container], capture_output=True, check=False)
+    if found:
+        print(f"stopped {len(found)} local container(s)")
+
+
 builder = ModelBuilder(
     image_uri=IMAGE,
     model_server=ModelServer.MMS,  # the generic serve/ping/invocations runner
@@ -75,3 +97,4 @@ finally:
     # The container outlives this process otherwise, holding the port and the
     # model, and a question that failed is exactly when it is left behind.
     endpoint.delete()
+    stop_local_containers(IMAGE)

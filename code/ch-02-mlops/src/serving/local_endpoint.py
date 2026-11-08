@@ -56,6 +56,28 @@ sample = {
 }
 schema = SchemaBuilder(sample_input=sample, sample_output={"pd": [0.5]})
 
+
+def stop_local_containers(image: str) -> None:
+    """Stop whatever is still serving this image.
+
+    endpoint.delete() takes the endpoint out of the SDK's local registry and
+    leaves the container compose started behind, holding the port and the
+    model. Nothing in the SDK brings that down, so this does.
+    """
+    import subprocess
+
+    found = subprocess.run(
+        ["docker", "ps", "-q", "--filter", f"ancestor={image}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.split()
+    for container in found:
+        subprocess.run(["docker", "stop", container], capture_output=True, check=False)
+    if found:
+        print(f"stopped {len(found)} local container(s)")
+
+
 builder = ModelBuilder(
     image_uri=IMAGE,
     model_server=ModelServer.MMS,  # the generic serve/ping/invocations runner
@@ -66,6 +88,9 @@ builder = ModelBuilder(
 )
 builder.build()
 endpoint = builder.deploy_local(wait=True, container_timeout_in_seconds=1200)
-resp = endpoint.invoke(body=json.dumps(sample), content_type="application/json")
-print("prediction:", resp.body.read().decode() if hasattr(resp, "body") else resp)
-endpoint.delete()
+try:
+    resp = endpoint.invoke(body=json.dumps(sample), content_type="application/json")
+    print("prediction:", resp.body.read().decode() if hasattr(resp, "body") else resp)
+finally:
+    endpoint.delete()
+    stop_local_containers(IMAGE)
