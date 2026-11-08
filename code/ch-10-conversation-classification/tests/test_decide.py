@@ -131,6 +131,7 @@ def test_the_record_says_which_model_answered():
 def test_http_endpoint_path(monkeypatch, path):
     """Use the System One path unless an explicit endpoint path is supplied."""
     import importlib
+
     import decider
 
     with monkeypatch.context() as env:
@@ -151,12 +152,13 @@ def test_http_endpoint_path(monkeypatch, path):
 def test_make_credentials_are_scoped_to_s3proxy(target, local_credentials):
     """Cloud callers must not inherit the S3Proxy placeholder credentials."""
     import os
-    from pathlib import Path
     import subprocess
+    from pathlib import Path
 
     chapter = Path(__file__).resolve().parents[1]
     result = subprocess.run(
-        ["make", "-s", "--eval", f"{target}: ; @env", target],
+        ["make", "-s", "-f", "Makefile", "-f", "-", target],
+        input=f"{target}: ; @env\n",
         cwd=chapter,
         env={"PATH": os.environ["PATH"]},
         capture_output=True,
