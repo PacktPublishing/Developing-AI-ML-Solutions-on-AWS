@@ -145,22 +145,33 @@ artifacts:
 # between the endpoint reading it and the package recording it. This compares
 # both URIs and the ETag of the object each one names.
 verify-artifacts:
-	@MODEL=$$(aws sagemaker describe-model --model-name ch12-champion \
-			--query 'PrimaryContainer.ModelDataUrl' --output text 2>/dev/null); \
-			GROUP=$$(aws sagemaker list-model-packages \
-			--model-package-group-name credit-scorecard \
-			--query 'ModelPackageSummaryList[0].ModelPackageArn' --output text); \
-			PKG=$$(aws sagemaker describe-model-package --model-package-name "$$GROUP" \
-			--query 'InferenceSpecification.Containers[0].ModelDataUrl' --output text); \
-			echo "endpoint model: $$MODEL"; \
-			echo "registry  model: $$PKG"; \
-			[ "$$MODEL" = "$$PKG" ] || { \
-			echo "the endpoint and the registry name different artifacts"; exit 1; }; \
-			BUCKET=$$(echo "$$MODEL" | sed -E 's|s3://([^/]+)/.*|\1|'); \
-			KEY=$$(echo "$$MODEL" | sed -E 's|s3://[^/]+/||'); \
-			ETAG=$$(aws s3api head-object --bucket "$$BUCKET" --key "$$KEY" \
+	@# The model names are CloudFormation's, not ours: the template does not set
+	@# ModelName, so they come out as ChampionModel-<suffix>. The logical id is
+	@# the stable handle, so ask the stack what the physical name is.
+	@for pair in "ChampionModel credit-scorecard" "ChallengerModel credit-challenger"; do \
+		set -- $$pair; \
+		NAME=$$(aws cloudformation describe-stack-resource --stack-name $(STACK) \
+		--logical-resource-id "$$1" \
+		--query 'StackResourceDetail.PhysicalResourceId' --output text); \
+		NAME=$${NAME##*/}; \
+		MODEL=$$(aws sagemaker describe-model --model-name "$$NAME" \
+		--query 'PrimaryContainer.ModelDataUrl' --output text); \
+		ARN=$$(aws sagemaker list-model-packages --model-package-group-name "$$2" \
+		--query 'ModelPackageSummaryList[0].ModelPackageArn' --output text); \
+		PKG=$$(aws sagemaker describe-model-package --model-package-name "$$ARN" \
+		--query 'InferenceSpecification.Containers[0].ModelDataUrl' --output text); \
+		if [ "$$MODEL" != "$$PKG" ]; then \
+			echo "$$1: the endpoint and the registry name different artifacts"; \
+			echo "  endpoint: $$MODEL"; \
+			echo "  registry: $$PKG"; \
+			exit 1; \
+		fi; \
+		BUCKET=$$(echo "$$MODEL" | sed -E 's|s3://([^/]+)/.*|\1|'); \
+		KEY=$$(echo "$$MODEL" | sed -E 's|s3://[^/]+/||'); \
+		ETAG=$$(aws s3api head-object --bucket "$$BUCKET" --key "$$KEY" \
 			--query ETag --output text); \
-			echo "both name s3://$$BUCKET/$$KEY with ETag $$ETAG"
+		echo "$$NAME and $$2 both name s3://$$BUCKET/$$KEY, ETag $$ETAG"; \
+	done
 
 govern:
 	@BUCKET=$$(aws cloudformation describe-stacks --stack-name $(STACK) \

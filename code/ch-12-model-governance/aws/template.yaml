@@ -271,7 +271,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: s3:GetObject
-                Resource: !Sub arn:aws:s3:::sagemaker-${AWS::Region}-${AWS::AccountId}/ch12/*
+                Resource: !Sub arn:aws:s3:::${SourceBucket}/ch12/*
               - Effect: Allow
                 Action:
                   - ecr:GetDownloadUrlForLayer
