@@ -47,6 +47,12 @@ if arn := os.environ.get("S3TABLES_ARN"):
             "rest.sigv4-enabled": "true",
             "rest.signing-name": "s3tables",
             "rest.signing-region": region,
+            # The catalog calls are signed by the settings above; the data
+            # files go straight to the table's own bucket, and pyiceberg's
+            # default pyarrow FileIO signs those in a way S3 Tables rejects.
+            # The fsspec one signs through botocore, which gets SigV4 right.
+            "py-io-impl": "pyiceberg.io.fsspec.FsspecFileIO",
+            "s3.region": region,
         },
     )
 else:

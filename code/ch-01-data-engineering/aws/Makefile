@@ -1,4 +1,4 @@
-.PHONY: iam airflow-deploy airflow-password airflow-delete empty-buckets lake-objects lake-parquet lake-table glue-run feature-group clean-feature-group check-account clean-lake
+.PHONY: iam airflow-deploy airflow-password airflow-delete empty-buckets lake-objects lake-parquet lake-table lake-table-bucket glue-run feature-group clean-feature-group check-account clean-lake
 
 S3TABLES_ARN ?= arn:aws:s3tables:us-east-1:$(ACCOUNT):bucket/ch01-lake
 
@@ -46,6 +46,11 @@ airflow-password:
 # S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
 # backup bucket (read from the stack outputs) before sam delete tears it down.
 airflow-delete:
+	@# The DAG creates the feature group, so no stack owns it and sam delete
+	@# leaves it behind pointing at a FeatureStoreRole this delete is about to
+	@# remove. The next deploy then fails in PutRecord with "the execution role
+	@# ARN is invalid", because the role the group was created with is gone.
+	-@$(MAKE) --no-print-directory clean-feature-group
 	@# The feature store's offline half flushes on its own schedule, so a bucket
 	@# emptied a moment ago can hold fresh Parquet by the time CloudFormation
 	@# reaches it, and the stack delete fails on the non-empty bucket. No fixed
@@ -86,7 +91,15 @@ lake-parquet:
 		LAKE_BUCKET=$(LAKE_BUCKET) uv run src/lake-basics/parquet_lake.py \
 		| tee /tmp/ch01-lake-parquet-$(RUN_STAMP).txt
 
-lake-table:
+# S3 Tables keeps its own kind of bucket, which no stack here creates and which
+# the Iceberg REST endpoint will not create for you: without this the target
+# fails on a bucket that does not exist.
+lake-table-bucket:
+	@aws s3tables get-table-bucket --table-bucket-arn $(S3TABLES_ARN) >/dev/null 2>&1 \
+		|| aws s3tables create-table-bucket --name $(notdir $(S3TABLES_ARN))
+	@echo "table bucket ready: $(S3TABLES_ARN)"
+
+lake-table: lake-table-bucket
 	cd .. && env -u AWS_ENDPOINT_URL -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
 		S3TABLES_ARN=$(S3TABLES_ARN) uv run src/lake-basics/iceberg_applications.py \
 		| tee /tmp/ch01-lake-table-$(RUN_STAMP).txt

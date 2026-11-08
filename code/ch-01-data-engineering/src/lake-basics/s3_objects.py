@@ -39,13 +39,16 @@ page = s3.list_objects_v2(Bucket=BUCKET, Prefix="decisions/2026/01/")
 print("keys under prefix:", [o["Key"] for o in page.get("Contents", [])])
 
 # stamp provenance on a curated object: metadata travels with the object,
-# tags can be filtered on by lifecycle, replication, and batch operations
+# tags can be filtered on by lifecycle, replication, and batch operations.
+# This sits under its own prefix because curated/applications/ is where
+# parquet_lake.py writes a partitioned dataset, and a plain key among the
+# vintage= directories leaves awswrangler unable to read the partitions.
 s3.put_object(
     Bucket=BUCKET,
-    Key="curated/applications/2026/01/app-1042.json",
+    Key="curated/provenance/2026/01/app-1042.json",
     Body=json.dumps({"id": 1042, "vintage": "2026-01"}),
     Metadata={"source-job": "backfill-2026-01"},
     Tagging="job=backfill-2026-01&source=bureau",
 )
-meta = s3.head_object(Bucket=BUCKET, Key="curated/applications/2026/01/app-1042.json")
+meta = s3.head_object(Bucket=BUCKET, Key="curated/provenance/2026/01/app-1042.json")
 print("provenance:", meta["Metadata"]["source-job"])
