@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "psycopg2-binary", "pyarrow", "pyiceberg[s3fs]"]
+# dependencies = ["boto3", "botocore[crt]", "psycopg2-binary", "pyarrow", "pyiceberg[s3fs]"]
 # ///
 """Load the gold mart into the offline and online feature stores.
 

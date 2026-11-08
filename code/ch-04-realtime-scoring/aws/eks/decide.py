@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12,<3.13"
-# dependencies = ["boto3", "requests"]
+# dependencies = ["boto3", "botocore[crt]", "requests"]
 # ///
 """Get loan decisions from the gateway running on the EKS cluster.
 

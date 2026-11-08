@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["requests", "requests-aws4auth", "boto3"]
+# dependencies = ["requests", "requests-aws4auth", "boto3", "botocore[crt]"]
 # ///
 """Provision OpenSearch conversational-search RAG over Bedrock for Dashboards.
 

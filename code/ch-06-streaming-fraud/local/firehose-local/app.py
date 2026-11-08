@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["starlette", "uvicorn", "boto3", "psycopg2-binary"]
+# dependencies = ["starlette", "uvicorn", "boto3", "botocore[crt]", "psycopg2-binary"]
 # ///
 """A local Amazon Data Firehose: delivery streams as a generic service.
 

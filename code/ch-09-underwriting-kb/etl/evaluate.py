@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "ollama", "opensearch-py"]
+# dependencies = ["boto3", "botocore[crt]", "ollama", "opensearch-py"]
 # ///
 """Evaluate retrieval using borrower, loan-ID and policy queries.
 

@@ -15,9 +15,9 @@ Local mode starts the container the way the service does, against the same
 /invocations and /ping contract, so the startup contract is checked here for the
 price of a container start.
 
-The weights are baked into the image the endpoint runs and not into this one,
-which is what `make sm-local` builds: the first request pays for the download.
-What is being checked is which server answers, not how fast.
+`make sm-local` builds a CPU image from the deployment Dockerfile with a
+different base image and PyTorch build. Both images include the weights. This
+checks the serving entrypoint and API, but does not test the deployed CUDA stack.
 
 Usage:
   MODEL_IMAGE=ch10-decider:cpu uv run src/serve_local.py
@@ -53,12 +53,10 @@ NAME = "ch10-decider-local"
 CONVERSATION = os.environ.get(
     "CONVERSATION", "My debit card was declined at the till this morning."
 )
-# The model is in the image for the endpoint and downloaded on first use here,
-# so give the container longer than a warm one would need.
+# Allow time to load and warm the model before the server reports readiness.
 TRIES = int(os.environ.get("PING_TRIES", "300"))
 
-# The model is baked into the BYOC image on AWS and fetched at run time here, so
-# either way there is no artifact to ship: the model data is an empty tar.
+# Both images include the weights, so local mode receives an empty model artifact.
 _EMPTY_TAR = os.path.join(tempfile.mkdtemp(), "model.tar.gz")
 tarfile.open(_EMPTY_TAR, "w:gz").close()
 

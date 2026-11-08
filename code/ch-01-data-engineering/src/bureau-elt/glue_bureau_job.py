@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "dlt[postgres,redshift]"]
+# dependencies = ["boto3", "botocore[crt]", "dlt[postgres,redshift]"]
 # ///
 """Load one day of bureau files from the raw zone into the warehouse.
 

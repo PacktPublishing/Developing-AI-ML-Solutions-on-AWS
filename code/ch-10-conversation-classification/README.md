@@ -129,7 +129,7 @@ One honest caveat about the chapter's own round. `src/decide.py` builds the
 typed question itself and sends it, which the agent passes straight through to
 the model, so the threshold on a `make decide` run is applied by the client and
 the agent's policy branch is not what decided anything. That is deliberate: the
-same question goes to all four backends, so the local, HTTP and AgentCore
+same question goes to all three backends, so the local, HTTP and AgentCore
 numbers compare. A caller that wants the policy sends `{"text": ...}` and gets
 `routed` back, which is what the curl above does. That division is the point of the split, and it is why the
 agent's IAM policy allows exactly one action, `sagemaker:InvokeEndpoint` on one
@@ -198,8 +198,7 @@ Two things worth knowing before building on it:
 
 - The checkpoint is Apache-2.0 and is two downloads, not one: the adapter and head
   are about 0.235 GB, and the Qwen3.5-2B-Base torso underneath is another 4.571 GB,
-  fetched on first load. That split is why the AWS side keeps weights on a volume
-  rather than in a container image.
+  fetched on first load. Both downloads are baked into the serving image during the build.
 - `strands-decider` is version 0.3.0 and its own description calls it an
   experimental typed classifier. Pin it, and expect the API to move.
 
@@ -329,8 +328,8 @@ labels the Brier is just twice the error rate.
   from-source SNS shim (file inboxes), S3Proxy (S3). The decision model has no
   stand-in at all: `agent/main.py` serves the AgentCore Runtime contract itself,
   so the local round runs the file that deploys, and `make sm-local` runs the
-  endpoint's own image through SageMaker local mode, started the way the service
-  starts it. `make decide` needs no container at all, where the batch path needs
+  CPU image built from the deployment Dockerfile through SageMaker local mode.
+  It checks the entrypoint and API using a different base image and PyTorch build. `make decide` needs no container at all, where the batch path needs
   S3Proxy for its manifests.
 
 ## Run it on AWS

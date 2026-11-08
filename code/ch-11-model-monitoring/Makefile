@@ -16,7 +16,9 @@ export AWS_DEFAULT_REGION ?= us-east-1
 # The local S3 (S3Proxy) that stands in for the artifact bucket; make run and make
 # pipeline both stage to it, so the local pipeline needs no real AWS at all.
 COMPOSE := docker compose -f local/monitoring-stack.yml
-S3_ENDPOINT := http://localhost:9000
+# Override when 9000 is taken: make up S3_PORT=9010
+S3_PORT ?= 9000
+S3_ENDPOINT := http://localhost:$(S3_PORT)
 S3_LOCAL := aws --endpoint-url $(S3_ENDPOINT)
 
 IMAGE := ch11-scorecard:latest
@@ -43,8 +45,8 @@ monitor:
 # up/down: the local artifact store (S3Proxy). Bring it up before make run to land the
 # monitoring artifacts in a real S3 bucket locally, as the Processing step does on AWS.
 up:
-	$(COMPOSE) up -d
-	@echo "local S3 (S3Proxy) on :9000, bucket s3://ch11-monitoring"
+	S3_PORT=$(S3_PORT) $(COMPOSE) up -d
+	@echo "local S3 (S3Proxy) on :$(S3_PORT), bucket s3://ch11-monitoring"
 down:
 	$(COMPOSE) down -v
 
@@ -77,7 +79,10 @@ lint:
 
 # the PSIDetector unit tests: quantile vs model-border bins, and JSON round-trip
 test:
-	uv run --with pytest --with catboost --with pandas --with numpy pytest tests/ -q
+	@# smclarify is AWS's implementation of the bias metrics and the reference
+	@# tests/test_bias.py holds src/bias.py to. It is a test dependency only.
+	uv run --with pytest --with catboost --with pandas --with numpy --with smclarify \
+		pytest tests/ -q
 
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS icons fetched at render time, custom icons from shared assets/diagrams/).
 # The shared icons come from `make icons` at the repository root; WIDTH sets

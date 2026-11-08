@@ -133,14 +133,101 @@ Resources:
       ComparisonOperator: LessThanThreshold
       TreatMissingData: notBreaching
 
+  # The jobs and the endpoint run as this role. The chapter owns it, rather than
+  # looking for an AmazonSageMaker-ExecutionRole that only exists in an account
+  # where someone has opened Studio, which a reader's account may not be.
+  SageMakerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ch11-sagemaker-exec
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: run
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub arn:aws:s3:::${SourceBucket}/*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource: !GetAtt SourceBucket.Arn
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                Resource: !GetAtt ScorecardRepo.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
+
+              # The monitoring job publishes the drift metrics the alarms read.
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+
+              # Pipelines runs each step as this role, so the role is what
+              # creates the step's job and tags it. The names are generated as
+              # pipelines-<execution>-<step>-<hash>, which is as tight as these
+              # can be scoped.
+              - Effect: Allow
+                Action:
+                  - sagemaker:CreateTransformJob
+                  - sagemaker:DescribeTransformJob
+                  - sagemaker:StopTransformJob
+                  - sagemaker:CreateProcessingJob
+                  - sagemaker:DescribeProcessingJob
+                  - sagemaker:StopProcessingJob
+                  - sagemaker:AddTags
+                  - sagemaker:ListTags
+                Resource:
+                  - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:transform-job/pipelines-*
+                  - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:processing-job/pipelines-*
+
+              # A job runs as this role, so this role has to be able to pass it.
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/ch11-sagemaker-exec
+
+              # The transform step reads the model the pipeline scores with.
+              - Effect: Allow
+                Action:
+                  - sagemaker:CreateModel
+                  - sagemaker:DescribeModel
+                  - sagemaker:DeleteModel
+                Resource: !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:model/*
+
 Outputs:
   RepositoryUri:
     Description: the ECR repository for the scorecard image
     Value: !GetAtt ScorecardRepo.RepositoryUri
 
   SourceBucket:
-    Description: the bucket make image uploads the build context to for CodeBuild
+    Description: the bucket the build context and the job artifacts both live in
     Value: !Ref SourceBucket
+
+  SageMakerRoleArn:
+    Description: the role the pipeline, the monitors and the endpoint run as
+    Value: !GetAtt SageMakerRole.Arn
 
   Alarms:
     Description: the drift alarms the monitoring job feeds

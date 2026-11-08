@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12,<3.13"
-# dependencies = ["mlflow>=3.10,<4", "sagemaker-mlflow", "boto3"]
+# dependencies = ["mlflow>=3.10,<4", "sagemaker-mlflow", "boto3", "botocore[crt]"]
 # ///
 """Package a registered challenger model into model.tar.gz on S3 for the serving stack.
 

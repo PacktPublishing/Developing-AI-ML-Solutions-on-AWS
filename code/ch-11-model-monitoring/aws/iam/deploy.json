@@ -2,84 +2,128 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "PassSageMakerExecutionRole",
+      "Sid": "CloudFormation",
       "Effect": "Allow",
-      "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::*:role/*AmazonSageMaker*"
-    },
-    {
-      "Sid": "DiscoverRoleAndBucket",
-      "Effect": "Allow",
-      "Action": ["iam:ListRoles", "s3:ListAllMyBuckets"],
-      "Resource": "*"
-    },
-    {
-      "Sid": "SageMaker",
-      "Effect": "Allow",
-      "Action": "sagemaker:*",
-      "Resource": "*"
-    },
-    {
-      "Sid": "MonitoringStack",
-      "Effect": "Allow",
-      "Action": "cloudformation:*",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplate",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:GetStackPolicy"
+      ],
       "Resource": "arn:aws:cloudformation:us-east-1:*:stack/ch11-*/*"
     },
     {
       "Sid": "CloudFormationRead",
       "Effect": "Allow",
-      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:ListStacks",
+        "cloudformation:ValidateTemplate",
+        "cloudformation:GetTemplateSummary"
+      ],
       "Resource": "*"
     },
     {
-      "Sid": "EcrRepository",
+      "Sid": "ManageChapterRoles",
       "Effect": "Allow",
-      "Action": "ecr:*",
-      "Resource": ["arn:aws:ecr:us-east-1:*:repository/ch11-*"]
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:UpdateAssumeRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::*:role/ch11-*"
     },
     {
-      "Sid": "EcrLogin",
+      "Sid": "PassChapterRoles",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::*:role/ch11-*",
+        "arn:aws:iam::*:role/*AmazonSageMaker-ExecutionRole*"
+      ]
+    },
+    {
+      "Sid": "ChapterRepository",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DeleteRepository",
+        "ecr:DescribeRepositories",
+        "ecr:DescribeImages",
+        "ecr:ListImages",
+        "ecr:BatchDeleteImage",
+        "ecr:PutLifecyclePolicy",
+        "ecr:SetRepositoryPolicy",
+        "ecr:TagResource",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:*:repository/ch11-*"
+    },
+    {
+      "Sid": "RegistryAuth",
       "Effect": "Allow",
       "Action": "ecr:GetAuthorizationToken",
       "Resource": "*"
     },
     {
-      "Sid": "ArtifactBuckets",
-      "Effect": "Allow",
-      "Action": "s3:*",
-      "Resource": [
-        "arn:aws:s3:::ch11-*",
-        "arn:aws:s3:::ch11-*/*",
-        "arn:aws:s3:::sagemaker-us-east-1-*",
-        "arn:aws:s3:::sagemaker-us-east-1-*/*",
-        "arn:aws:s3:::amazon-sagemaker-*",
-        "arn:aws:s3:::amazon-sagemaker-*/*"
-      ]
-    },
-    {
-      "Sid": "CloudWatchAlerting",
+      "Sid": "ChapterBuckets",
       "Effect": "Allow",
       "Action": [
-        "cloudwatch:PutMetricData",
-        "cloudwatch:PutMetricAlarm",
-        "cloudwatch:DescribeAlarms",
-        "cloudwatch:DeleteAlarms",
-        "cloudwatch:GetMetricData",
-        "cloudwatch:GetMetricStatistics"
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketPolicy",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutBucketTagging",
+        "s3:GetBucketTagging",
+        "s3:PutBucketVersioning",
+        "s3:GetBucketVersioning",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetEncryptionConfiguration",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketPublicAccessBlock"
       ],
-      "Resource": "*"
+      "Resource": "arn:aws:s3:::ch11-*"
     },
     {
-      "Sid": "Logs",
+      "Sid": "ChapterObjects",
       "Effect": "Allow",
-      "Action": "logs:*",
-      "Resource": [
-        "arn:aws:logs:us-east-1:*:log-group:*ch11*",
-        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*"
-      ]
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:GetObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::ch11-*/*"
     },
     {
-      "Sid": "CodeBuildProject",
+      "Sid": "ChapterBuilds",
       "Effect": "Allow",
       "Action": [
         "codebuild:CreateProject",
@@ -92,21 +136,124 @@
       "Resource": "arn:aws:codebuild:us-east-1:*:project/ch11-*"
     },
     {
-      "Sid": "ImageBuildRole",
+      "Sid": "ChapterModels",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole",
-        "iam:DeleteRole",
-        "iam:GetRole",
-        "iam:PutRolePolicy",
-        "iam:DeleteRolePolicy",
-        "iam:GetRolePolicy",
-        "iam:PassRole",
-        "iam:TagRole",
-        "iam:ListRolePolicies",
-        "iam:ListAttachedRolePolicies"
+        "sagemaker:CreateModel",
+        "sagemaker:DeleteModel",
+        "sagemaker:DescribeModel",
+        "sagemaker:CreateEndpointConfig",
+        "sagemaker:DeleteEndpointConfig",
+        "sagemaker:DescribeEndpointConfig",
+        "sagemaker:CreateEndpoint",
+        "sagemaker:UpdateEndpoint",
+        "sagemaker:DeleteEndpoint",
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:AddTags",
+        "sagemaker:ListTags"
       ],
-      "Resource": "arn:aws:iam::*:role/ch11-image-build"
+      "Resource": [
+        "arn:aws:sagemaker:us-east-1:*:model/ch11-*",
+        "arn:aws:sagemaker:us-east-1:*:endpoint-config/ch11-*",
+        "arn:aws:sagemaker:us-east-1:*:endpoint/ch11-*"
+      ]
+    },
+    {
+      "Sid": "ChapterJobs",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CreateProcessingJob",
+        "sagemaker:DescribeProcessingJob",
+        "sagemaker:StopProcessingJob",
+        "sagemaker:CreateTransformJob",
+        "sagemaker:DescribeTransformJob",
+        "sagemaker:StopTransformJob",
+        "sagemaker:CreateTrainingJob",
+        "sagemaker:DescribeTrainingJob"
+      ],
+      "Resource": [
+        "arn:aws:sagemaker:us-east-1:*:processing-job/*",
+        "arn:aws:sagemaker:us-east-1:*:transform-job/*",
+        "arn:aws:sagemaker:us-east-1:*:training-job/*"
+      ]
+    },
+    {
+      "Sid": "ChapterPipelines",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CreatePipeline",
+        "sagemaker:UpdatePipeline",
+        "sagemaker:DeletePipeline",
+        "sagemaker:DescribePipeline",
+        "sagemaker:StartPipelineExecution",
+        "sagemaker:DescribePipelineExecution",
+        "sagemaker:ListPipelineExecutionSteps",
+        "sagemaker:ListPipelineExecutions"
+      ],
+      "Resource": [
+        "arn:aws:sagemaker:us-east-1:*:pipeline/ch11-*",
+        "arn:aws:sagemaker:us-east-1:*:pipeline/ch11-*/execution/*"
+      ]
+    },
+    {
+      "Sid": "SageMakerRead",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:ListEndpoints",
+        "sagemaker:ListModels",
+        "sagemaker:ListEndpointConfigs",
+        "sagemaker:ListPipelines"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ChapterInvoke",
+      "Effect": "Allow",
+      "Action": "sagemaker:InvokeEndpoint",
+      "Resource": "arn:aws:sagemaker:us-east-1:*:endpoint/ch11-*"
+    },
+    {
+      "Sid": "ChapterAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:TagResource"
+      ],
+      "Resource": "arn:aws:cloudwatch:us-east-1:*:alarm:ch11-*"
+    },
+    {
+      "Sid": "PublishMetrics",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricData",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ChapterLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:DeleteLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:FilterLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/ch11-*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*:log-stream:*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/ch11-*:log-stream:*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/ProcessingJobs:*"
+      ]
     }
   ]
 }

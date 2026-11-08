@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "ollama", "opensearch-py"]
+# dependencies = ["boto3", "botocore[crt]", "ollama", "opensearch-py"]
 # ///
 """Answer questions over the memo knowledge base, grounded with citations.
 

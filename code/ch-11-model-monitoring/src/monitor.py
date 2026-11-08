@@ -73,7 +73,7 @@ def run(
     if ndcg < NDCG_MIN:
         violations.append(
             {
-                "monitor": "clarify",
+                "monitor": "feature_attribution",
                 "feature": "attribution",
                 "metric": "ndcg",
                 "value": round(ndcg, 3),

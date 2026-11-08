@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["starlette", "uvicorn", "boto3", "pyarrow", "pyiceberg[s3fs]"]
+# dependencies = ["starlette", "uvicorn", "boto3", "botocore[crt]", "pyarrow", "pyiceberg[s3fs]"]
 # ///
 """A local SageMaker Feature Store: both planes on one endpoint.
 

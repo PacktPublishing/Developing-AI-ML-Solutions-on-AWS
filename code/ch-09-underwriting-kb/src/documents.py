@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "ollama", "opensearch-py", "pdfplumber"]
+# dependencies = ["boto3", "botocore[crt]", "ollama", "opensearch-py", "pdfplumber"]
 # ///
 """Read supporting case documents with the configured document model.
 

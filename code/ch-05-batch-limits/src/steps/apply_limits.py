@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["boto3", "psycopg2-binary"]
+# dependencies = ["boto3", "botocore[crt]", "psycopg2-binary"]
 # ///
 """Apply the staged limit decisions to the warehouse.
 

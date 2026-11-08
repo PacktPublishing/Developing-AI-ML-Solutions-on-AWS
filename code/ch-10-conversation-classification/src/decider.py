@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3"]
+# dependencies = ["boto3", "botocore[crt]"]
 # ///
 """Provide three interchangeable clients for a decision model.
 
@@ -44,7 +44,7 @@ AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 # Strands Decider also serves /invocations and /ping, which is the contract
 # AgentCore Runtime invokes a container on, so pointing DECIDER_PATH at
 # /invocations runs the local round through the same path the cloud round uses.
-SYSTEM_ONE_PATH = os.environ.get("DECIDER_PATH", "/v1/systemone")
+SYSTEM_ONE_PATH = os.environ.get("DECIDER_PATH") or "/v1/systemone"
 
 
 def best_device() -> str:

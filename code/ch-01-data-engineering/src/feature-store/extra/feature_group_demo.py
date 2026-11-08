@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "psycopg2-binary"]
+# dependencies = ["boto3", "botocore[crt]", "psycopg2-binary"]
 # ///
 """The feature group through the real API, local or AWS by endpoint alone.
 

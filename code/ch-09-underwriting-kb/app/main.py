@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["fastapi", "uvicorn[standard]", "python-multipart", "pdfplumber", "boto3", "ollama", "opensearch-py", "strands-agents", "pyjwt[crypto]"]
+# dependencies = ["fastapi", "uvicorn[standard]", "python-multipart", "pdfplumber", "boto3", "botocore[crt]", "ollama", "opensearch-py", "strands-agents", "pyjwt[crypto]"]
 # ///
 """Serve underwriting queries, statement uploads and supporting documents.
 

@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12,<3.13"
-# dependencies = ["sagemaker>=3,<4", "mlflow>=3.10,<4", "sagemaker-mlflow", "boto3", "pandas"]
+# dependencies = ["sagemaker>=3,<4", "mlflow>=3.10,<4", "sagemaker-mlflow", "boto3", "botocore[crt]", "pandas"]
 # ///
 """Auto-deploy a registered model from the MLflow App with SDK v3 ModelBuilder.
 

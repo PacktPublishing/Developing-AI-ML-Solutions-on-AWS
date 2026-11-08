@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12,<3.13"
-# dependencies = ["sagemaker>=3,<4", "boto3"]
+# dependencies = ["sagemaker>=3,<4", "boto3", "botocore[crt]"]
 # ///
 """SageMaker Automatic Model Tuning for the challenger (SDK v3).
 

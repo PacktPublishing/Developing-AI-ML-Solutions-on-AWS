@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["boto3", "psycopg2-binary"]
+# dependencies = ["boto3", "botocore[crt]", "psycopg2-binary"]
 # ///
 """Shortlist the customers eligible for a limit review.
 
