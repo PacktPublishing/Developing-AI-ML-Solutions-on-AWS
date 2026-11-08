@@ -14,7 +14,9 @@ services:
       - S3PROXY_IDENTITY=local
       - S3PROXY_CREDENTIAL=localsecret
     ports:
-      - "9000:9000"
+      # The host port is S3_PORT because 9000 is MinIO's default and is often
+      # already taken; inside the network it stays 9000 either way.
+      - "${S3_PORT:-9000}:9000"
 
   # one-shot: create the artifact bucket once S3Proxy answers, then exit
   createbucket:

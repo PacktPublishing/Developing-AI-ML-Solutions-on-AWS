@@ -82,6 +82,25 @@ and nothing about what happened next.
 CloudWatch has all ten under `ch11/monitoring`, as `bias_<metric>` with a
 `Facet` dimension, so they alarm and trend like any other metric.
 
+## The same run locally
+
+`make up` then `make pipeline` runs the same `aws/pipeline.py` under
+`PIPELINE_MODE=local`, as containers on the laptop, against S3Proxy instead of
+S3. It is the same file and the same image, not a second implementation of the
+pipeline, and the numbers are the same to four decimal places:
+
+| path | metrics | values |
+| --- | --- | --- |
+| `make run`, directly | 10 | the baseline |
+| `make pipeline`, local containers | 10 | identical |
+| the Processing step on AWS | 10 | identical |
+| the live endpoint's captured traffic | 3 | identical where comparable |
+
+The live row reports three because captured traffic has no outcomes in it. The
+other three rows score a labelled batch, so they report all ten.
+
+`make up S3_PORT=9010` moves the local S3 off 9000, which MinIO also uses.
+
 ## A reader's account needs less than you would think
 
 `iam/deploy.json` is 17 statements of explicit actions, scoped to `ch11-*`, with

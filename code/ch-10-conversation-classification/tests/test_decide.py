@@ -125,3 +125,50 @@ def test_the_record_says_which_model_answered():
     assert record["model"] == "fake"
     assert record["backend"] == "fake"
     assert record["run_id"] == "run"
+
+
+@pytest.mark.parametrize("path", [None, "", "/invocations"])
+def test_http_endpoint_path(monkeypatch, path):
+    """Use the System One path unless an explicit endpoint path is supplied."""
+    import importlib
+    import decider
+
+    with monkeypatch.context() as env:
+        if path is None:
+            env.delenv("DECIDER_PATH", raising=False)
+        else:
+            env.setenv("DECIDER_PATH", path)
+        importlib.reload(decider)
+        client = decider.HttpDecider("http://localhost:8019/")
+        assert client._url == "http://localhost:8019" + (path or "/v1/systemone")
+    importlib.reload(decider)
+
+
+@pytest.mark.parametrize(
+    "target,local_credentials",
+    [("up", True), ("classify", True), ("serve-agent", False)],
+)
+def test_make_credentials_are_scoped_to_s3proxy(target, local_credentials):
+    """Cloud callers must not inherit the S3Proxy placeholder credentials."""
+    import os
+    from pathlib import Path
+    import subprocess
+
+    chapter = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        ["make", "-s", "--eval", f"{target}: ; @env", target],
+        cwd=chapter,
+        env={"PATH": os.environ["PATH"]},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    values = dict(
+        line.split("=", 1) for line in result.stdout.splitlines() if "=" in line
+    )
+    if local_credentials:
+        assert values["AWS_ACCESS_KEY_ID"] == "local"
+        assert values["AWS_SECRET_ACCESS_KEY"] == "localsecret"
+    else:
+        assert "AWS_ACCESS_KEY_ID" not in values
+        assert "AWS_SECRET_ACCESS_KEY" not in values

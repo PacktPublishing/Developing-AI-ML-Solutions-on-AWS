@@ -1,9 +1,7 @@
-# The same decision-model round locally, by two routes. `make decide` loads the
-# model into the router's own process, which needs no container at all.
-# `make sm-local` runs the endpoint's own image through SageMaker local mode,
-# started the way the service starts it, which is what checks the contract a
-# deploy will hold the image to. The SNS shim fans each routed conversation out
-# to a per-team file inbox either way.
+# Local inference and the separate container startup check. make sm-local
+# submits one example and deletes the endpoint; it does not write the dataset
+# predictions consumed by route.py. Its CPU image uses the deployment Dockerfile
+# with a different base image and PyTorch build.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -26,7 +24,7 @@ Diagram:
       Type: AWS::Diagram::Cloud
       Preset: AWSCloudNoLogo
       Direction: vertical
-      Title: "Local"
+      Title: "Local development"
       Children: [Decider, LocalEndpoint, SNS]
 
     Decider:
@@ -37,7 +35,7 @@ Diagram:
     LocalEndpoint:
       Type: AWS::Diagram::Resource
       Preset: "Docker"
-      Title: "SageMaker local mode\nthe endpoint's own image (make sm-local)"
+      Title: "SageMaker local mode\nCPU container check (make sm-local)"
 
     SNS:
       Type: AWS::Diagram::Resource

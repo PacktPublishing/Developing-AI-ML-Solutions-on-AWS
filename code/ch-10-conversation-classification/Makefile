@@ -23,8 +23,10 @@ VARIANT ?= a
 # Local by default: Bedrock is the Ollama-backed batch shim, S3 is S3Proxy.
 export BEDROCK_LOCAL ?= 1
 export S3_ENDPOINT ?= http://localhost:9000
-export AWS_ACCESS_KEY_ID ?= local
-export AWS_SECRET_ACCESS_KEY ?= localsecret
+# Only the S3Proxy targets need placeholder credentials. Cloud callers use
+# the normal AWS credential chain, including the selected profile.
+up classify: export AWS_ACCESS_KEY_ID ?= local
+up classify: export AWS_SECRET_ACCESS_KEY ?= localsecret
 
 up:
 	$(COMPOSE) up -d --wait
@@ -49,7 +51,7 @@ export DECIDER_BACKEND ?= local
 export DECIDER_URL ?=
 # /invocations instead of /v1/systemone runs the local round through the exact
 # path AgentCore Runtime invokes, which Strands Decider's server also serves.
-export DECIDER_PATH ?=
+export DECIDER_PATH ?= /v1/systemone
 THRESHOLD ?= 0
 decide:
 	uv run --with strands-decider src/decide.py --dataset $(DATASET) \
@@ -74,7 +76,7 @@ AGENT_PORT ?= 8080
 ENDPOINT_NAME ?= ch10-decider
 serve-agent:
 	PORT=$(AGENT_PORT) ENDPOINT_NAME=$(ENDPOINT_NAME) \
-		uv run --with bedrock-agentcore --with boto3 agent/main.py
+		uv run --with bedrock-agentcore --with boto3 --with "botocore[crt]" agent/main.py
 
 # sm-local: the model's container as a SageMaker endpoint in local mode, which
 # starts it the way the service does (`docker run <image> serve`) rather than
