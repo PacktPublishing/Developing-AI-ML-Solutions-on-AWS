@@ -46,14 +46,22 @@ airflow-password:
 # S3 blocks CloudFormation from deleting a non-empty bucket, so empty the
 # backup bucket (read from the stack outputs) before sam delete tears it down.
 airflow-delete:
-	@$(MAKE) --no-print-directory empty-buckets
-	# The feature store's offline half flushes on its own schedule, so a bucket
-	# emptied a moment ago can hold fresh Parquet by the time CloudFormation
-	# reaches it, and the stack delete fails on the non-empty bucket. Empty,
-	# wait for the flush, then empty again.
-	@sleep 45
-	@$(MAKE) --no-print-directory empty-buckets
-	sam delete --no-prompts
+	@# The feature store's offline half flushes on its own schedule, so a bucket
+	@# emptied a moment ago can hold fresh Parquet by the time CloudFormation
+	@# reaches it, and the stack delete fails on the non-empty bucket. No fixed
+	@# wait bounds that, because the flush is not on our clock: empty and delete,
+	@# and when the delete fails on a bucket that filled up again, do it again.
+	@for attempt in 1 2 3 4; do \
+		$(MAKE) --no-print-directory empty-buckets; \
+		if sam delete --no-prompts; then \
+			echo "stack deleted on attempt $$attempt"; \
+			exit 0; \
+		fi; \
+		echo "attempt $$attempt left a non-empty bucket behind; emptying again"; \
+		sleep 30; \
+	done; \
+	echo "the offline store is still flushing after four attempts; run this again"; \
+	exit 1
 
 empty-buckets:
 	@for KEY in BackupBucket OfflineBucket RawBucket; do \
