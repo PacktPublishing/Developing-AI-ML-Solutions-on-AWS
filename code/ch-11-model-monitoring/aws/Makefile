@@ -1,4 +1,4 @@
-.PHONY: iam deploy image pipeline clarify endpoint round teardown
+.PHONY: iam deploy image pipeline endpoint round teardown
 
 # the whole AWS round in one command (run make iam once first, as the account admin): the
 # stack, the image built by CodeBuild, then the monitoring pipeline. make teardown when done.
@@ -6,10 +6,8 @@ round:
 	$(MAKE) deploy
 	$(MAKE) image
 	$(MAKE) pipeline
-	@# Both of these were outside the round, so nothing ran them together with
-	@# the rest and the chain they belong to was never tested. clarify monitors
-	@# the batch path; endpoint monitors a live one through Data Capture.
-	$(MAKE) clarify
+	@# endpoint was outside the round, so nothing ran it together with the rest
+	@# and the chain it belongs to was never tested.
 	$(MAKE) endpoint
 
 # Reproduce ch-11's monitoring on real AWS as a SageMaker Pipeline: Batch Transform
@@ -88,18 +86,6 @@ pipeline:
 		AWS_DEFAULT_REGION=$(REGION) uv run pipeline.py
 
 # -------------------------------------------------------------------------------
-# clarify: verify the from-source SHAP drift against REAL SageMaker Clarify
-# -------------------------------------------------------------------------------
-# Optional parity check. Runs two Clarify explainability jobs (KernelSHAP) and compares
-# the feature-attribution NDCG with the chapter's from-source (TreeSHAP) NDCG. Clarify is
-# closed to new accounts, so this needs a grandfathered account; make pipeline is the
-# everyday path. Needs make deploy + make image first (for the scorecard serving image).
-clarify:
-	@aws s3api head-bucket --bucket $(BUCKET) 2>/dev/null \
-		|| aws s3 mb s3://$(BUCKET) --region $(REGION)
-	IMAGE_URI=$(IMAGE) SAGEMAKER_ROLE_ARN=$(ROLE) ARTIFACT_BUCKET=$(BUCKET) \
-		AWS_DEFAULT_REGION=$(REGION) PYTHONPATH=$(CURDIR)/../src uv run clarify_monitor.py
-
 # -------------------------------------------------------------------------------
 # endpoint: real-time endpoint with Data Capture, then monitor the captured traffic
 # -------------------------------------------------------------------------------

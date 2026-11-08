@@ -77,7 +77,10 @@ lint:
 
 # the PSIDetector unit tests: quantile vs model-border bins, and JSON round-trip
 test:
-	uv run --with pytest --with catboost --with pandas --with numpy pytest tests/ -q
+	@# smclarify is AWS's implementation of the bias metrics and the reference
+	@# tests/test_bias.py holds src/bias.py to. It is a test dependency only.
+	uv run --with pytest --with catboost --with pandas --with numpy --with smclarify \
+		pytest tests/ -q
 
 # Regenerate the architecture figures from diagrams/yaml/ with a pinned awsdac (AWS icons fetched at render time, custom icons from shared assets/diagrams/).
 # The shared icons come from `make icons` at the repository root; WIDTH sets

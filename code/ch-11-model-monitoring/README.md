@@ -13,11 +13,18 @@ scorecard's own feature contributions, and CloudWatch alerting on top.
   **MLflow** as a pyfunc model, so the drift baseline carries the same lineage
   as the model it watches.
 - **SHAP attribution drift**: rank features by mean absolute SHAP contribution
-  and report the NDCG of the current ranking against the reference one,
-  mirroring SageMaker Clarify's
-  [feature-attribution drift](https://docs.aws.amazon.com/sagemaker/latest/dg/clarify-model-monitor-feature-attribution-drift.html).
-- The SageMaker-shaped artifacts: Clarify's `analysis.json` and Model Monitor's
-  `constraint_violations.json`, from one monitoring entrypoint
+  and report the NDCG of the current ranking against the reference one.
+- **Standardized bias metrics** per facet, in `src/bias.py`: CI and DPL before a
+  model exists, DPPL, DI, RD, AD, SD, DAR, DRR and TE once it predicts. SageMaker
+  Clarify is closed to new customers, and AWS's [replacement
+  guidance](https://docs.aws.amazon.com/sagemaker/latest/dg/clarify-availability-change.html)
+  is that these are standardized arithmetic to compute and own rather than a
+  service to call. `tests/test_bias.py` checks every one of them against
+  `smclarify`, AWS's open-source implementation of the same metrics.
+  Captured endpoint traffic carries no outcomes, so the live path reports the
+  three that read predictions alone: CI, DPPL and DI.
+- The SageMaker-shaped artifacts: `analysis.json`, `bias.json` and Model
+  Monitor's `constraint_violations.json`, from one monitoring entrypoint
   (`src/run_monitor.py`) that runs locally and as the Processing step alike.
 - **CloudWatch alerting** that fires before bad decisions accumulate: locally
   through a from-source shim, on AWS through the stack's alarms.
