@@ -244,13 +244,15 @@
         "logs:DescribeLogStreams",
         "logs:GetLogEvents",
         "logs:DeleteLogGroup",
-        "logs:PutRetentionPolicy"
+        "logs:PutRetentionPolicy",
+        "logs:FilterLogEvents"
       ],
       "Resource": [
         "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*",
         "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/ch11-*",
         "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*:log-stream:*",
-        "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/ch11-*:log-stream:*"
+        "arn:aws:logs:us-east-1:*:log-group:/aws/codebuild/ch11-*:log-stream:*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/ProcessingJobs:*"
       ]
     }
   ]
