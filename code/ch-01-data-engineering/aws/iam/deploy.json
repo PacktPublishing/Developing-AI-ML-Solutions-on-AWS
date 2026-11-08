@@ -13,19 +13,35 @@
     {
       "Sid": "CloudFormationRead",
       "Effect": "Allow",
-      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Action": [
+        "cloudformation:Describe*",
+        "cloudformation:List*",
+        "cloudformation:GetTemplateSummary"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "ManageChapterRoles",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
-        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
-        "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile",
-        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
-        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
-        "iam:ListAttachedRolePolicies", "iam:PassRole"
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:CreateInstanceProfile",
+        "iam:DeleteInstanceProfile",
+        "iam:GetInstanceProfile",
+        "iam:AddRoleToInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PassRole"
       ],
       "Resource": [
         "arn:aws:iam::*:role/ch01-*",
@@ -37,40 +53,172 @@
       "Effect": "Allow",
       "Action": "s3:*",
       "Resource": [
-        "arn:aws:s3:::bureau-*", "arn:aws:s3:::bureau-*/*",
-        "arn:aws:s3:::credit-lake*", "arn:aws:s3:::credit-lake*/*",
-        "arn:aws:s3:::ch01-lake*", "arn:aws:s3:::ch01-lake*/*",
-        "arn:aws:s3:::feature-store*", "arn:aws:s3:::feature-store*/*",
-        "arn:aws:s3:::ch01-*", "arn:aws:s3:::ch01-*/*",
-        "arn:aws:s3:::aws-sam-cli-managed-*", "arn:aws:s3:::aws-sam-cli-managed-*/*"
+        "arn:aws:s3:::bureau-*",
+        "arn:aws:s3:::bureau-*/*",
+        "arn:aws:s3:::credit-lake*",
+        "arn:aws:s3:::credit-lake*/*",
+        "arn:aws:s3:::ch01-lake*",
+        "arn:aws:s3:::ch01-lake*/*",
+        "arn:aws:s3:::feature-store*",
+        "arn:aws:s3:::feature-store*/*",
+        "arn:aws:s3:::ch01-*",
+        "arn:aws:s3:::ch01-*/*",
+        "arn:aws:s3:::aws-sam-cli-managed-*",
+        "arn:aws:s3:::aws-sam-cli-managed-*/*"
       ]
     },
-    {"Sid": "Glue", "Effect": "Allow", "Action": "glue:*", "Resource": "*"},
-    {"Sid": "Athena", "Effect": "Allow", "Action": ["athena:*"], "Resource": "*"},
-    {"Sid": "LakeFormation", "Effect": "Allow", "Action": ["lakeformation:GetDataAccess", "lakeformation:GrantPermissions"], "Resource": "*"},
-    {"Sid": "S3Tables", "Effect": "Allow", "Action": "s3tables:*", "Resource": "*"},
-    {"Sid": "RedshiftServerless", "Effect": "Allow", "Action": ["redshift-serverless:*", "redshift-data:*"], "Resource": "*"},
-    {"Sid": "FeatureStoreOnline", "Effect": "Allow", "Action": "dynamodb:*", "Resource": "arn:aws:dynamodb:us-east-1:*:table/ch01-*"},
+    {
+      "Sid": "Glue",
+      "Effect": "Allow",
+      "Action": "glue:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Athena",
+      "Effect": "Allow",
+      "Action": [
+        "athena:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LakeFormation",
+      "Effect": "Allow",
+      "Action": [
+        "lakeformation:GetDataAccess",
+        "lakeformation:GrantPermissions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3Tables",
+      "Effect": "Allow",
+      "Action": "s3tables:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "RedshiftServerless",
+      "Effect": "Allow",
+      "Action": [
+        "redshift-serverless:*",
+        "redshift-data:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "FeatureStoreOnline",
+      "Effect": "Allow",
+      "Action": "dynamodb:*",
+      "Resource": "arn:aws:dynamodb:us-east-1:*:table/ch01-*"
+    },
     {
       "Sid": "SageMakerFeatureStore",
       "Effect": "Allow",
-      "Action": ["sagemaker:CreateFeatureGroup", "sagemaker:DeleteFeatureGroup", "sagemaker:DescribeFeatureGroup", "sagemaker:ListFeatureGroups", "sagemaker:PutRecord", "sagemaker:GetRecord", "sagemaker:AddTags"],
+      "Action": [
+        "sagemaker:CreateFeatureGroup",
+        "sagemaker:DeleteFeatureGroup",
+        "sagemaker:DescribeFeatureGroup",
+        "sagemaker:ListFeatureGroups",
+        "sagemaker:PutRecord",
+        "sagemaker:GetRecord",
+        "sagemaker:AddTags"
+      ],
       "Resource": [
         "arn:aws:sagemaker:us-east-1:*:feature-group/ch01-*",
         "arn:aws:sagemaker:us-east-1:*:feature-group/applicant-credit-profile-fg"
       ]
     },
-    {"Sid": "EventBridge", "Effect": "Allow", "Action": ["events:PutRule", "events:DeleteRule", "events:DescribeRule", "events:PutTargets", "events:RemoveTargets", "events:TagResource"], "Resource": "*"},
+    {
+      "Sid": "EventBridge",
+      "Effect": "Allow",
+      "Action": [
+        "events:PutRule",
+        "events:DeleteRule",
+        "events:DescribeRule",
+        "events:PutTargets",
+        "events:RemoveTargets",
+        "events:TagResource"
+      ],
+      "Resource": "*"
+    },
     {
       "Sid": "AirflowEc2",
       "Effect": "Allow",
-      "Action": ["ec2:*Vpc*", "ec2:*Subnet*", "ec2:*Route*", "ec2:*InternetGateway*", "ec2:*SecurityGroup*", "ec2:*Address*", "ec2:*Instance*", "ec2:*Volume*", "ec2:*Image*", "ec2:*KeyPair*", "ec2:Describe*", "ec2:*Tags"],
+      "Action": [
+        "ec2:*Vpc*",
+        "ec2:*Subnet*",
+        "ec2:*Route*",
+        "ec2:*InternetGateway*",
+        "ec2:*SecurityGroup*",
+        "ec2:*Address*",
+        "ec2:*Instance*",
+        "ec2:*Volume*",
+        "ec2:*Image*",
+        "ec2:*KeyPair*",
+        "ec2:Describe*",
+        "ec2:*Tags"
+      ],
       "Resource": "*"
     },
-    {"Sid": "AmiIdParameter", "Effect": "Allow", "Action": ["ssm:GetParameter", "ssm:GetParameters"], "Resource": "arn:aws:ssm:us-east-1::parameter/aws/service/ami-*"},
-    {"Sid": "SsmRunCommand", "Effect": "Allow", "Action": ["ssm:SendCommand"], "Resource": ["arn:aws:ec2:us-east-1:*:instance/*", "arn:aws:ssm:us-east-1::document/AWS-RunShellScript"]},
-    {"Sid": "SsmCommandResult", "Effect": "Allow", "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations"], "Resource": "*"},
-    {"Sid": "WarehouseSecret", "Effect": "Allow", "Action": ["secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:GetRandomPassword", "secretsmanager:TagResource"], "Resource": "*"},
-    {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": "*"}
+    {
+      "Sid": "AmiIdParameter",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1::parameter/aws/service/ami-*"
+    },
+    {
+      "Sid": "SsmRunCommand",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:SendCommand"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-east-1:*:instance/*",
+        "arn:aws:ssm:us-east-1::document/AWS-RunShellScript"
+      ]
+    },
+    {
+      "Sid": "SsmInstanceRead",
+      "Effect": "Allow",
+      "Action": "ssm:DescribeInstanceInformation",
+      "Resource": "*"
+    },
+    {
+      "Sid": "FeatureStoreRead",
+      "Effect": "Allow",
+      "Action": "sagemaker:ListFeatureGroups",
+      "Resource": "*"
+    },
+    {
+      "Sid": "SsmCommandResult",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetCommandInvocation",
+        "ssm:ListCommandInvocations"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "WarehouseSecret",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:GetRandomPassword",
+        "secretsmanager:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": "*"
+    }
   ]
 }

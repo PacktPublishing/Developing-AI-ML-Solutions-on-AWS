@@ -16,6 +16,7 @@ import os
 import random
 
 import boto3
+import botocore.exceptions
 
 # -------------------------------------------------------------------------------
 # Configuration
@@ -76,8 +77,14 @@ def main() -> None:
 
     random.seed(args.date)  # same date, same files: reruns are reproducible
     s3 = boto3.client("s3")
-    with contextlib.suppress(s3.exceptions.BucketAlreadyOwnedByYou):
-        s3.create_bucket(Bucket=BUCKET)
+    # the deployed stack creates the bucket, so only make one when it is missing:
+    # calling CreateBucket on an existing bucket races two concurrent runs against
+    # each other and S3 answers OperationAborted
+    try:
+        s3.head_bucket(Bucket=BUCKET)
+    except botocore.exceptions.ClientError:
+        with contextlib.suppress(s3.exceptions.BucketAlreadyOwnedByYou):
+            s3.create_bucket(Bucket=BUCKET)
     per_file = args.records // args.files
     written = 0
     for part in range(args.files):
