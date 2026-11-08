@@ -1,12 +1,10 @@
 # /// script
 # dependencies = ["boto3", "ollama", "opensearch-py"]
 # ///
-"""Check retrieval against questions whose right answer is known.
+"""Evaluate retrieval using borrower, loan-ID and policy queries.
 
-Three kinds of question, each built from the corpus itself: one naming a
-borrower, one naming a loan id, and one about credit policy. A question counts as
-found when a right document is among the top k. Each runs twice, k-NN alone and
-hybrid, so a change to chunking, weights, or the model shows up as a number.
+Measure whether an expected document appears in the top k results. Compare
+k-NN and hybrid search on queries generated from the corpus.
 
 Usage (from the chapter root, with the index seeded):
   PYTHONPATH=src uv run etl/evaluate.py --memos data/generated/memos

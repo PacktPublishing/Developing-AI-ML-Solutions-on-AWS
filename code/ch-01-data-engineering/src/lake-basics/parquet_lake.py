@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["awswrangler", "pandas"]
 # ///
-"""Why Parquet wins: write a partitioned dataset, query it in place.
+"""Write and query a partitioned Parquet dataset.
 
 Usage:
   uv run lake-basics/parquet_lake.py

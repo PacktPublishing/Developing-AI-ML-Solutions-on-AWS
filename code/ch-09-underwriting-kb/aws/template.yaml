@@ -235,6 +235,12 @@ Resources:
           # embeddings stay on Titan v2. The AppRole allows anthropic.* profiles.
           TEXT_MODEL: global.anthropic.claude-haiku-4-5-20251001-v1:0
 
+          # The document reader is handed a supporting document as a Converse
+          # document block and reads the PDF itself, so it is a model with that
+          # input modality rather than the chat model. Global cross-Region
+          # inference, which the AppRole's inference-profile/* already allows.
+          DOC_MODEL: global.anthropic.claude-haiku-5-5
+
           # the page reads this from /auth-config to sign the underwriter in
           COGNITO_CLIENT_ID: !Ref UnderwriterClient
 

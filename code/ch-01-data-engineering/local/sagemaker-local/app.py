@@ -40,7 +40,7 @@ async def flush() -> None:
 
 
 async def flusher() -> None:
-    """Flush the offline buffer on an interval, like the real ingest leg."""
+    """Flush buffered records to the offline store at regular intervals."""
     while True:
         await asyncio.sleep(FLUSH_SECONDS)
         await flush()

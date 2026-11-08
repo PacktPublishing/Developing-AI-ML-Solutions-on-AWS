@@ -1,14 +1,11 @@
 # /// script
 # dependencies = ["boto3"]
 # ///
-"""The auditor's record: model cards, a registry, and lineage from model metadata.
+"""Generate model cards, registry metadata and lineage records.
 
-Reads governance/models.json -- the facts a team owns about each model -- and renders
-the three artifacts an audit reads: a SageMaker-shaped model card (overview, intended
-uses and risk rating, training and evaluation details), a model registry entry (the
-model package group, its version, and the champion/challenger stage), and a lineage
-record (dataset -> training -> model -> deployment). With --upload the same records go to
-the real services: SageMaker Model Cards, the Model Registry, and ML Lineage.
+Read governance/models.json and write local JSON records. With --upload,
+create or update SageMaker model cards, register new model package versions,
+and create dataset-to-model lineage associations.
 
 Usage:
   uv run src/governance.py --models governance/models.json --out outputs/governance
@@ -92,7 +89,7 @@ def registry(models: dict) -> dict:
 
 
 def lineage(name: str, meta: dict) -> dict:
-    """Render a lineage record: dataset -> training -> model -> deployment."""
+    """Generate declared dataset, training, model and deployment relationships."""
     return {
         "model": name,
         "associations": [
@@ -138,11 +135,10 @@ def upload_card(sm, name: str, card: dict) -> None:
 
 
 def upload_registry(sm, name: str, meta: dict, account: str, region: str) -> str:
-    """Register a model version in the Model Registry; return its package ARN.
+    """Create a model package version and return its ARN.
 
-    Champion versions are Approved, challengers wait on manual approval, so the
-    registry itself records the rollout stage. The inference specification points at
-    the model's real serving image and artifact.
+    Set champion packages to Approved and other packages to PendingManualApproval.
+    Use the image and artifact locations derived from the model metadata.
     """
     from botocore.exceptions import ClientError
 

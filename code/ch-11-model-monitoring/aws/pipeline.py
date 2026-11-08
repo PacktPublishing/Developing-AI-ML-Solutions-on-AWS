@@ -2,29 +2,14 @@
 # requires-python = ">=3.12,<3.13"
 # dependencies = ["sagemaker>=3,<4", "sagemaker-mlops", "botocore[crt]", "boto3", "pandas"]
 # ///
-"""ch-11 monitoring as a SageMaker Pipeline: Batch Transform, then the drift monitor.
+"""Run Batch Transform followed by drift monitoring in a SageMaker Pipeline.
 
-One script, local AND AWS, the way ch-02 and ch-05 run their pipelines. The DAG is
-the same in both modes:
+The Transform step scores the current batch. The Processing step runs
+run_monitor.py with the model, reference batch, current batch and predictions.
+It writes monitoring reports and publishes CloudWatch metrics.
 
-  score-current (Batch Transform) -> monitor-drift (Processing)
-
-The Transform step scores the current batch through the scorecard's serving container
--- the realistic way you score a production batch, and the way Model Monitor captures
-predictions. The Processing step runs run_monitor.py, the chapter's one monitoring
-entrypoint, handing it the /opt/ml/processing paths as arguments: it reads those live
-scores, the reference and current batches, and the model, computes PSI + SHAP
-feature-attribution drift, writes the Clarify-shaped artifacts, and publishes the
-metrics to CloudWatch, where the stack's alarms turn them into alerts. SageMaker
-Clarify is closed to new accounts; this is AWS's documented replacement -- the same
-SHAP, run as a Processing step you own.
-
-PIPELINE_MODE selects the executor. local runs the Transform and Processing containers
-on this machine through the SDK's local mode (instance_type=local, local control
-plane), staging inputs and outputs to real S3 exactly as ch-05 does; aws runs them as
-managed jobs. The model the Transform step scores through is created through the
-session's own SageMaker client -- real on AWS, the SDK's local registry in local mode
--- so the identical code drives both.
+PIPELINE_MODE selects local containers or managed AWS jobs. The session's
+SageMaker client registers the serving model for the selected environment.
 
 Env: PIPELINE_MODE (local|aws, default aws), IMAGE_URI, SAGEMAKER_ROLE_ARN,
      ARTIFACT_BUCKET, AWS_DEFAULT_REGION (default us-east-1), DATA_DIR (default
@@ -83,7 +68,7 @@ s3 = boto3.client("s3", region_name=REGION)
 
 
 class LocalPipelineSession(_MlopsLocalPipelineSession, PipelineSession):
-    """The v3 local pipeline session is split across two classes; join both halves."""
+    """Combine the SDK local pipeline and pipeline session interfaces."""
 
 
 if MODE == "local":
@@ -128,12 +113,7 @@ def stage() -> dict:
 
 
 def ensure_model(model_tar: str) -> None:
-    """(Re)create the model the Transform step scores through, in this session's control plane.
-
-    Real SageMaker on AWS, the SDK's local registry in local mode. Routing through
-    sess.sagemaker_client (not a bare boto3 client) is what lets the same call register
-    a model the local Transform executor can find.
-    """
+    """Recreate the serving model using the selected session's SageMaker client."""
     client = sess.sagemaker_client
     try:
         client.delete_model(ModelName=MODEL_NAME)
@@ -153,7 +133,7 @@ def ensure_model(model_tar: str) -> None:
 
 
 def _input(name: str, s3_uri: str) -> ProcessingInput:
-    """One Processing input mounted under the container's input tree."""
+    """Create a ProcessingInput mounted under the container input directory."""
     return ProcessingInput(
         input_name=name,
         s3_input=ProcessingS3Input(

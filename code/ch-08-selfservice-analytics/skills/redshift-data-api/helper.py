@@ -9,7 +9,7 @@ Usage:
 Env vars:
     REDSHIFT_REGION, REDSHIFT_WORKGROUP (serverless) or REDSHIFT_HOST (shim),
     REDSHIFT_DB_NAME, REDSHIFT_USER_NAME
-    REDSHIFT_QUERY_TIMEOUT=30    seconds before the statement is cancelled
+    REDSHIFT_QUERY_TIMEOUT=30    seconds before the statement is canceled
     REDSHIFT_MAX_ROWS=10000      result row cap
 
 The same code runs against real AWS and the local shim: boto3 picks up AWS_ENDPOINT_URL_REDSHIFT_DATA when set, pointing this client at the from-source Data API in front of redshift-local.
@@ -99,7 +99,7 @@ def execute_redshift_query(sql: str) -> list[dict]:
         if time.monotonic() > deadline:
             client.cancel_statement(Id=sid)
             _audit("query_timeout", id=sid, timeout_s=_TIMEOUT)
-            raise TimeoutError(f"query exceeded {_TIMEOUT}s and was cancelled")
+            raise TimeoutError(f"query exceeded {_TIMEOUT}s and was canceled")
         time.sleep(0.5)
 
     if not desc.get("HasResultSet"):

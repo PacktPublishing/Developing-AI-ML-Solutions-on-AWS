@@ -3,7 +3,7 @@
 STACK ?= ch07-vision-rag
 
 # The GPU serving image is built by a second copy of build.yaml; the template is
-# parameterised by RepoName, so the same file makes both repositories and projects.
+# parameterized by RepoName, so the same file makes both repositories and projects.
 SERVING_REPO ?= ch07-kyc-serving
 SERVING_BUILD_STACK := $(SERVING_REPO)-build
 ENDPOINT_NAME ?= ch07-kyc-face

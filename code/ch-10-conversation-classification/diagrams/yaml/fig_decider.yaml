@@ -1,0 +1,52 @@
+# The decision-model round on AWS, split across two services by what each is for.
+# decide.py sends a conversation to the routing agent on AgentCore Runtime, which
+# holds the policy (the teams, their borders, the confidence floor) and asks the
+# decision model behind a SageMaker endpoint. route.py then publishes each routed
+# conversation to its team's SNS topic.
+Diagram:
+  DefinitionFiles:
+    - Type: LocalFile
+      LocalFile: ../../assets/diagrams/defs/aws-icons-light.yaml
+
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: horizontal
+      Children: [Client, AWSCloud]
+
+    Client:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "decide.py\nroute.py"
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Direction: vertical
+      Children: [AskRow, SNS]
+
+    AskRow:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Agent, Endpoint]
+
+    Agent:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Bedrock"
+      Title: "AgentCore Runtime\nrouting agent"
+
+    Endpoint:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon SageMaker AI"
+      Title: "SageMaker endpoint\nStrands Decider 2B"
+
+    SNS:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon Simple Notification Service (Amazon SNS)"
+      Title: "SNS\nten team topics"
+
+  Links:
+    - {Source: Client, SourcePosition: E, Target: Agent, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Agent, SourcePosition: E, Target: Endpoint, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    # route.py publishes, not the agent: the agent answers with a team, and the
+    # client sends it on to that team's topic.
+    - {Source: Client, SourcePosition: E, Target: SNS, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

@@ -1,8 +1,9 @@
-"""Read an applicant's bank statement PDF and total it.
+"""Extract bank statement transactions and calculate monthly totals.
 
-Extracting the transactions is parsing, and totalling them is arithmetic, so
-both belong here rather than in a prompt: the agent reads the figures from this
-module the same way it reads a debt-to-income ratio from the affordability tool.
+Description patterns identify own-account transfers, asset sales and loan
+disbursements to exclude from income. The summary includes total inflows,
+remaining income, loan repayments and running-balance checks. Submission
+validation requires a case reference and at least one extracted transaction.
 
 Usage:
   PYTHONPATH=src uv run src/statements.py data/generated/statements/CASE-*.pdf
@@ -13,7 +14,7 @@ from __future__ import annotations
 import re
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import pairwise
 from pathlib import Path
 
@@ -25,6 +26,39 @@ HEADER = ("date", "description", "money out", "money in", "balance")
 # card and account numbers run to eight digits or more; a facility reference does not
 LONG_NUMBER = re.compile(r"\b\d(?:[ -]?\d){7,}\b")
 EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+
+# Description patterns and exclusion reasons for the POL-DTI income rules.
+NOT_INCOME: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "own-account transfer",
+        re.compile(
+            r"transfer\s+(?:from|in)\b.*\b(?:own|self|savings|current)\b|own account",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "loan disbursement",
+        re.compile(
+            r"disburse?ment|disbursed|drawdown|draw down|facility advance",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "asset sale",
+        re.compile(r"asset sale|sale of\b|proceeds of sale", re.IGNORECASE),
+    ),
+)
+
+# Cell values treated as zero.
+BLANK_CELLS = {"", "-", "--", "nil", "none", "n/a", "na"}
+
+RECONCILED = "reconciled"
+BREAKS = "breaks"
+NOT_CHECKED = "not_checked"
+
+
+class Unreadable(ValueError):
+    """The statement has an invalid amount or fails submission validation."""
 
 
 @dataclass
@@ -40,24 +74,56 @@ class Transaction:
 
 @dataclass
 class Summary:
-    """What the statement says about capacity, for the affordability tools."""
+    """Monthly statement totals, reconciliation results and upload version."""
 
     case_id: str
     holder: str
     months: int
+    # Average monthly credits before income exclusions.
+    total_inflows: float
+    # Average monthly credits after income exclusions.
     monthly_income: float
     existing_repayments: float
     transactions: int
-    # rows whose balance does not follow from the one before: a misread line
+    # Reconciliation status: reconciled, breaks or not_checked.
+    reconciliation: str
+    # Rows with inconsistent running balances.
     balance_breaks: list[str]
+    # Masked descriptions and reasons for excluded credits.
+    excluded_inflows: list[str] = field(default_factory=list)
+    # Submission version assigned during indexing.
+    version: int = 0
 
 
 def _money(cell: str | None) -> float:
-    """Return a cell as a number, treating blanks and stray marks as zero."""
-    if not cell:
+    """Parse an amount, preserving a leading minus, trailing minus or parentheses.
+
+    Blank markers return zero. Unrecognized amounts raise Unreadable.
+    """
+    if cell is None:
         return 0.0
-    cleaned = re.sub(r"[^0-9.]", "", cell)
-    return float(cleaned) if cleaned else 0.0
+    text = cell.strip()
+    if text.lower() in BLANK_CELLS:
+        return 0.0
+    negative = (
+        text.startswith("-")
+        or text.endswith("-")
+        or (text.startswith("(") and text.endswith(")"))
+    )
+    core = text.strip("()").strip().lstrip("-").rstrip("-").strip()
+    core = core.lstrip("$\u20ac\u00a3\u20a6").strip().replace(",", "").replace(" ", "")
+    if not re.fullmatch(r"\d+(?:\.\d+)?", core):
+        raise Unreadable(f"unrecognized amount {cell!r}")
+    value = float(core)
+    return -value if negative else value
+
+
+def excluded_reason(description: str) -> str | None:
+    """Return the matching income-exclusion reason, or None if no pattern matches."""
+    for reason, pattern in NOT_INCOME:
+        if pattern.search(description):
+            return reason
+    return None
 
 
 def read(path: str | Path) -> tuple[dict[str, str], list[Transaction]]:
@@ -93,52 +159,82 @@ def read(path: str | Path) -> tuple[dict[str, str], list[Transaction]]:
     return fields, rows
 
 
-def reconcile(rows: list[Transaction]) -> list[str]:
-    """Return each row whose balance is not the previous balance plus in, minus out.
+def reconcile(rows: list[Transaction], holder: str = "") -> list[str]:
+    """Return descriptions of rows with inconsistent running balances.
 
-    The statement prints no opening balance, so the first row is the anchor and
-    every later row is checked against the one before it.
+    Use the first row as the starting balance. Each subsequent balance must equal
+    the previous balance plus credits minus debits, within 0.5. Error descriptions
+    include the row number, date and masked transaction description.
     """
     breaks = []
-    for prev, t in pairwise(rows):
+    for position, (prev, t) in enumerate(pairwise(rows), start=2):
         expected = prev.balance + t.inn - t.out
         if abs(t.balance - expected) > 0.5:
             breaks.append(
-                f"{t.date} {t.description}: balance {t.balance:,.0f},"
-                f" expected {expected:,.0f}"
+                f"row {position} on {t.date} ({mask(t.description, holder)}):"
+                f" balance {t.balance:,.0f}, expected {expected:,.0f}"
             )
     return breaks
 
 
-def summarise(path: str | Path) -> Summary:
+def summarize(path: str | Path) -> Summary:
     """Return the monthly income and existing repayments the statement supports."""
     fields, rows = read(path)
-    by_month_in: dict[str, float] = defaultdict(float)
+    holder = fields.get("account holder", "")
+    by_month_total: dict[str, float] = defaultdict(float)
+    by_month_income: dict[str, float] = defaultdict(float)
     by_month_obligation: dict[str, float] = defaultdict(float)
+    excluded: list[str] = []
     for t in rows:
         month = t.date[:7]
-        by_month_in[month] += t.inn
+        if t.inn:
+            by_month_total[month] += t.inn
+            reason = excluded_reason(t.description)
+            if reason:
+                excluded.append(
+                    f"{t.date} {mask(t.description, holder)} {t.inn:,.0f}: {reason}"
+                )
+            else:
+                by_month_income[month] += t.inn
         if t.out and OBLIGATION.search(t.description):
             by_month_obligation[month] += t.out
-    months = len(by_month_in) or 1
+    months = len({t.date[:7] for t in rows}) or 1
+    breaks = reconcile(rows, holder)
     return Summary(
         case_id=fields.get("case reference", ""),
-        holder=fields.get("account holder", ""),
+        holder=holder,
         months=months,
-        monthly_income=round(sum(by_month_in.values()) / months, 2),
+        total_inflows=round(sum(by_month_total.values()) / months, 2),
+        monthly_income=round(sum(by_month_income.values()) / months, 2),
         existing_repayments=round(sum(by_month_obligation.values()) / months, 2),
         transactions=len(rows),
-        balance_breaks=reconcile(rows),
+        # Running-balance reconciliation requires at least two rows.
+        reconciliation=(
+            NOT_CHECKED if len(rows) < 2 else (BREAKS if breaks else RECONCILED)
+        ),
+        balance_breaks=breaks,
+        excluded_inflows=excluded,
     )
 
 
-def mask(text: str, holder: str) -> str:
-    """Replace the holder's name, long numbers, and email addresses in one line.
+def validate(summary: Summary) -> Summary:
+    """Raise Unreadable if the summary has no transactions or case reference."""
+    if not summary.transactions:
+        raise Unreadable(
+            "no transactions recognized: the statement may be a scan, or a layout"
+            " the table extractor does not read"
+        )
+    if not summary.case_id:
+        raise Unreadable("no case reference in the statement header")
+    return summary
 
-    The name comes from the statement's own header, so it is matched exactly
-    rather than guessed at by a model.
+
+def mask(text: str, holder: str) -> str:
+    """Replace the holder's name, long numbers and email addresses.
+
+    Match the holder's full name and name components from the statement header.
     """
-    # an address can contain the name, so it goes first
+    # Mask email addresses before matching holder names.
     text = LONG_NUMBER.sub("[NUMBER]", EMAIL.sub("[EMAIL]", text))
     for part in [holder, *holder.split()]:
         if len(part) > 2:
@@ -149,18 +245,13 @@ def mask(text: str, holder: str) -> str:
 
 
 def chunks_for(path: str | Path) -> tuple[Summary, list[str]]:
-    """Return the summary and the statement rendered as one chunk per month.
-
-    A statement is a table, so it is grouped by month rather than split on
-    paragraph breaks: each chunk is a period a reader would actually compare.
-    The chunks are masked, because they are embedded and stored; the case id
-    is what ties them back to the applicant.
-    """
+    """Return the summary and masked text chunks: a summary followed by one per month."""
     _, rows = read(path)
-    summary = summarise(path)
+    summary = summarize(path)
     header = (
         f"Bank statement for case {summary.case_id}. "
         f"Monthly income {summary.monthly_income:,.0f}. "
+        f"Total credits {summary.total_inflows:,.0f} a month. "
         f"Existing repayments {summary.existing_repayments:,.0f} a month."
     )
     by_month: dict[str, list[Transaction]] = defaultdict(list)
@@ -179,16 +270,20 @@ def chunks_for(path: str | Path) -> tuple[Summary, list[str]]:
 def submit(path: str | Path, store, runtime) -> Summary:
     """Parse an uploaded statement and index it as the document under review."""
     summary, chunks = chunks_for(path)
-    store.index_submission(
+    validate(summary)
+    summary.version = store.index_submission(
         runtime,
         summary.case_id,
         summary.case_id,
         chunks,
         meta={
             "monthly_income": summary.monthly_income,
+            "total_inflows": summary.total_inflows,
             "existing_repayments": summary.existing_repayments,
             "months": summary.months,
+            "reconciliation": summary.reconciliation,
             "balance_breaks": summary.balance_breaks,
+            "excluded_inflows": summary.excluded_inflows,
         },
     )
     return summary
@@ -197,11 +292,16 @@ def submit(path: str | Path, store, runtime) -> Summary:
 def main() -> None:
     """Print the summary for each statement given on the command line."""
     for arg in sys.argv[1:]:
-        s = summarise(arg)
+        try:
+            s = validate(summarize(arg))
+        except Unreadable as err:
+            print(f"{arg}: refused, {err}")
+            continue
         print(
-            f"{s.case_id}  {s.holder}: income {s.monthly_income:,.0f}/month, "
-            f"existing repayments {s.existing_repayments:,.0f}/month "
-            f"over {s.months} months, {s.transactions} transactions"
+            f"{s.case_id}  {s.holder}: income {s.monthly_income:,.0f}/month "
+            f"of {s.total_inflows:,.0f} credits, existing repayments "
+            f"{s.existing_repayments:,.0f}/month over {s.months} months, "
+            f"{s.transactions} transactions, {s.reconciliation}"
         )
 
 

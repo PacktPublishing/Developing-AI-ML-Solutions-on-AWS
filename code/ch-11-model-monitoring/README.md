@@ -9,7 +9,7 @@ scorecard's own feature contributions, and CloudWatch alerting on top.
 - Online **Population Stability Index (PSI)** monitoring of scores and features.
   Features are binned at the model's own CatBoost split borders (the ML approach
   to PSI); the score, which has no model borders, is binned into reference
-  quantiles. The fitted detector serialises to a JSON artifact and logs to
+  quantiles. The fitted detector serializes to a JSON artifact and logs to
   **MLflow** as a pyfunc model, so the drift baseline carries the same lineage
   as the model it watches.
 - **SHAP attribution drift**: rank features by mean absolute SHAP contribution

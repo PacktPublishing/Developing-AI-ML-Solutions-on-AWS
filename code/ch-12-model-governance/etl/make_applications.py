@@ -1,11 +1,10 @@
 # /// script
 # dependencies = ["pandas"]
 # ///
-"""Build a batch of applications to route through the gateway.
+"""Prepare Chapter 2 test applications for rollout testing.
 
-Reuses chapter 2's held-out applications, drops the label, and gives each one a stable
-loanId -- the key the rollout split buckets on -- so the same application always lands
-with the same model.
+Remove labels and assign stable loanId values for the AppConfig split rule.
+Assignments are repeatable for a fixed split configuration.
 
 Usage:
   uv run etl/make_applications.py --n 300 --out data/applications.jsonl
@@ -19,7 +18,7 @@ import pandas as pd
 
 
 def main() -> None:
-    """Write n labelled-free applications, each with a loanId, as JSONL."""
+    """Write applications without target labels to JSONL, each with a loanId."""
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
         "--source", type=Path, default=Path("../ch-02-mlops/data/split/test.csv")

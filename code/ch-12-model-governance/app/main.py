@@ -1,14 +1,12 @@
 # /// script
 # dependencies = ["fastapi", "uvicorn[standard]", "boto3"]
 # ///
-"""The rollout gateway: one FastAPI service that flag-routes each application.
+"""Serve application scoring through a FastAPI gateway.
 
-POST /score evaluates the challenger_rollout feature flag with the application's loanId,
-routes it to the champion or challenger, and returns the decision plus which variant
-served it. The flag comes from the AWS AppConfig agent sidecar, which evaluates the
-rules -- local development mode over an Ion file locally, the deployed configuration
-on ECS -- so widening the rollout is a flag edit with no redeploy. The same uvicorn
-process runs locally and as a long-running Fargate service on AWS.
+POST /score evaluates challenger_rollout with the application's loanId, calls
+the selected model and returns its probability, decision, variant and model
+name. The AppConfig agent evaluates the flag. The gateway runs under uvicorn
+locally and on Fargate.
 
 Env: APPCONFIG_AGENT_URL (+ APPCONFIG_APP / APPCONFIG_ENV / APPCONFIG_PROFILE),
      CHAMPION_URL, CHALLENGER_URL.
@@ -31,7 +29,7 @@ _router: Router | None = None
 
 
 def get_router() -> Router:
-    """Build the router once: the flag client plus the model-scoring seam."""
+    """Create and cache the feature-flag client and model router."""
     global _router
     if _router is None:
         _router = Router(get_appconfig(), get_scorer())
@@ -59,7 +57,7 @@ class Decision(BaseModel):
 def score(
     application: Application, router: Annotated[Router, Depends(get_router)]
 ) -> Decision:
-    """Flag-route one application and return its decision and serving variant."""
+    """Score an application with the selected model and return the decision."""
     return Decision(**router.route(application.model_dump()))
 
 

@@ -1,16 +1,11 @@
 # /// script
 # dependencies = ["catboost", "pandas", "numpy"]
 # ///
-"""The drift monitors: Population Stability Index and SHAP attribution drift.
+"""Calculate feature PSI, score PSI and SHAP attribution drift.
 
-PSI compares a current distribution to the reference the model was trained on: < 0.1
-stable, 0.1-0.25 moderate, > 0.25 major. Features are binned the ML way -- at the
-scorecard's own CatBoost split borders (see psi.py), so PSI measures drift across the
-boundaries the model actually uses -- while the score, which has no model borders, is
-binned into reference quantiles. The attribution monitor (attribution.py) mirrors
-SageMaker Clarify's feature-attribution drift: NDCG between the reference SHAP
-ranking and the current one (1.0 = unchanged).
-run() returns the metrics and the violations a monitoring schedule would raise.
+Numeric feature bins use CatBoost split borders, with reference quantiles as a
+fallback. Score PSI uses reference quantiles. Attribution drift uses the NDCG
+function in attribution.py. Return metrics and threshold violations.
 
 Usage:
   uv run src/monitor.py --reference data/generated/reference.csv --current data/generated/current.csv
@@ -41,7 +36,7 @@ def run(
         current_scores = score(model, current)
     violations = []
 
-    # Feature PSI the ML way: bin each feature at the model's own split borders.
+    # Use model split borders for numeric feature PSI, with quantile fallback.
     detector = PSIDetector.from_catboost(model, reference, NUMERIC, CATEGORICAL)
     metrics: dict = {"feature_psi": detector.psi(current)}
     violations.extend(
@@ -90,7 +85,7 @@ def run(
 
 
 def constraint_violations(report: dict) -> dict:
-    """Render Model Monitor's constraint_violations.json from the monitor report."""
+    """Format threshold breaches for constraint_violations.json."""
     return {
         "violations": [
             {

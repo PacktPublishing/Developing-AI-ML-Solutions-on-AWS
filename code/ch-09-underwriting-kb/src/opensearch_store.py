@@ -4,6 +4,7 @@ The store interface (reset / add / finalize / search) the chapter uses, so the
 embed step and retrieval do not care which backend is behind them.
 """
 
+import datetime
 import os
 
 from models import embed
@@ -11,6 +12,9 @@ from opensearchpy import OpenSearch, helpers
 
 INDEX = "memo_chunks"
 PIPELINE = "memo-hybrid"
+
+SSL = os.environ.get("OPENSEARCH_SSL") == "1"
+INSECURE = os.environ.get("OPENSEARCH_INSECURE") == "1"
 
 # What a search reads by default: the decided cases and the credit policy, never
 # a document under review.
@@ -50,7 +54,7 @@ def query_body(
     if not hybrid:
         return {"size": k, "query": knn}
     # the keyword half reads the title too, which carries the loan id and the
-    # borrower, the exact tokens an embedding blurs into its neighbours
+    # borrower, the exact tokens an embedding blurs into its neighbors
     keyword = {
         "bool": {
             "must": {"multi_match": {"query": text, "fields": ["title^2", "content"]}},
@@ -74,8 +78,12 @@ def client() -> OpenSearch:
             if os.environ.get("OPENSEARCH_USER")
             else None
         ),
-        use_ssl=os.environ.get("OPENSEARCH_SSL") == "1",
-        verify_certs=False,
+        use_ssl=SSL,
+        # The managed domain is https with a certificate from a public CA, and
+        # the master-user password is sent on every request, so the certificate
+        # is verified. Only a local endpoint with a self-signed certificate has
+        # a reason to skip it, and it has to say so: OPENSEARCH_INSECURE=1.
+        verify_certs=SSL and not INSECURE,
         ssl_show_warn=False,
         # a small managed node throttles under a burst of writes; ride out the 429s
         timeout=30,
@@ -132,9 +140,20 @@ class OpenSearchStore:
                         # the figures the statement parser recovered, carried with
                         # the document so the agent reads them back from the index
                         "monthly_income": {"type": "double"},
+                        "total_inflows": {"type": "double"},
                         "existing_repayments": {"type": "double"},
                         "months": {"type": "integer"},
+                        "reconciliation": {"type": "keyword"},
                         "balance_breaks": {"type": "keyword"},
+                        "excluded_inflows": {"type": "keyword"},
+                        # an upload replaces the one before it rather than
+                        # joining it, so each submission carries its own version
+                        # and a read names the version it read
+                        "submission_version": {"type": "integer"},
+                        "uploaded_at": {"type": "date"},
+                        # supporting documents the underwriter adds to a case
+                        "doc_name": {"type": "keyword"},
+                        "doc_type": {"type": "keyword"},
                         "loan_id": {"type": "long"},
                         "borrower": {"type": "keyword"},
                         # the loan-book fields the filters narrow on
@@ -170,11 +189,13 @@ class OpenSearchStore:
         source: str = "corpus",
         case_id: str = "",
         meta: dict | None = None,
+        doc_id: str | None = None,
     ) -> None:
-        """Buffer one embedded chunk for bulk indexing."""
+        """Buffer an embedded chunk; a supplied doc_id replaces the same indexed document."""
         self._buffer.append(
             {
                 "_index": INDEX,
+                **({"_id": doc_id} if doc_id else {}),
                 "source": source,
                 "case_id": case_id,
                 **(meta or {}),
@@ -237,6 +258,27 @@ class OpenSearchStore:
     # ---------------------------------------------------------------------------
     # The document under review
     # ---------------------------------------------------------------------------
+    def latest_version(self, case_id: str, source: str = "submission") -> int:
+        """Return the newest version of an uploaded document, or 0 if none."""
+        if not self.client.indices.exists(index=INDEX):
+            return 0
+        resp = self.client.search(
+            index=INDEX,
+            body={
+                "size": 0,
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"term": {"source": source}},
+                            {"term": {"case_id": case_id}},
+                        ]
+                    }
+                },
+                "aggs": {"latest": {"max": {"field": "submission_version"}}},
+            },
+        )
+        return int(resp["aggregations"]["latest"]["value"] or 0)
+
     def index_submission(
         self,
         runtime,
@@ -244,8 +286,12 @@ class OpenSearchStore:
         holder: str,
         chunks: list[str],
         meta: dict | None = None,
+        source: str = "submission",
+        doc_name: str = "",
     ) -> int:
-        """Embed and index one uploaded document, with the figures parsed from it."""
+        """Index a numbered submission version with version-specific chunk IDs."""
+        version = self.latest_version(case_id, source) + 1
+        uploaded_at = datetime.datetime.now(datetime.UTC).isoformat()
         vectors = embed(runtime, chunks)
         for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
             self.add(
@@ -254,24 +300,36 @@ class OpenSearchStore:
                 i,
                 chunk,
                 vector,
-                source="submission",
+                source=source,
                 case_id=case_id,
-                meta=meta,
+                meta={
+                    **(meta or {}),
+                    "submission_version": version,
+                    "uploaded_at": uploaded_at,
+                    "doc_name": doc_name,
+                },
+                doc_id=f"{source}:{case_id}:v{version}:{i}",
             )
         self.finalize()
-        return len(chunks)
+        return version
 
-    def read_submission(self, case_id: str) -> dict:
-        """Return the uploaded document: its parsed figures and its text."""
+    def read_submission(
+        self, case_id: str, version: int | None = None, source: str = "submission"
+    ) -> dict:
+        """Return figures and text for the requested version, or the latest version."""
+        wanted = self.latest_version(case_id, source) if version is None else version
+        if not wanted:
+            return {}
         resp = self.client.search(
             index=INDEX,
             body={
-                "size": 100,
+                "size": 500,
                 "query": {
                     "bool": {
                         "filter": [
-                            {"term": {"source": "submission"}},
+                            {"term": {"source": source}},
                             {"term": {"case_id": case_id}},
+                            {"term": {"submission_version": wanted}},
                         ]
                     }
                 },
@@ -284,28 +342,73 @@ class OpenSearchStore:
         first = hits[0]
         return {
             "case_id": case_id,
+            "version": wanted,
+            "uploaded_at": first.get("uploaded_at", ""),
+            "doc_name": first.get("doc_name", ""),
             "holder": first.get("borrower", ""),
             "monthly_income": first.get("monthly_income"),
+            "total_inflows": first.get("total_inflows"),
             "existing_repayments": first.get("existing_repayments"),
             "months": first.get("months"),
+            "doc_type": first.get("doc_type", ""),
+            "reconciliation": first.get("reconciliation", "not_checked"),
             "balance_breaks": first.get("balance_breaks") or [],
+            "excluded_inflows": first.get("excluded_inflows") or [],
             "text": "\n\n".join(h["content"] for h in hits),
         }
 
-    def drop_submission(self, case_id: str) -> int:
-        """Delete an uploaded document once the review is done."""
-        resp = self.client.delete_by_query(
+    def list_submissions(self, case_id: str, source: str = "context") -> list[dict]:
+        """Return all matching case-document versions, oldest first."""
+        if not self.client.indices.exists(index=INDEX):
+            return []
+        resp = self.client.search(
             index=INDEX,
             body={
+                "size": 1000,
                 "query": {
                     "bool": {
                         "filter": [
-                            {"term": {"source": "submission"}},
+                            {"term": {"source": source}},
                             {"term": {"case_id": case_id}},
                         ]
                     }
-                }
+                },
+                "sort": [{"submission_version": "asc"}, {"chunk_index": "asc"}],
             },
+        )
+        documents: dict[int, dict] = {}
+        for hit in resp["hits"]["hits"]:
+            src = hit["_source"]
+            version = src.get("submission_version") or 0
+            doc = documents.setdefault(
+                version,
+                {
+                    "version": version,
+                    "doc_name": src.get("doc_name", ""),
+                    "doc_type": src.get("doc_type", ""),
+                    "uploaded_at": src.get("uploaded_at", ""),
+                    "chunks": [],
+                },
+            )
+            doc["chunks"].append(src["content"])
+        ordered = [documents[v] for v in sorted(documents)]
+        for doc in ordered:
+            doc["text"] = "\n\n".join(doc.pop("chunks"))
+        return ordered
+
+    def drop_submission(
+        self, case_id: str, version: int | None = None, source: str = "submission"
+    ) -> int:
+        """Delete the selected submission version, or all versions when none is specified."""
+        filters: list[dict] = [
+            {"term": {"source": source}},
+            {"term": {"case_id": case_id}},
+        ]
+        if version is not None:
+            filters.append({"term": {"submission_version": version}})
+        resp = self.client.delete_by_query(
+            index=INDEX,
+            body={"query": {"bool": {"filter": filters}}},
             refresh=True,
         )
         return resp.get("deleted", 0)

@@ -1,10 +1,7 @@
-"""The scorecard: a CatBoost classifier over the credit bureau features.
+"""Train and load a CatBoost credit model and calculate default probabilities.
 
-CatBoost handles the categorical features natively and exposes feature importances
-and SHAP values directly, which the drift monitors lean on. train() fits on the
-reference batch; score() returns the probability of default the monitors watch.
-This is the model library; train.py is the SageMaker training entrypoint that runs
-it, in local mode and as a managed job alike.
+The model uses numeric and categorical credit bureau features. The monitoring
+code also uses its split borders and native SHAP values.
 """
 
 from pathlib import Path
@@ -35,7 +32,7 @@ DEFAULTS = {"iterations": 300, "depth": 5, "learning_rate": 0.1}
 
 
 def train(reference: pd.DataFrame, params: dict | None = None) -> CatBoostClassifier:
-    """Fit the scorecard on the reference batch, honouring SageMaker hyperparameters."""
+    """Fit the scorecard on the reference batch, honoring SageMaker hyperparameters."""
     p = {**DEFAULTS, **(params or {})}
     model = CatBoostClassifier(
         iterations=int(p["iterations"]),

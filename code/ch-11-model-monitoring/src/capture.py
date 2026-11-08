@@ -1,14 +1,10 @@
 # /// script
 # dependencies = ["pandas", "boto3"]
 # ///
-"""Read SageMaker Data Capture records into the frames the monitors expect.
+"""Read captured SageMaker endpoint inputs and predictions for monitoring.
 
-A real-time endpoint with DataCaptureConfig logs every request and response to S3 as
-JSON Lines, one record per invocation. Each record's endpointInput.data is the CSV the
-caller sent (headerless FEATURES rows) and endpointOutput.data is the probability the
-scorecard returned per row. read_capture reconstructs the current feature frame and the
-live scores from those records, so the same monitors (monitor.run) that watch a batch
-watch live traffic instead, with no rescoring.
+Parse CSV feature rows and predicted probabilities from Data Capture JSONL.
+Return a feature frame and aligned scores for monitor.run.
 
 Usage:
   from capture import read_capture

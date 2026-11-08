@@ -1,16 +1,14 @@
 # /// script
 # dependencies = ["reportlab"]
 # ///
-"""Generate synthetic bank statement PDFs for applicants awaiting a decision.
+"""Generate synthetic bank statement PDFs and a CSV manifest.
 
-Each statement is three months of transactions for one applicant: a recurring
-salary credit, the repayments on any facility they already hold, and everyday
-spending around them. The manifest records the true monthly income and existing
-repayments for each file, so the parser can be checked against them rather than
-against a number somebody eyeballed.
+Each statement contains three months of salary credits, loan repayments and
+spending. Some include own-account transfers, loan disbursements or asset sales.
+The manifest records monthly salary income, total inflows and loan repayments
+for comparison with the parser output.
 
-All names, businesses, amounts, and account numbers are invented, and amounts
-are in USD.
+All personal details and transactions are invented. Amounts are in USD.
 
 Usage:
   python gen_statements.py --out data/generated/statements --count 12 --seed 11
@@ -75,26 +73,46 @@ EVERYDAY = [
 ]
 
 
+# Credits excluded by POL-DTI, as (description, minimum amount, maximum amount).
+NOT_INCOME = [
+    ("TRANSFER FROM  OWN SAVINGS", 5_000, 60_000),
+    ("LOAN DISBURSEMENT  FACILITY 4471", 100_000, 400_000),
+    ("ASSET SALE  DELIVERY VAN", 150_000, 900_000),
+]
+
+
 @dataclass
 class Statement:
-    """One applicant's statement and the figures a parser should recover."""
+    """Generated statement transactions and expected monthly totals."""
 
     case_id: str
     holder: str
     account: str
+    # Monthly salary income used for DTI.
     monthly_income: int
+    # Average monthly credits before income exclusions.
+    total_inflows: int
     existing_repayment: int
     rows: list[tuple[str, str, str, str, str]]
 
 
 def build(rng: random.Random, case_id: str) -> Statement:
-    """Compose three months of transactions around a salary and any repayment."""
+    """Generate three months of transactions for an applicant."""
     holder = f"{rng.choice(FIRST)} {rng.choice(LAST)}"
     account = f"****{rng.randint(1000, 9999)}"
     income = rng.randrange(45_000, 260_000, 5_000)
-    # about half the applicants already carry a facility somewhere
+    # Generate an existing loan repayment for 55% of applicants.
     repayment = rng.randrange(4_000, 40_000, 1_000) if rng.random() < 0.55 else 0
     balance = rng.randrange(20_000, 400_000, 1_000)
+
+    # Add excluded credits to 35% of statements. Own-account transfers recur
+    # monthly; loan disbursements and asset sales occur once.
+    extra, extra_low, extra_high = rng.choice(NOT_INCOME)
+    excluded_amount = (
+        rng.randrange(extra_low, extra_high, 1_000) if rng.random() < 0.35 else 0
+    )
+    recurring = excluded_amount and extra.startswith("TRANSFER")
+    excluded_total = excluded_amount * (3 if recurring else 1)
 
     rows: list[tuple[str, str, str, str, str]] = []
     start = dt.date(2026, 3, 1)
@@ -103,6 +121,8 @@ def build(rng: random.Random, case_id: str) -> Statement:
         entries: list[tuple[int, str, int, int]] = [
             (26, "SALARY  MONTHLY PAYROLL", 0, income)
         ]
+        if excluded_amount and (recurring or month == 0):
+            entries.append((18, extra, 0, excluded_amount))
         if repayment:
             entries.append((3, "LOAN REPAYMENT  FACILITY 4471", repayment, 0))
         for _ in range(rng.randint(5, 9)):
@@ -119,7 +139,15 @@ def build(rng: random.Random, case_id: str) -> Statement:
                     f"{balance:,}",
                 )
             )
-    return Statement(case_id, holder, account, income, repayment, rows)
+    return Statement(
+        case_id,
+        holder,
+        account,
+        income,
+        income + round(excluded_total / 3),
+        repayment,
+        rows,
+    )
 
 
 def write_pdf(st: Statement, path: Path) -> None:
@@ -169,7 +197,7 @@ def write_pdf(st: Statement, path: Path) -> None:
 
 
 def main() -> None:
-    """Write the statement PDFs and a manifest of their true figures."""
+    """Write statement PDFs and their expected monthly totals to a CSV manifest."""
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--out", default="data/generated/statements")
     p.add_argument("--count", type=int, default=12)
@@ -193,6 +221,7 @@ def main() -> None:
                 "file": name,
                 "holder": st.holder,
                 "monthly_income": st.monthly_income,
+                "total_inflows": st.total_inflows,
                 "existing_repayment": st.existing_repayment,
             }
         )

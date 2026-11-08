@@ -50,7 +50,7 @@ def _hyperparameters() -> dict:
 
 
 def _metrics(y_true, p_default) -> dict:
-    """AUC, Gini, and KS: the same yardstick the incumbent is measured by."""
+    """Calculate AUC, Gini and KS for comparison with the incumbent."""
     from sklearn.metrics import roc_auc_score, roc_curve
 
     auc = float(roc_auc_score(y_true, p_default))

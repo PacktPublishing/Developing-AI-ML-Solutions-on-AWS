@@ -1,14 +1,11 @@
 # /// script
 # dependencies = ["catboost", "pandas", "numpy", "boto3"]
 # ///
-"""The monitoring job over the drift monitors, emitting the SageMaker-shaped artifacts.
+"""Run drift monitoring, write JSON reports and publish CloudWatch metrics.
 
-One entrypoint for both environments. Locally it runs on the generated batches,
-publishes to the CloudWatch shim, and bootstraps the alarms, because no stack exists
-to own them. As the SageMaker Processing step the pipeline passes the
-/opt/ml/processing paths as arguments (--scores carries the Batch Transform
-predictions) and the metrics go to real CloudWatch, where the stack's alarms watch
-the same names.
+Read predictions from Batch Transform output or endpoint capture records.
+MONITOR_LOCAL selects the local CloudWatch client and creates local alarms.
+On AWS, the stack defines the alarms and this script publishes their metrics.
 
 Usage:
   MONITOR_LOCAL=1 uv run src/run_monitor.py

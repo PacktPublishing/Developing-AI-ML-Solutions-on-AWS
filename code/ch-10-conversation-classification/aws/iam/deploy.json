@@ -5,30 +5,69 @@
       "Sid": "CloudFormation",
       "Effect": "Allow",
       "Action": "cloudformation:*",
-      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/ch10-*/*"
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:*:stack/ch10-*/*",
+        "arn:aws:cloudformation:us-east-1:*:stack/aws-sam-cli-managed-*/*"
+      ]
+    },
+    {
+      "Sid": "SamTransform",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateChangeSet"
+      ],
+      "Resource": "arn:aws:cloudformation:us-east-1:aws:transform/*"
     },
     {
       "Sid": "CloudFormationRead",
       "Effect": "Allow",
-      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+      "Action": [
+        "cloudformation:Describe*",
+        "cloudformation:List*",
+        "cloudformation:GetTemplateSummary"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "ManageChapterRoles",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
-        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
-        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
-        "iam:ListAttachedRolePolicies", "iam:PassRole"
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PassRole"
       ],
       "Resource": "arn:aws:iam::*:role/ch10-*"
     },
-    {"Sid": "BatchBucket", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::ch10-*", "arn:aws:s3:::ch10-*/*"]},
+    {
+      "Sid": "BatchBucket",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::ch10-*",
+        "arn:aws:s3:::ch10-*/*"
+      ]
+    },
     {
       "Sid": "BedrockBatch",
       "Effect": "Allow",
-      "Action": ["bedrock:CreateModelInvocationJob", "bedrock:GetModelInvocationJob", "bedrock:ListModelInvocationJobs", "bedrock:StopModelInvocationJob", "bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Action": [
+        "bedrock:CreateModelInvocationJob",
+        "bedrock:GetModelInvocationJob",
+        "bedrock:ListModelInvocationJobs",
+        "bedrock:StopModelInvocationJob",
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
       "Resource": [
         "arn:aws:bedrock:*::foundation-model/*",
         "arn:aws:bedrock:::foundation-model/*",
@@ -36,14 +75,120 @@
         "arn:aws:bedrock:us-east-1:*:model-invocation-job/*"
       ]
     },
-    {"Sid": "BedrockListJobs", "Effect": "Allow", "Action": "bedrock:ListModelInvocationJobs", "Resource": "*"},
-    {"Sid": "BedrockSubscription", "Effect": "Allow", "Action": "aws-marketplace:ViewSubscriptions", "Resource": "*"},
+    {
+      "Sid": "BedrockListJobs",
+      "Effect": "Allow",
+      "Action": "bedrock:ListModelInvocationJobs",
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockSubscription",
+      "Effect": "Allow",
+      "Action": "aws-marketplace:ViewSubscriptions",
+      "Resource": "*"
+    },
     {
       "Sid": "Sns",
       "Effect": "Allow",
-      "Action": ["sns:CreateTopic", "sns:DeleteTopic", "sns:Subscribe", "sns:Unsubscribe", "sns:Publish", "sns:ListTopics", "sns:ListSubscriptionsByTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes", "sns:TagResource"],
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:Publish",
+        "sns:ListTopics",
+        "sns:ListSubscriptionsByTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:TagResource"
+      ],
       "Resource": "*"
     },
-    {"Sid": "Logs", "Effect": "Allow", "Action": "logs:*", "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch10*"}
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:*ch10*"
+    },
+    {
+      "Sid": "AgentCore",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:CreateAgentRuntime",
+        "bedrock-agentcore:UpdateAgentRuntime",
+        "bedrock-agentcore:DeleteAgentRuntime",
+        "bedrock-agentcore:GetAgentRuntime",
+        "bedrock-agentcore:ListAgentRuntimes",
+        "bedrock-agentcore:ListAgentRuntimeVersions",
+        "bedrock-agentcore:CreateAgentRuntimeEndpoint",
+        "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+        "bedrock-agentcore:DeleteAgentRuntimeEndpoint",
+        "bedrock-agentcore:GetAgentRuntimeEndpoint",
+        "bedrock-agentcore:ListAgentRuntimeEndpoints",
+        "bedrock-agentcore:CreateWorkloadIdentity",
+        "bedrock-agentcore:GetWorkloadIdentity",
+        "bedrock-agentcore:DeleteWorkloadIdentity",
+        "bedrock-agentcore:ListWorkloadIdentities",
+        "bedrock-agentcore:InvokeAgentRuntime",
+        "bedrock-agentcore:StopRuntimeSession",
+        "bedrock-agentcore:TagResource",
+        "bedrock-agentcore:UntagResource",
+        "bedrock-agentcore:ListTagsForResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DeciderImage",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DeleteRepository",
+        "ecr:DescribeRepositories",
+        "ecr:ListImages",
+        "ecr:BatchDeleteImage",
+        "ecr:PutImageScanningConfiguration",
+        "ecr:TagResource",
+        "codebuild:CreateProject",
+        "codebuild:DeleteProject",
+        "codebuild:BatchGetProjects",
+        "codebuild:StartBuild",
+        "codebuild:BatchGetBuilds"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PassChapterRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole",
+        "iam:CreateInstanceProfile",
+        "iam:DeleteInstanceProfile",
+        "iam:AddRoleToInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile",
+        "iam:GetInstanceProfile",
+        "iam:CreateServiceLinkedRole"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DeciderEndpoint",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CreateModel",
+        "sagemaker:DeleteModel",
+        "sagemaker:DescribeModel",
+        "sagemaker:CreateEndpointConfig",
+        "sagemaker:DeleteEndpointConfig",
+        "sagemaker:DescribeEndpointConfig",
+        "sagemaker:CreateEndpoint",
+        "sagemaker:DeleteEndpoint",
+        "sagemaker:UpdateEndpoint",
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:InvokeEndpoint",
+        "sagemaker:AddTags",
+        "sagemaker:ListTags"
+      ],
+      "Resource": "*"
+    }
   ]
 }

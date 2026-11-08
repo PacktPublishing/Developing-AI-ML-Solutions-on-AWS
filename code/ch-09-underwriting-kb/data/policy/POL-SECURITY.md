@@ -5,7 +5,7 @@ Synthetic credit policy for the book's knowledge base. Invented for illustration
 ## Minimum security
 
 Every SME facility needs a personal guarantee from the promoter and guarantor
-cheques signed by two signatories. Asset finance is also secured on the asset
+checks signed by two signatories. Asset finance is also secured on the asset
 financed.
 
 ## Approval limits

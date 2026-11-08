@@ -1,7 +1,7 @@
 # /// script
 # dependencies = ["boto3", "ollama"]
 # ///
-"""The model seam: one Bedrock-shaped interface, two backends."""
+"""Provide Bedrock-compatible model clients for AWS and local inference."""
 
 import io
 import json

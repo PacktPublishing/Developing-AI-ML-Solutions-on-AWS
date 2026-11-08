@@ -3,8 +3,7 @@
 One `InferenceSpec` defines what it means to embed, register, and match a face. Locally
 ModelBuilder serves it with Mode.IN_PROCESS, which is the only local path that reaches
 an Apple GPU; on AWS the same class runs inside the serving container behind an
-asynchronous SageMaker endpoint on a GPU instance. The code that answers is identical,
-which is the parity claim this chapter can actually make.
+asynchronous SageMaker endpoint on a GPU instance. Both deployments use this inference implementation.
 
     {"op": "register",   "keys": [...]}                          # batched, the GPU case
     {"op": "match",   "key": "probes/x.jpg", "claim": "..."}  # 1:N verification

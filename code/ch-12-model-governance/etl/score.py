@@ -1,7 +1,6 @@
-"""Route a batch of applications through the gateway and summarise the split.
+"""Send applications to the gateway and count variants and decisions.
 
-POSTs each application to the gateway's /score and tallies which variant served it and
-what it decided -- the view an operator watches while a rollout widens.
+POST each JSONL record to /score and print the aggregate counts.
 
 Usage:
   uv run etl/score.py data/applications.jsonl

@@ -21,7 +21,7 @@
   },
   "credit-challenger": {
     "stage": "challenger",
-    "description": "Monotone gradient-boosted challenger for consumer credit. CatBoost with monotonic constraints on the numeric features, so the model honours the same directional business rules as the incumbent scorecard while capturing interactions the linear model cannot; its native categorical handling also tolerates category values unseen in training rather than failing on them.",
+    "description": "Monotone gradient-boosted challenger for consumer credit. CatBoost with monotonic constraints on the numeric features, so the model honors the same directional business rules as the incumbent scorecard while capturing interactions the linear model cannot; its native categorical handling also tolerates category values unseen in training rather than failing on them.",
     "algorithm": "Monotone CatBoost",
     "problem_type": "Binary classification (probability of default)",
     "owner": "Credit Risk Modeling",

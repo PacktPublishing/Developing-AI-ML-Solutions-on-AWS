@@ -31,7 +31,7 @@ USERS: dict[str, dict] = {}
 
 
 class CognitoError(Exception):
-    """An error botocore and the page read the way they read Cognito's."""
+    """An error formatted for Cognito API clients."""
 
     def __init__(self, kind: str, message: str):
         super().__init__(message)
