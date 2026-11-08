@@ -187,6 +187,12 @@
       "Resource": "*"
     },
     {
+      "Sid": "FeatureStoreRead",
+      "Effect": "Allow",
+      "Action": "sagemaker:ListFeatureGroups",
+      "Resource": "*"
+    },
+    {
       "Sid": "SsmCommandResult",
       "Effect": "Allow",
       "Action": [
