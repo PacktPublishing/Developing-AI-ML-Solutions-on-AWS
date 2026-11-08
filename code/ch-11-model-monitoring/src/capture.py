@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["pandas", "boto3"]
+# dependencies = ["pandas", "boto3", "botocore[crt]"]
 # ///
 """Read captured SageMaker endpoint inputs and predictions for monitoring.
 

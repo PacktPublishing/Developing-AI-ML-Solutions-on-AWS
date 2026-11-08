@@ -6,6 +6,11 @@ round:
 	$(MAKE) deploy
 	$(MAKE) image
 	$(MAKE) pipeline
+	@# Both of these were outside the round, so nothing ran them together with
+	@# the rest and the chain they belong to was never tested. clarify monitors
+	@# the batch path; endpoint monitors a live one through Data Capture.
+	$(MAKE) clarify
+	$(MAKE) endpoint
 
 # Reproduce ch-11's monitoring on real AWS as a SageMaker Pipeline: Batch Transform
 # (score the current batch) -> Processing (PSI + SHAP feature-attribution drift, AWS's
@@ -18,8 +23,16 @@ IMAGE := $(REGISTRY)/ch11-scorecard:latest
 STACK := ch11-monitoring
 
 # the SageMaker default bucket (created if missing) and the SageMaker execution role
-BUCKET ?= sagemaker-$(REGION)-$(ACCOUNT)
-ROLE ?= $(shell aws iam list-roles --query "Roles[?contains(RoleName,'AmazonSageMaker-ExecutionRole')].Arn | [0]" --output text)
+# A stack output by name, read when the recipe line runs.
+output = $(shell aws cloudformation describe-stacks --region $(REGION) \
+	--stack-name $(STACK) --query "Stacks[0].Outputs[?OutputKey=='$(1)'].OutputValue" --output text)
+
+# Both come from the chapter's own stack. The artifacts used to go to the
+# account's default SageMaker bucket, which no chapter owns and no
+# least-privilege policy can scope, and the role used to be found by listing
+# every role in the account and matching a name that Studio creates.
+BUCKET ?= $(call output,SourceBucket)
+ROLE ?= $(call output,SageMakerRoleArn)
 
 # -------------------------------------------------------------------------------
 # iam: provision this chapter's deploy identity (run once, as the account admin)

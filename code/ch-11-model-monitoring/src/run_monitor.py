@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["catboost", "pandas", "numpy", "boto3"]
+# dependencies = ["catboost", "pandas", "numpy", "boto3", "botocore[crt]"]
 # ///
 """Run drift monitoring, write JSON reports and publish CloudWatch metrics.
 

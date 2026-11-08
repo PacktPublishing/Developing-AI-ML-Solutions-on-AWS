@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12,<3.13"
-# dependencies = ["boto3", "botocore[crt]", "pandas"]
+# dependencies = ["boto3", "botocore[crt]", "pandas", "catboost"]
 # ///
 """Deploy the scorecard to a SageMaker endpoint with data capture enabled.
 
