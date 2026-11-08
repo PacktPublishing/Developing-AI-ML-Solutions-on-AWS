@@ -4,7 +4,8 @@
 # (credit-challenger, CatBoost) SageMaker endpoint. Widening the rollout is an AppConfig
 # deployment; the running service and the endpoints are untouched. SageMaker Model Cards,
 # the Model Registry (champion Approved, challenger pending), and ML Lineage hold the
-# audit record for the two models.
+# audit record for the two models, and each registered version names the model
+# artifact it was built from, in the chapter's own bucket.
 Diagram:
   DefinitionFiles:
     - Type: LocalFile
@@ -28,7 +29,7 @@ Diagram:
       Preset: AWSCloudNoLogo
       Direction: horizontal
       Title: "AWS"
-      Children: [RolloutColumn, Endpoints, Governance]
+      Children: [RolloutColumn, Endpoints, GovernanceColumn]
 
     RolloutColumn:
       Type: AWS::Diagram::VerticalStack
@@ -57,23 +58,32 @@ Diagram:
     Champion:
       Type: AWS::Diagram::Resource
       Preset: "Amazon SageMaker AI"
-      Title: "champion endpoint\ncredit-scorecard (WOE + LR)"
+      Title: "champion endpoint\nWOE + LR"
     Challenger:
       Type: AWS::Diagram::Resource
       Preset: "Amazon SageMaker AI"
-      Title: "challenger endpoint\ncredit-challenger (CatBoost)"
+      Title: "challenger endpoint\nCatBoost"
 
+    GovernanceColumn:
+      Type: AWS::Diagram::HorizontalStack
+      Children: [Governance, Artifacts]
     Governance:
       Type: AWS::Diagram::Resource
       Preset: "Amazon SageMaker AI"
       Title: "SageMaker governance\nModel Cards, Registry, Lineage"
+    Artifacts:
+      Type: AWS::S3::Bucket
+      Title: "model artifacts"
 
-  # The gateway routes to each endpoint; the endpoint group as a whole is recorded in
-  # governance (one link from the stack, so no two lines cross).
+  # The gateway routes to each endpoint, and each endpoint's model is recorded in
+  # governance. The links come from the two icons rather than from the stack that
+  # holds them: a stack has no icon, so a line drawn from it starts in blank space.
   Links:
     - {Source: Applications, SourcePosition: E, Target: Gateway, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: AppConfig, SourcePosition: S, Target: Agent, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Agent, SourcePosition: S, Target: Gateway, TargetPosition: N, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Gateway, SourcePosition: E, Target: Champion, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
     - {Source: Gateway, SourcePosition: E, Target: Challenger, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
-    - {Source: Endpoints, SourcePosition: E, Target: Governance, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Champion, SourcePosition: E, Target: Governance, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Challenger, SourcePosition: E, Target: Governance, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}
+    - {Source: Governance, SourcePosition: E, Target: Artifacts, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

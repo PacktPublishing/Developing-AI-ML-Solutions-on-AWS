@@ -9,6 +9,11 @@ all:
 	$(MAKE) up
 	$(MAKE) apps
 	$(MAKE) score
+	@# The rollout is what the chapter is about, and it sat outside this list on
+	@# both paths: nothing moved the percentage and scored again in one run. The
+	@# AWS round runs flip in the same place.
+	$(MAKE) flip PCT=100
+	$(MAKE) score
 	$(MAKE) govern
 
 # Option 1, the rollout stack: the AppConfig agent, the two chapter-2 models, and the

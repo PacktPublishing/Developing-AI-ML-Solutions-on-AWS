@@ -13,6 +13,11 @@ Description: |
   desired count 0, so the stack costs nothing at rest.
 
 Parameters:
+  ImageTag:
+    Description: 'the tag the three serving images were pushed under. A model''s image is immutable, so CloudFormation only replaces it when this changes: with :latest hardcoded a new push leaves the endpoint serving the old digest while the deploy reports success.'
+    Type: String
+    Default: latest
+
   RolloutPct:
     Description: percent of applications routed to the challenger
     Type: Number
@@ -289,8 +294,8 @@ Resources:
     Properties:
       ExecutionRoleArn: !GetAtt EndpointRole.Arn
       PrimaryContainer:
-        Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-champion:latest
-        ModelDataUrl: !Sub s3://sagemaker-${AWS::Region}-${AWS::AccountId}/ch12/champion-pl/model.tar.gz
+        Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-champion:${ImageTag}
+        ModelDataUrl: !Sub s3://${SourceBucket}/ch12/champion-pl/model.tar.gz
         Mode: SingleModel
     Condition: ServingEnabled
 
@@ -299,8 +304,8 @@ Resources:
     Properties:
       ExecutionRoleArn: !GetAtt EndpointRole.Arn
       PrimaryContainer:
-        Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-challenger:latest
-        ModelDataUrl: !Sub s3://sagemaker-${AWS::Region}-${AWS::AccountId}/ch12/challenger-cb/model.tar.gz
+        Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-challenger:${ImageTag}
+        ModelDataUrl: !Sub s3://${SourceBucket}/ch12/challenger-cb/model.tar.gz
         Mode: SingleModel
     Condition: ServingEnabled
 
@@ -511,7 +516,7 @@ Resources:
         # The gateway: reads the evaluated flag from the sidecar and invokes the
         # champion or challenger endpoint the split picked.
         - Name: gateway
-          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-rollout-gateway:latest
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ch12-rollout-gateway:${ImageTag}
           Essential: true
           DependsOn:
             - ContainerName: appconfig-agent

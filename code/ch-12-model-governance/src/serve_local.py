@@ -16,6 +16,15 @@ import os
 import shutil
 import tempfile
 
+# The same stubs ch-02, ch-04 and ch-07 use for their local-mode paths: without
+# them ModelBuilder resolves the account's default SageMaker bucket, which no
+# chapter owns and a ch12-* policy cannot reach, and the run dies on a 403 from
+# head_bucket before a container ever starts.
+if os.environ.get("SM_OFFLINE") == "1":
+    from sagemaker_offline import use_local_stubs
+
+    use_local_stubs()
+
 from sagemaker.serve.builder.schema_builder import SchemaBuilder
 from sagemaker.serve.mode.function_pointers import Mode
 from sagemaker.serve.model_builder import ModelBuilder
