@@ -37,11 +37,11 @@ Diagram:
     Champion:
       Type: AWS::Diagram::Resource
       Preset: "Docker"
-      Title: "champion\ncredit-scorecard (WOE + LR)"
+      Title: "champion\nWOE + LR"
     Challenger:
       Type: AWS::Diagram::Resource
       Preset: "Docker"
-      Title: "challenger\ncredit-challenger (CatBoost)"
+      Title: "challenger\nCatBoost"
 
   Links:
     - {Source: Developer, SourcePosition: E, Target: ModelBuilder, TargetPosition: W, TargetArrowHead: {Type: Open}, Type: orthogonal}

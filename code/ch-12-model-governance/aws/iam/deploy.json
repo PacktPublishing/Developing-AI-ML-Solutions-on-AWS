@@ -4,29 +4,91 @@
     {
       "Sid": "AppConfig",
       "Effect": "Allow",
-      "Action": "appconfig:*",
+      "Action": [
+        "appconfig:CreateApplication",
+        "appconfig:GetApplication",
+        "appconfig:DeleteApplication",
+        "appconfig:CreateEnvironment",
+        "appconfig:GetEnvironment",
+        "appconfig:DeleteEnvironment",
+        "appconfig:CreateConfigurationProfile",
+        "appconfig:GetConfigurationProfile",
+        "appconfig:DeleteConfigurationProfile",
+        "appconfig:UpdateConfigurationProfile",
+        "appconfig:CreateHostedConfigurationVersion",
+        "appconfig:GetHostedConfigurationVersion",
+        "appconfig:DeleteHostedConfigurationVersion",
+        "appconfig:CreateDeploymentStrategy",
+        "appconfig:GetDeploymentStrategy",
+        "appconfig:DeleteDeploymentStrategy",
+        "appconfig:StartDeployment",
+        "appconfig:GetDeployment",
+        "appconfig:StopDeployment",
+        "appconfig:ListApplications",
+        "appconfig:ListEnvironments",
+        "appconfig:ListConfigurationProfiles",
+        "appconfig:ListDeployments",
+        "appconfig:TagResource",
+        "appconfig:UntagResource",
+        "appconfig:ListTagsForResource",
+        "appconfig:GetLatestConfiguration",
+        "appconfig:StartConfigurationSession",
+        "appconfig:UpdateAccountSettings",
+        "appconfig:GetAccountSettings"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "GovernanceStack",
       "Effect": "Allow",
-      "Action": "cloudformation:*",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:GetTemplate",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:GetStackPolicy",
+        "cloudformation:TagResource",
+        "cloudformation:UntagResource"
+      ],
       "Resource": "arn:aws:cloudformation:us-east-1:*:stack/ch12-*/*"
     },
     {
       "Sid": "CloudFormationRead",
       "Effect": "Allow",
-      "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary", "cloudformation:ValidateTemplate"],
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ListStacks",
+        "cloudformation:ListChangeSets",
+        "cloudformation:ListStackResources",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ValidateTemplate"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "ManageChapterRoles",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole",
-        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
-        "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListRolePolicies",
-        "iam:ListAttachedRolePolicies", "iam:PassRole"
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PassRole"
       ],
       "Resource": "arn:aws:iam::*:role/ch12-*"
     },
@@ -37,27 +99,105 @@
       "Resource": "arn:aws:iam::*:role/*AmazonSageMaker*"
     },
     {
-      "Sid": "DiscoverRoleAndBucket",
-      "Effect": "Allow",
-      "Action": ["iam:ListRoles", "s3:ListAllMyBuckets"],
-      "Resource": "*"
-    },
-    {
       "Sid": "SageMakerGovernance",
       "Effect": "Allow",
-      "Action": "sagemaker:*",
+      "Action": [
+        "sagemaker:CreateModel",
+        "sagemaker:DescribeModel",
+        "sagemaker:DeleteModel",
+        "sagemaker:CreateEndpointConfig",
+        "sagemaker:DescribeEndpointConfig",
+        "sagemaker:DeleteEndpointConfig",
+        "sagemaker:CreateEndpoint",
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:DeleteEndpoint",
+        "sagemaker:UpdateEndpoint",
+        "sagemaker:InvokeEndpoint",
+        "sagemaker:CreateModelCard",
+        "sagemaker:UpdateModelCard",
+        "sagemaker:DescribeModelCard",
+        "sagemaker:DeleteModelCard",
+        "sagemaker:ListModelCards",
+        "sagemaker:CreateModelPackage",
+        "sagemaker:DescribeModelPackage",
+        "sagemaker:DeleteModelPackage",
+        "sagemaker:ListModelPackages",
+        "sagemaker:CreateModelPackageGroup",
+        "sagemaker:DescribeModelPackageGroup",
+        "sagemaker:DeleteModelPackageGroup",
+        "sagemaker:ListModelPackageGroups",
+        "sagemaker:CreateArtifact",
+        "sagemaker:ListArtifacts",
+        "sagemaker:DeleteArtifact",
+        "sagemaker:AddTags",
+        "sagemaker:ListTags",
+        "sagemaker:AddAssociation",
+        "sagemaker:DeleteAssociation",
+        "sagemaker:ListAssociations",
+        "sagemaker:DescribeArtifact",
+        "sagemaker:UpdateArtifact"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "Fargate",
       "Effect": "Allow",
-      "Action": "ecs:*",
+      "Action": [
+        "ecs:CreateCluster",
+        "ecs:DeleteCluster",
+        "ecs:DescribeClusters",
+        "ecs:RegisterTaskDefinition",
+        "ecs:DeregisterTaskDefinition",
+        "ecs:DescribeTaskDefinition",
+        "ecs:CreateService",
+        "ecs:UpdateService",
+        "ecs:DeleteService",
+        "ecs:DescribeServices",
+        "ecs:ListTasks",
+        "ecs:DescribeTasks",
+        "ecs:StopTask",
+        "ecs:TagResource",
+        "ecs:UntagResource",
+        "ecs:ListTagsForResource"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "FargateNetworking",
       "Effect": "Allow",
-      "Action": "ec2:*",
+      "Action": [
+        "ec2:CreateVpc",
+        "ec2:DeleteVpc",
+        "ec2:DescribeVpcs",
+        "ec2:ModifyVpcAttribute",
+        "ec2:CreateSubnet",
+        "ec2:DeleteSubnet",
+        "ec2:DescribeSubnets",
+        "ec2:ModifySubnetAttribute",
+        "ec2:CreateInternetGateway",
+        "ec2:DeleteInternetGateway",
+        "ec2:DescribeInternetGateways",
+        "ec2:AttachInternetGateway",
+        "ec2:DetachInternetGateway",
+        "ec2:CreateRouteTable",
+        "ec2:DeleteRouteTable",
+        "ec2:DescribeRouteTables",
+        "ec2:CreateRoute",
+        "ec2:DeleteRoute",
+        "ec2:AssociateRouteTable",
+        "ec2:DisassociateRouteTable",
+        "ec2:CreateSecurityGroup",
+        "ec2:DeleteSecurityGroup",
+        "ec2:DescribeSecurityGroups",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:CreateTags",
+        "ec2:DeleteTags",
+        "ec2:DescribeAvailabilityZones"
+      ],
       "Resource": "*"
     },
     {
@@ -65,18 +205,50 @@
       "Effect": "Allow",
       "Action": "iam:CreateServiceLinkedRole",
       "Resource": "*",
-      "Condition": { "StringEquals": { "iam:AWSServiceName": "ecs.amazonaws.com" } }
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": "ecs.amazonaws.com"
+        }
+      }
     },
     {
       "Sid": "EcrRepository",
       "Effect": "Allow",
-      "Action": "ecr:*",
-      "Resource": ["arn:aws:ecr:us-east-1:*:repository/ch12-*"]
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DeleteRepository",
+        "ecr:DescribeRepositories",
+        "ecr:DescribeImages",
+        "ecr:ListImages",
+        "ecr:BatchDeleteImage",
+        "ecr:PutLifecyclePolicy",
+        "ecr:SetRepositoryPolicy",
+        "ecr:TagResource",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage"
+      ],
+      "Resource": [
+        "arn:aws:ecr:us-east-1:*:repository/ch12-*"
+      ]
     },
     {
       "Sid": "CodeBuild",
       "Effect": "Allow",
-      "Action": ["codebuild:CreateProject", "codebuild:UpdateProject", "codebuild:DeleteProject", "codebuild:StartBuild", "codebuild:StartBuildBatch", "codebuild:BatchGetBuilds", "codebuild:BatchGetBuildBatches", "codebuild:BatchGetProjects"],
+      "Action": [
+        "codebuild:CreateProject",
+        "codebuild:UpdateProject",
+        "codebuild:DeleteProject",
+        "codebuild:StartBuild",
+        "codebuild:StartBuildBatch",
+        "codebuild:BatchGetBuilds",
+        "codebuild:BatchGetBuildBatches",
+        "codebuild:BatchGetProjects"
+      ],
       "Resource": "arn:aws:codebuild:us-east-1:*:project/ch12-*"
     },
     {
@@ -88,23 +260,81 @@
     {
       "Sid": "ArtifactBuckets",
       "Effect": "Allow",
-      "Action": "s3:*",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketPolicy",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutBucketTagging",
+        "s3:GetBucketTagging",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetEncryptionConfiguration",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:PutBucketVersioning",
+        "s3:GetBucketVersioning"
+      ],
       "Resource": [
-        "arn:aws:s3:::ch12-*",
-        "arn:aws:s3:::ch12-*/*",
-        "arn:aws:s3:::sagemaker-us-east-1-*",
-        "arn:aws:s3:::sagemaker-us-east-1-*/*"
+        "arn:aws:s3:::ch12-*"
       ]
     },
     {
       "Sid": "Logs",
       "Effect": "Allow",
-      "Action": "logs:*",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:DeleteLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:TagResource",
+        "logs:ListTagsForResource"
+      ],
       "Resource": [
         "arn:aws:logs:us-east-1:*:log-group:*ch12*",
         "arn:aws:logs:us-east-1:*:log-group:/ecs/ch12*",
         "arn:aws:logs:us-east-1:*:log-group:/aws/sagemaker/*"
       ]
+    },
+    {
+      "Sid": "LogsRead",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ArtifactObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:GetObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::ch12-*/*"
+    },
+    {
+      "Sid": "Diagnostics",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:ListClusters",
+        "sagemaker:ListEndpoints",
+        "sagemaker:ListModels",
+        "sagemaker:ListEndpointConfigs",
+        "s3:ListAllMyBuckets",
+        "ecr:DescribeRepositories",
+        "codebuild:ListProjects"
+      ],
+      "Resource": "*"
     }
   ]
 }

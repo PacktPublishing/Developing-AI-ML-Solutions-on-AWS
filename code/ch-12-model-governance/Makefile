@@ -9,6 +9,11 @@ all:
 	$(MAKE) up
 	$(MAKE) apps
 	$(MAKE) score
+	@# The rollout is what the chapter is about, and it sat outside this list on
+	@# both paths: nothing moved the percentage and scored again in one run. The
+	@# AWS round runs flip in the same place.
+	$(MAKE) flip PCT=100
+	$(MAKE) score
 	$(MAKE) govern
 
 # Option 1, the rollout stack: the AppConfig agent, the two chapter-2 models, and the
@@ -30,14 +35,19 @@ ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
 SM_ROLE ?=
 MODEL ?= champion
 sm-local:
-	@test -n "$(SM_ROLE)" || { echo "set SM_ROLE=<sagemaker exec role arn>"; exit 1; }
+	@# Local mode, and local means local: the image is built here rather than
+	@# pulled from the chapter's ECR repository, which only exists once the stack
+	@# is deployed. SM_OFFLINE stubs the account, role and bucket lookups the SDK
+	@# makes on the way, so this needs no account at all, as ch-02's does.
 	@case "$(MODEL)" in \
-		champion) MP=../ch-02-mlops/runs-local/model ;; \
-		challenger) MP=../ch-02-mlops/runs-local/model-challenger ;; \
+		champion) CTX=../ch-02-mlops/src/scorecard; MP=../ch-02-mlops/runs-local/model ;; \
+		challenger) CTX=../ch-02-mlops/src/challenger; MP=../ch-02-mlops/runs-local/model-challenger ;; \
 		*) echo "MODEL must be champion or challenger"; exit 1 ;; \
 	esac; \
-	MODEL_IMAGE=$(ECR)/ch12-$(MODEL):latest SAGEMAKER_ROLE_ARN=$(SM_ROLE) MODEL_PATH=$$MP \
-	  uv run --no-project src/serve_local.py
+	docker build -q -t ch12-$(MODEL):local "$$CTX"; \
+	SM_OFFLINE=1 MODEL_IMAGE=ch12-$(MODEL):local \
+		SAGEMAKER_ROLE_ARN=arn:aws:iam::000000000000:role/local \
+		MODEL_PATH=$$MP PYTHONPATH=src uv run --no-project src/serve_local.py
 
 # a batch of applications to route (reuses chapter 2's held-out set)
 apps:

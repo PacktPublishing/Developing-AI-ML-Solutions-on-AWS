@@ -14,7 +14,10 @@ Usage:
 
 import argparse
 import json
+import os
 from pathlib import Path
+
+import boto3
 
 
 def model_card(name: str, meta: dict) -> dict:
@@ -134,7 +137,15 @@ def upload_card(sm, name: str, card: dict) -> None:
         print(f"  model card updated: {name}")
 
 
-def upload_registry(sm, name: str, meta: dict, account: str, region: str) -> str:
+def upload_registry(
+    sm,
+    name: str,
+    meta: dict,
+    account: str,
+    region: str,
+    bucket: str,
+    image_tag: str,
+) -> str:
     """Create a model package version and return its ARN.
 
     Set champion packages to Approved and other packages to PendingManualApproval.
@@ -152,8 +163,19 @@ def upload_registry(sm, name: str, meta: dict, account: str, region: str) -> str
         if not _already_exists(err):
             raise
 
-    image = f"{account}.dkr.ecr.{region}.amazonaws.com/{meta['ecr_repo']}:latest"
-    model_data = f"s3://sagemaker-{region}-{account}/{meta['model_artifact']}"
+    # A registry records what was deployed, so it records a tag that cannot
+    # move. With :latest a package version points at whatever that tag means
+    # whenever someone reads it, which is the opposite of the point.
+    image = f"{account}.dkr.ecr.{region}.amazonaws.com/{meta['ecr_repo']}:{image_tag}"
+    model_data = f"s3://{bucket}/{meta['model_artifact']}"
+    # The URI names a key, and a key can be overwritten. The ETag names the
+    # bytes that were registered, so a reader can tell later whether what the
+    # endpoint loads is still what was approved here.
+    etag = (
+        boto3.client("s3", region_name=region)
+        .head_object(Bucket=bucket, Key=meta["model_artifact"])["ETag"]
+        .strip('"')
+    )
     approval = "Approved" if meta["stage"] == "champion" else "PendingManualApproval"
     arn = sm.create_model_package(
         ModelPackageGroupName=name,
@@ -166,15 +188,23 @@ def upload_registry(sm, name: str, meta: dict, account: str, region: str) -> str
         ModelApprovalStatus=approval,
         CustomerMetadataProperties={
             "stage": meta["stage"],
+            # The URI names a key and a key can be overwritten; the ETag names
+            # the bytes this version was registered against.
+            "model_artifact_etag": etag,
             **{k: str(v) for k, v in meta["metrics"].items()},
         },
     )["ModelPackageArn"]
-    print(f"  registered {name} -> {approval}")
+    print(f"  registered {name} -> {approval} (artifact etag {etag})")
     return arn
 
 
 def upload_lineage(
-    sm, name: str, model_package_arn: str, account: str, region: str
+    sm,
+    name: str,
+    model_package_arn: str,
+    account: str,
+    region: str,
+    bucket: str,
 ) -> None:
     """Record dataset -> model lineage as two artifacts and an association."""
     from botocore.exceptions import ClientError
@@ -193,7 +223,7 @@ def upload_lineage(
             return summaries[0]["ArtifactArn"]
 
     dataset_arn = artifact(
-        f"s3://sagemaker-{region}-{account}/ch12/datasets/{name}",
+        f"s3://{bucket}/ch12/datasets/{name}",
         "DataSet",
         f"{name}-dataset",
     )
@@ -210,7 +240,7 @@ def upload_lineage(
     print(f"  lineage: dataset ContributedTo model ({name})")
 
 
-def upload(models: dict, region: str) -> None:
+def upload(models: dict, region: str, bucket: str, image_tag: str) -> None:
     """Upload every model's card, registry entry, and lineage to SageMaker."""
     import boto3
 
@@ -219,8 +249,8 @@ def upload(models: dict, region: str) -> None:
     for name, meta in models.items():
         print(f"{name}:")
         upload_card(sm, name, model_card(name, meta))
-        arn = upload_registry(sm, name, meta, account, region)
-        upload_lineage(sm, name, arn, account, region)
+        arn = upload_registry(sm, name, meta, account, region, bucket, image_tag)
+        upload_lineage(sm, name, arn, account, region, bucket)
     print(f"uploaded {len(models)} models to SageMaker governance")
 
 
@@ -235,7 +265,26 @@ def main() -> None:
         help="also upload to SageMaker Model Cards, Registry, and Lineage",
     )
     p.add_argument("--region", default="us-east-1")
+    # The artifacts were read from sagemaker-<region>-<account>, the account's
+    # own default bucket: no chapter owns it, nothing here puts the artifacts
+    # in it, and no least-privilege policy can scope to it.
+    p.add_argument(
+        "--bucket",
+        default=os.environ.get("ARTIFACT_BUCKET", ""),
+        help="the bucket holding the model artifacts, from the chapter stack",
+    )
+    p.add_argument(
+        "--image-tag",
+        default=os.environ.get("IMAGE_TAG", ""),
+        help="the tag the serving images were pushed under",
+    )
     a = p.parse_args()
+    if a.upload and not (a.bucket and a.image_tag):
+        raise SystemExit(
+            "--upload needs --bucket and --image-tag, or ARTIFACT_BUCKET and "
+            "IMAGE_TAG. A registry entry naming neither records nothing "
+            "anyone can go back to."
+        )
 
     models = json.loads(a.models.read_text())
     a.out.mkdir(parents=True, exist_ok=True)
@@ -251,7 +300,7 @@ def main() -> None:
         f"wrote model cards, registry, and lineage for {len(models)} models -> {a.out}"
     )
     if a.upload:
-        upload(models, a.region)
+        upload(models, a.region, a.bucket, a.image_tag)
 
 
 if __name__ == "__main__":

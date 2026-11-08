@@ -16,6 +16,15 @@ import os
 import shutil
 import tempfile
 
+# The same stubs ch-02, ch-04 and ch-07 use for their local-mode paths: without
+# them ModelBuilder resolves the account's default SageMaker bucket, which no
+# chapter owns and a ch12-* policy cannot reach, and the run dies on a 403 from
+# head_bucket before a container ever starts.
+if os.environ.get("SM_OFFLINE") == "1":
+    from sagemaker_offline import use_local_stubs
+
+    use_local_stubs()
+
 from sagemaker.serve.builder.schema_builder import SchemaBuilder
 from sagemaker.serve.mode.function_pointers import Mode
 from sagemaker.serve.model_builder import ModelBuilder
@@ -49,6 +58,28 @@ for fname in os.listdir(MODEL_PATH):
     if os.path.isfile(src):
         shutil.copy(src, code)
 
+
+def stop_local_containers(image: str) -> None:
+    """Stop whatever is still serving this image.
+
+    endpoint.delete() takes the endpoint out of the SDK's local registry and
+    leaves the container compose started behind, holding the port and the
+    model. Nothing in the SDK brings that down, so this does.
+    """
+    import subprocess
+
+    found = subprocess.run(
+        ["docker", "ps", "-q", "--filter", f"ancestor={image}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.split()
+    for container in found:
+        subprocess.run(["docker", "stop", container], capture_output=True, check=False)
+    if found:
+        print(f"stopped {len(found)} local container(s)")
+
+
 builder = ModelBuilder(
     image_uri=IMAGE,
     model_server=ModelServer.MMS,  # the generic serve/ping/invocations runner
@@ -59,6 +90,11 @@ builder = ModelBuilder(
 )
 builder.build()
 endpoint = builder.deploy_local(wait=True, container_timeout_in_seconds=1200)
-resp = endpoint.invoke(body=json.dumps(sample), content_type="application/json")
-print("prediction:", resp.body.read().decode() if hasattr(resp, "body") else resp)
-endpoint.delete()
+try:
+    resp = endpoint.invoke(body=json.dumps(sample), content_type="application/json")
+    print("prediction:", resp.body.read().decode() if hasattr(resp, "body") else resp)
+finally:
+    # The container outlives this process otherwise, holding the port and the
+    # model, and a question that failed is exactly when it is left behind.
+    endpoint.delete()
+    stop_local_containers(IMAGE)

@@ -1,9 +1,12 @@
 version: 0.2
 
 # A batch build: the three serving images build in parallel, one child build per image.
-# Each child gets its context directory and image tag from the build-list; ECR_REGISTRY
-# comes from the CodeBuild project. The contexts sit at the zip root beside this file
-# (scorecard/, challenger/, gateway/).
+# Each child gets its context directory and repository from the build-list; ECR_REGISTRY
+# and TAG come from the CodeBuild project, TAG per build. Each image is pushed under
+# that tag and under latest: latest is for a person reading the console, and the unique
+# tag is what the stack deploys, because CloudFormation replaces a model when its
+# parameters change and :latest never changes. The contexts sit at the zip root beside
+# this file (scorecard/, challenger/, gateway/).
 batch:
   fast-fail: false
   build-list:
@@ -11,17 +14,17 @@ batch:
       env:
         variables:
           CONTEXT: scorecard
-          IMAGE: "ch12-champion:latest"
+          REPO: ch12-champion
     - identifier: challenger
       env:
         variables:
           CONTEXT: challenger
-          IMAGE: "ch12-challenger:latest"
+          REPO: ch12-challenger
     - identifier: gateway
       env:
         variables:
           CONTEXT: gateway
-          IMAGE: "ch12-rollout-gateway:latest"
+          REPO: ch12-rollout-gateway
 
 phases:
   pre_build:
@@ -29,7 +32,8 @@ phases:
       - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
   build:
     commands:
-      - docker build -t "$ECR_REGISTRY/$IMAGE" "$CONTEXT/"
+      - docker build -t "$ECR_REGISTRY/$REPO:$TAG" -t "$ECR_REGISTRY/$REPO:latest" "$CONTEXT/"
   post_build:
     commands:
-      - docker push "$ECR_REGISTRY/$IMAGE"
+      - docker push "$ECR_REGISTRY/$REPO:$TAG"
+      - docker push "$ECR_REGISTRY/$REPO:latest"
