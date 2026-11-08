@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["awswrangler", "pandas"]
+# dependencies = ["awswrangler", "botocore[crt]", "pandas"]
 # ///
 """Write and query a partitioned Parquet dataset.
 
