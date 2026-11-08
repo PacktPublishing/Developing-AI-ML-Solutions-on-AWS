@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["boto3", "pandas"]
+# dependencies = ["boto3", "botocore[crt]", "pandas"]
 # ///
 """Replay the transaction file into the stream, one PutRecord per event.
 

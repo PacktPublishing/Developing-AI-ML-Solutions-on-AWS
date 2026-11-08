@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "ollama", "opensearch-py", "strands-agents"]
+# dependencies = ["boto3", "botocore[crt]", "ollama", "opensearch-py", "strands-agents"]
 # ///
 """Provide an underwriting agent with retrieval and affordability tools.
 

@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["fastapi", "uvicorn[standard]", "boto3"]
+# dependencies = ["fastapi", "uvicorn[standard]", "boto3", "botocore[crt]"]
 # ///
 """Serve application scoring through a FastAPI gateway.
 

@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "ollama"]
+# dependencies = ["boto3", "botocore[crt]", "ollama"]
 # ///
 """Provide Bedrock and local Ollama clients for text, document and embedding calls."""
 

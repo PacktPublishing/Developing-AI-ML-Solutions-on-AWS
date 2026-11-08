@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "ollama", "opensearch-py"]
+# dependencies = ["boto3", "botocore[crt]", "ollama", "opensearch-py"]
 # ///
 """Embed the synthetic memo corpus into the vector store, one chunk per row.
 

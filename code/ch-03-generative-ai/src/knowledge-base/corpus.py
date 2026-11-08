@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "psycopg2-binary", "ollama"]
+# dependencies = ["boto3", "botocore[crt]", "psycopg2-binary", "ollama"]
 # ///
 """Build the knowledge base: generate it and embed it into the vector store.
 

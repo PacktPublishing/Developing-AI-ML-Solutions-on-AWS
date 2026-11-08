@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3"]
+# dependencies = ["boto3", "botocore[crt]"]
 # ///
 """Parity check: the same Feature Store op matrix, shim or AWS.
 

@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "psycopg2-binary", "ollama", "strands-agents", "bedrock-agentcore"]
+# dependencies = ["boto3", "botocore[crt]", "psycopg2-binary", "ollama", "strands-agents", "bedrock-agentcore"]
 # ///
 """The underwriting assistant: a grounded query mode and an agent mode.
 

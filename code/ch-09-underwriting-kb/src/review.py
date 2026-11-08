@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "ollama", "opensearch-py", "pdfplumber", "strands-agents"]
+# dependencies = ["boto3", "botocore[crt]", "ollama", "opensearch-py", "pdfplumber", "strands-agents"]
 # ///
 """Review one uploaded bank statement against the archive of past decisions.
 

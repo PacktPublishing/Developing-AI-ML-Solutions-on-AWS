@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["boto3"]
+# dependencies = ["boto3", "botocore[crt]"]
 # ///
 """Load the credit mart into the Redshift Serverless workgroup over the Data API.
 

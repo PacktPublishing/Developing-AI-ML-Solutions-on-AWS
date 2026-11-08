@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "ollama"]
+# dependencies = ["boto3", "botocore[crt]", "ollama"]
 # ///
 """The batch-inference seam: real Bedrock on AWS, a from-source shim locally.
 

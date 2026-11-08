@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3"]
+# dependencies = ["boto3", "botocore[crt]"]
 # ///
 """Generate model cards, registry metadata and lineage records.
 

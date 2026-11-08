@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3", "pyarrow", "pyiceberg[s3fs]"]
+# dependencies = ["boto3", "botocore[crt]", "pyarrow", "pyiceberg[s3fs]"]
 # ///
 """Write application records to an Iceberg table and read them back.
 

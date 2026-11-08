@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3"]
+# dependencies = ["boto3", "botocore[crt]"]
 # ///
 """Read one applicant's features back from the online store.
 

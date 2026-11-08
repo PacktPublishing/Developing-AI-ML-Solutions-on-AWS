@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["boto3"]
+# dependencies = ["boto3", "botocore[crt]"]
 # ///
 """Provide an AWS SNS client or a local file-based implementation.
 
