@@ -68,6 +68,10 @@ builder = ModelBuilder(
 )
 builder.build()
 endpoint = builder.deploy_local(wait=True, container_timeout_in_seconds=1200)
-resp = endpoint.invoke(body=json.dumps(sample), content_type="application/json")
-print("prediction:", resp.body.read().decode() if hasattr(resp, "body") else resp)
-endpoint.delete()
+try:
+    resp = endpoint.invoke(body=json.dumps(sample), content_type="application/json")
+    print("prediction:", resp.body.read().decode() if hasattr(resp, "body") else resp)
+finally:
+    # The container outlives this process otherwise, holding the port and the
+    # model, and a question that failed is exactly when it is left behind.
+    endpoint.delete()

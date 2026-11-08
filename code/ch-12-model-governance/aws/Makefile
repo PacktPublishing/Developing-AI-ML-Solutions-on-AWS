@@ -169,8 +169,16 @@ verify-artifacts:
 		BUCKET=$$(echo "$$MODEL" | sed -E 's|s3://([^/]+)/.*|\1|'); \
 		KEY=$$(echo "$$MODEL" | sed -E 's|s3://[^/]+/||'); \
 		ETAG=$$(aws s3api head-object --bucket "$$BUCKET" --key "$$KEY" \
-			--query ETag --output text); \
-		echo "$$NAME and $$2 both name s3://$$BUCKET/$$KEY, ETag $$ETAG"; \
+			--query ETag --output text | tr -d '"'); \
+			RECORDED=$$(aws sagemaker describe-model-package --model-package-name "$$ARN" \
+			--query 'CustomerMetadataProperties.model_artifact_etag' --output text); \
+			if [ "$$ETAG" != "$$RECORDED" ]; then \
+				echo "$$2: the artifact changed since it was registered"; \
+				echo "  registered: $$RECORDED"; \
+				echo "  in the bucket now: $$ETAG"; \
+				exit 1; \
+			fi; \
+		echo "$$NAME and $$2 both name s3://$$BUCKET/$$KEY, ETag $$ETAG as registered"; \
 	done
 
 govern:

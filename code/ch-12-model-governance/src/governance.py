@@ -17,6 +17,8 @@ import json
 import os
 from pathlib import Path
 
+import boto3
+
 
 def model_card(name: str, meta: dict) -> dict:
     """Render a SageMaker model-card document (the create_model_card Content schema)."""
@@ -166,6 +168,14 @@ def upload_registry(
     # whenever someone reads it, which is the opposite of the point.
     image = f"{account}.dkr.ecr.{region}.amazonaws.com/{meta['ecr_repo']}:{image_tag}"
     model_data = f"s3://{bucket}/{meta['model_artifact']}"
+    # The URI names a key, and a key can be overwritten. The ETag names the
+    # bytes that were registered, so a reader can tell later whether what the
+    # endpoint loads is still what was approved here.
+    etag = (
+        boto3.client("s3", region_name=region)
+        .head_object(Bucket=bucket, Key=meta["model_artifact"])["ETag"]
+        .strip('"')
+    )
     approval = "Approved" if meta["stage"] == "champion" else "PendingManualApproval"
     arn = sm.create_model_package(
         ModelPackageGroupName=name,
@@ -178,10 +188,13 @@ def upload_registry(
         ModelApprovalStatus=approval,
         CustomerMetadataProperties={
             "stage": meta["stage"],
+            # The URI names a key and a key can be overwritten; the ETag names
+            # the bytes this version was registered against.
+            "model_artifact_etag": etag,
             **{k: str(v) for k, v in meta["metrics"].items()},
         },
     )["ModelPackageArn"]
-    print(f"  registered {name} -> {approval}")
+    print(f"  registered {name} -> {approval} (artifact etag {etag})")
     return arn
 
 
