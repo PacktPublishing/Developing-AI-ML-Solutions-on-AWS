@@ -54,15 +54,14 @@ def _free_port() -> int:
         return int(probe.getsockname()[1])
 
 
-def _start_dynamodb() -> str:
-    """Start DynamoDB Local with docker-py, stop it when tests end, return its URL."""
+def _start_dynamodb(port: int) -> None:
+    """Start DynamoDB Local on a port and stop it when tests end."""
     import docker
 
     try:
         engine = docker.from_env()
     except docker.errors.DockerException:
         pytest.skip("no Docker daemon for DynamoDB Local", allow_module_level=True)
-    port = _free_port()
     container = engine.containers.run(
         IMAGE,
         command=["-jar", "DynamoDBLocal.jar", "-inMemory"],
@@ -71,10 +70,9 @@ def _start_dynamodb() -> str:
         remove=True,
     )
     atexit.register(container.stop)
-    url = f"http://localhost:{port}"
     for _ in range(30):
-        if _dynamodb_ready(url):
-            return url
+        if _dynamodb_ready(f"http://localhost:{port}"):
+            return
         time.sleep(1)
     pytest.skip("DynamoDB Local did not become ready", allow_module_level=True)
 
@@ -83,7 +81,9 @@ def _start_dynamodb() -> str:
 # publishes on 8000, and start one otherwise. The shim reads ONLINE_STORE_URL.
 STORE_URL = os.environ.get("ONLINE_STORE_URL", DEFAULT_URL)
 if not _dynamodb_ready(STORE_URL):
-    STORE_URL = _start_dynamodb()
+    OWN_PORT = _free_port()
+    _start_dynamodb(OWN_PORT)
+    STORE_URL = f"http://localhost:{OWN_PORT}"
 os.environ["ONLINE_STORE_URL"] = STORE_URL
 
 import app as shim  # noqa: E402
