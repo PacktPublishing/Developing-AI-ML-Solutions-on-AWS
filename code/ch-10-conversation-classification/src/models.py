@@ -78,3 +78,12 @@ def get_runtime():
 def answer_text(response: dict) -> str:
     """Pull the assistant's text out of a Converse response."""
     return response["output"]["message"]["content"][0]["text"].strip()
+
+
+def answer_tokens(response: dict) -> dict[str, int]:
+    """Pull the token counts out of a Converse response."""
+    usage = response.get("usage") or {}
+    return {
+        "in_tokens": int(usage.get("inputTokens") or 0),
+        "out_tokens": int(usage.get("outputTokens") or 0),
+    }

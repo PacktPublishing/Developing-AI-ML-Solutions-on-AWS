@@ -44,9 +44,17 @@ RUN if [ -n "$TORCH_INDEX" ]; then \
 
 # Bake the weights in. SageMaker gives /invocations 60 seconds, so a 4.5 GB
 # download belongs in the build rather than in the first request.
+#
+# A decider is a LoRA adapter over a base model, and both have to be here.
+# Which base it needs is the checkpoint's to say, so read it out of
+# strands_decider_config.json rather than hardcode one.
 ENV HF_HOME=/opt/models
 RUN if [ "$BAKE_WEIGHTS" = "1" ]; then \
-        python -c "from huggingface_hub import snapshot_download; snapshot_download('${CHECKPOINT}'); snapshot_download('Qwen/Qwen3.5-2B-Base')" \
+        python -c "import json; from huggingface_hub import snapshot_download; \
+path = snapshot_download('${CHECKPOINT}'); \
+base = json.load(open(path + '/strands_decider_config.json'))['base_model']; \
+print('base model:', base); \
+snapshot_download(base)" \
         && chmod -R a+rX /opt/models; \
     fi
 

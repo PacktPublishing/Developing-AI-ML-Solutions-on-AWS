@@ -107,6 +107,35 @@ a from-source shim** that fans each publish out to its subscribers, delivering t
 file inbox per team. On a small local model (Qwen3 0.6b) the accuracy is
 illustrative; the graded numbers come from Claude on Bedrock in the cloud round.
 
+### Swapping the checkpoint
+
+`DECIDER_MODEL` names the checkpoint the `local` and `http` backends load, and
+`model/Dockerfile` takes the same name as `CHECKPOINT` for the endpoint image.
+Two sizes are published as System One deciders. Both answer this chapter's
+question with one output token, and the difference between them is latency and
+download size rather than accuracy:
+
+| checkpoint | accuracy, variant a / b | median latency, a / b | base model |
+| --- | --- | --- | --- |
+| `strands-decider-2B-qwen3.5-v1-2610` | 0.684 / 0.666 | 1.2 s / 1.3 s | `Qwen/Qwen3.5-2B-Base`, 4.5 GB |
+| `strands-decider-E4B-gemma4-v1-2610` | 0.669 / 0.691 | 4.4 s / 5.2 s | `google/gemma-4-E4B-it`, 16 GB |
+
+All 320 conversations, `local:mps`, both checkpoints loaded by the same engine:
+
+```
+DECIDER_MODEL=StrandsAgents/strands-decider-E4B-gemma4-v1-2610 make decide VARIANT=b
+```
+
+McNemar on the paired predictions does not separate the checkpoints: 3 against 11
+at variant b (p=0.061) and 11 against 6 at variant a (p=0.332). The chapter stays
+on the 2B because four times the latency and a 16 GB base buy no accuracy that
+320 conversations can measure. Run the command above if you want to see that for
+yourself rather than take it from this table.
+
+Each published decider is a LoRA adapter, and it names the base it was trained
+over in its own `strands_decider_config.json`. The image build reads that field,
+so a checkpoint is the only thing you change.
+
 ### AgentCore runs locally too
 
 `agent/main.py` is the deployable unit and the local one. `BedrockAgentCoreApp`

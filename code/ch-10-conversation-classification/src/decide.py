@@ -35,20 +35,27 @@ def question_for(labels: list[str], described: bool) -> dict:
     }
 
 
-def route_one(decider, text: str, question: dict) -> tuple[str, dict, float, str]:
-    """Return the team, the distribution over teams, the confidence, and the model.
+def route_one(decider, text: str, question: dict) -> tuple[str, dict, float, dict]:
+    """Return the team, the distribution over teams, the confidence, and what it cost.
 
     The model comes back from the backend rather than from configuration, so a
     predictions file records which model actually answered. That is what lets a
     Strands Decider run and a Kev run be compared after the fact.
+
+    The usage travels with it: one output token per question.
     """
     response = decider.decide(text, question)
     answer = response["answers"]["team"]
+    usage = response.get("usage") or {}
     return (
         answer["choice"],
         answer["probabilities"],
         answer["confidence"],
-        str(response.get("model") or "unnamed"),
+        {
+            "model": str(response.get("model") or "unnamed"),
+            "in_tokens": int(usage.get("input_tokens") or 0),
+            "out_tokens": int(usage.get("output_tokens") or 0),
+        },
     )
 
 
@@ -113,14 +120,18 @@ def main() -> None:
     print(f"decision model on {decider.where}, variant {a.variant}, {len(rows)} rows")
 
     out = a.out or a.data / f"{a.dataset}.predictions.jsonl"
-    latencies = []
+    latencies: list[float] = []
+    spent: list[tuple[int, int]] = []
     hits = held = 0
     with out.open("w", encoding="utf-8") as f:
         for row in rows:
             started = time.perf_counter()
-            team, probs, confidence, model = route_one(decider, row["text"], question)
+            team, probs, confidence, answered = route_one(
+                decider, row["text"], question
+            )
             latencies.append(time.perf_counter() - started)
-            meta = {"run_id": run_id, "model": model, "backend": decider.where}
+            meta = {"run_id": run_id, "backend": decider.where, **answered}
+            spent.append((answered["in_tokens"], answered["out_tokens"]))
             record = record_for(row, team, probs, confidence, a.threshold, meta)
             if not record["pred"]:
                 held += 1
@@ -137,6 +148,11 @@ def main() -> None:
         f"  median {statistics.median(latencies) * 1000:.0f} ms per conversation, "
         f"{sum(latencies):.1f}s for {len(rows)}"
     )
+    if spent:
+        print(
+            f"  {statistics.mean(t[0] for t in spent):.0f} tokens in and "
+            f"{statistics.mean(t[1] for t in spent):.0f} out per conversation"
+        )
 
 
 if __name__ == "__main__":

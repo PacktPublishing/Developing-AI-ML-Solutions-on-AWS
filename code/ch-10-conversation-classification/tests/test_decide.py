@@ -30,9 +30,16 @@ class FakeDecider:
         self.asked: list[tuple[str, dict]] = []
 
     def decide(self, state: str, questions: dict) -> dict:
-        """Return the canned answer and remember the call."""
+        """Return the canned answer and remember the call.
+
+        One output token per question.
+        """
         self.asked.append((state, questions))
-        return {"model": "fake", "answers": {"team": self.answer}}
+        return {
+            "model": "fake",
+            "answers": {"team": self.answer},
+            "usage": {"input_tokens": 812, "output_tokens": len(questions)},
+        }
 
 
 def test_bare_names_ask_about_every_team_without_describing_any():
@@ -69,13 +76,31 @@ def test_a_team_the_dataset_does_not_use_is_not_offered():
 def test_the_answer_is_read_without_parsing_any_text():
     """The chosen team, the distribution and the confidence come back as fields."""
     decider = FakeDecider("Cards", {"Cards": 0.8, "Bank Accounts": 0.2}, 0.73)
-    team, probs, confidence, model = route_one(
+    team, probs, confidence, answered = route_one(
         decider, "my card was declined", {"team": {}}
     )
     assert (team, confidence) == ("Cards", 0.73)
     assert probs == {"Cards": 0.8, "Bank Accounts": 0.2}
-    assert model == "fake"
+    assert answered["model"] == "fake"
     assert decider.asked[0][0] == "my card was declined"
+
+
+def test_one_output_token_answers_the_question():
+    """One output token per question."""
+    decider = FakeDecider("Cards", {"Cards": 0.8, "Bank Accounts": 0.2}, 0.73)
+    _, _, _, answered = route_one(decider, "my card was declined", {"team": {}})
+    assert answered["out_tokens"] == 1
+    assert answered["in_tokens"] == 812
+
+    record = record_for(
+        {"id": "1", "label": "Cards"},
+        "Cards",
+        {"Cards": 0.8},
+        0.73,
+        0.0,
+        {"run_id": "run", "backend": "fake", **answered},
+    )
+    assert (record["in_tokens"], record["out_tokens"]) == (812, 1)
 
 
 def test_a_confident_answer_is_routed():
