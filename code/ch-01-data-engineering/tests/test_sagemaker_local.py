@@ -1,53 +1,9 @@
 """Tests for the local Feature Store shim: both API planes and the flush logic."""
 
-import atexit
-import socket
-import time
 import uuid
 
-import pytest
+import app as shim
 from starlette.testclient import TestClient
-
-
-# -------------------------------------------------------------------------------
-# DynamoDB Local bootstrap
-# -------------------------------------------------------------------------------
-def _dynamodb_up() -> bool:
-    """Probe DynamoDB Local without boto3 overhead."""
-    try:
-        socket.create_connection(("localhost", 8000), timeout=2).close()
-        return True
-    except OSError:
-        return False
-
-
-def _start_dynamodb() -> None:
-    """Start DynamoDB Local with docker-py and stop it when tests end."""
-    import docker
-
-    try:
-        engine = docker.from_env()
-    except Exception:
-        pytest.skip("no Docker daemon for DynamoDB Local", allow_module_level=True)
-    container = engine.containers.run(
-        "amazon/dynamodb-local:latest",
-        command=["-jar", "DynamoDBLocal.jar", "-inMemory"],
-        ports={"8000/tcp": 8000},
-        detach=True,
-        remove=True,
-    )
-    atexit.register(container.stop)
-    for _ in range(30):
-        if _dynamodb_up():
-            return
-        time.sleep(1)
-    pytest.skip("DynamoDB Local did not become ready", allow_module_level=True)
-
-
-if not _dynamodb_up():
-    _start_dynamodb()
-
-import app as shim  # noqa: E402
 
 client = TestClient(shim.app)
 
