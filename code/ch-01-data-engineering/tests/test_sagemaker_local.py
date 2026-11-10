@@ -1,51 +1,90 @@
 """Tests for the local Feature Store shim: both API planes and the flush logic."""
 
 import atexit
+import os
 import socket
 import time
 import uuid
 
+import boto3
 import pytest
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 from starlette.testclient import TestClient
 
 
 # -------------------------------------------------------------------------------
 # DynamoDB Local bootstrap
 # -------------------------------------------------------------------------------
-def _dynamodb_up() -> bool:
-    """Probe DynamoDB Local without boto3 overhead."""
+DEFAULT_URL = "http://localhost:8000"
+# Pinned: `latest` moves under the test, and the shim reads a fixed API shape.
+IMAGE = "amazon/dynamodb-local:3.3.2"
+
+
+def _dynamodb_ready(url: str) -> bool:
+    """Ask DynamoDB to list its tables and check that the reply is one.
+
+    Port 8000 is popular, and a probe that only opens a socket cannot tell
+    DynamoDB Local from whatever else the host happens to be running: it
+    reports ready, the container is never started, and the first call gets a
+    connection reset. Reading TableNames out of the reply is the check,
+    because a foreign server that answers with an HTTP error raises
+    ClientError just as a real one would.
+    """
     try:
-        socket.create_connection(("localhost", 8000), timeout=2).close()
-        return True
-    except OSError:
+        reply = boto3.client(
+            "dynamodb",
+            endpoint_url=url,
+            region_name="us-east-1",
+            aws_access_key_id="local",
+            aws_secret_access_key="localsecret",
+            config=Config(
+                retries={"max_attempts": 0}, connect_timeout=2, read_timeout=2
+            ),
+        ).list_tables()
+    except (ClientError, BotoCoreError, OSError):
         return False
+    return "TableNames" in reply
 
 
-def _start_dynamodb() -> None:
-    """Start DynamoDB Local with docker-py and stop it when tests end."""
+def _free_port() -> int:
+    """Take a port the host is not using, so a busy 8000 cannot collide."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def _start_dynamodb() -> str:
+    """Start DynamoDB Local with docker-py, stop it when tests end, return its URL."""
     import docker
 
     try:
         engine = docker.from_env()
-    except Exception:
+    except docker.errors.DockerException:
         pytest.skip("no Docker daemon for DynamoDB Local", allow_module_level=True)
+    port = _free_port()
     container = engine.containers.run(
-        "amazon/dynamodb-local:latest",
+        IMAGE,
         command=["-jar", "DynamoDBLocal.jar", "-inMemory"],
-        ports={"8000/tcp": 8000},
+        ports={"8000/tcp": port},
         detach=True,
         remove=True,
     )
     atexit.register(container.stop)
+    url = f"http://localhost:{port}"
     for _ in range(30):
-        if _dynamodb_up():
-            return
+        if _dynamodb_ready(url):
+            return url
         time.sleep(1)
     pytest.skip("DynamoDB Local did not become ready", allow_module_level=True)
 
 
-if not _dynamodb_up():
-    _start_dynamodb()
+# Reuse a store the developer already has up, which is what local/lakehouse.yml
+# publishes on 8000, and start one otherwise. The shim reads ONLINE_STORE_URL.
+STORE_URL = os.environ.get("ONLINE_STORE_URL", DEFAULT_URL)
+if not _dynamodb_ready(STORE_URL):
+    STORE_URL = _start_dynamodb()
+os.environ["ONLINE_STORE_URL"] = STORE_URL
 
 import app as shim  # noqa: E402
 
