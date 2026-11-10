@@ -55,6 +55,9 @@ class Report:
     # records with a usable prediction, and the ones without
     scored: int = 0
     missing: int = 0
+    # mean tokens per record, when the router recorded them
+    in_tokens: float = math.nan
+    out_tokens: float = math.nan
 
     @property
     def coverage(self) -> float:
@@ -88,6 +91,19 @@ class Report:
                 _pct(self.macro_adjusted),
                 "macro, referenced to each class's own base rate",
             ),
+        ] + self.cost
+
+    @property
+    def cost(self) -> list[tuple[str, str, str]]:
+        """What the run spent per record.
+
+        Empty when the prediction file carries no token counts.
+        """
+        if math.isnan(self.in_tokens):
+            return []
+        return [
+            ("tokens in", f"{self.in_tokens:.0f}", "mean per conversation"),
+            ("tokens out", f"{self.out_tokens:.0f}", "mean per conversation"),
         ]
 
 
@@ -150,6 +166,12 @@ def _class_score(preds: list[dict], label: str) -> ClassScore:
     )
 
 
+def _mean_tokens(preds: list[dict], key: str) -> float:
+    """Mean of a token count over the records that carry one."""
+    counts = [r[key] for r in preds if isinstance(r.get(key), int)]
+    return sum(counts) / len(counts) if counts else math.nan
+
+
 def score(dataset: str, preds: list[dict], labels: list[str]) -> Report:
     """Calculate accuracy and macro-F1 over all records.
 
@@ -172,6 +194,8 @@ def score(dataset: str, preds: list[dict], labels: list[str]) -> Report:
         classes=classes,
         scored=len(scored),
         missing=len(preds) - len(scored),
+        in_tokens=_mean_tokens(preds, "in_tokens"),
+        out_tokens=_mean_tokens(preds, "out_tokens"),
     )
 
 

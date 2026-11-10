@@ -23,8 +23,8 @@ from pathlib import Path
 
 import categories
 from batch import get_bedrock, s3_client
+from models import TEXT_MODEL, answer_text, answer_tokens
 from runs import new_run_id
-from models import TEXT_MODEL, answer_text
 
 INSTRUCTION = (
     "You are a bank's conversation router. Classify the conversation into exactly"
@@ -283,6 +283,7 @@ def collect(
                 failures[record_id] = f"the answer is not a Converse response: {err}"
                 continue
             cut_off = _cut_off(rec["modelOutput"])
+            spent = answer_tokens(rec["modelOutput"])
             if distribution:
                 probs, why = parse_probs(said, labels)
                 if why:
@@ -295,6 +296,7 @@ def collect(
                 preds[record_id] = {
                     "pred": max(probs, key=lambda k: probs[k]),
                     "probs": probs,
+                    **spent,
                 }
             else:
                 label, why = parse_label(said, labels)
@@ -305,7 +307,7 @@ def collect(
                         else why
                     )
                     continue
-                preds[record_id] = {"pred": label, "probs": None}
+                preds[record_id] = {"pred": label, "probs": None, **spent}
     return preds, failures
 
 
@@ -428,6 +430,9 @@ def main() -> None:
             }
             if got and got.get("probs"):
                 record["probs"] = got["probs"]
+            if got:
+                record["in_tokens"] = got.get("in_tokens", 0)
+                record["out_tokens"] = got.get("out_tokens", 0)
             if not got:
                 # Store the error reason for records without a prediction.
                 record["failed"] = run.failures.get(
